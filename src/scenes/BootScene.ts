@@ -26,12 +26,19 @@ export class BootScene extends Scene {
     this.loadAssets();
     
     // If no assets to load, 'complete' may not fire - start immediately
-    // Check after a brief moment to let the loader process
+    // Check multiple conditions for robustness
     this.time.delayedCall(0, () => {
-      if (!this.load.isLoading) {
+      const load = this.load;
+      const hasQueue = load.list?.size > 0 || load.totalToLoad > 0;
+      if (!hasQueue || !load.isLoading) {
         this.startMainMenu();
       }
     });
+    
+    // Also start immediately if loader is already done (synchronous)
+    if (this.load.list?.size === 0 && this.load.totalToLoad === 0) {
+      this.startMainMenu();
+    }
   }
 
   private startMainMenu(): void {
