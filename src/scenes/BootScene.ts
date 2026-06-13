@@ -20,16 +20,28 @@ export class BootScene extends Scene {
     });
 
     this.load.on('complete', () => {
-      this.loadingText.setText('Ready!');
-      this.progressText.setText('100%');
-      this.updateProgressBar(1);
-      
-      this.time.delayedCall(300, () => {
-        this.scene.start('MainMenuScene');
-      });
+      this.startMainMenu();
     });
 
     this.loadAssets();
+    
+    // If no assets to load, 'complete' may not fire - start immediately
+    // Check after a brief moment to let the loader process
+    this.time.delayedCall(0, () => {
+      if (!this.load.isLoading) {
+        this.startMainMenu();
+      }
+    });
+  }
+
+  private startMainMenu(): void {
+    this.loadingText.setText('Ready!');
+    this.progressText.setText('100%');
+    this.updateProgressBar(1);
+    
+    this.time.delayedCall(300, () => {
+      this.scene.start('MainMenuScene');
+    });
   }
 
   private createLoadingUI(): void {
