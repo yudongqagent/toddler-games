@@ -1,17 +1,25 @@
 import { Scene, GameObjects } from 'phaser';
 import { updateGameProgress } from '../utils/GameData';
+import { soundManager } from '../utils/SoundManager';
+import { haptics } from '../utils/Haptics';
+import { Celebration } from '../utils/Celebration';
+import { accessibility } from '../utils/Accessibility';
 
 export class CountingScene extends Scene {
   private numbers: GameObjects.Text[] = [];
   private currentNumber: number = 1;
   private starsEarned: number = 0;
   private feedbackText!: GameObjects.Text;
+  private celebration!: Celebration;
+  private numberContainers: Map<number, GameObjects.Container> = new Map();
+  private speechUtterance: SpeechSynthesisUtterance | null = null;
 
   constructor() {
     super({ key: 'CountingScene', active: false });
   }
 
   create(): void {
+    this.celebration = new Celebration(this);
     this.createBackground();
     this.createBackButton();
     this.createNumbers();
@@ -35,7 +43,11 @@ export class CountingScene extends Scene {
       fontFamily: 'Arial, sans-serif'
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     
-    btn.on('pointerup', () => this.scene.start('MainMenuScene'));
+    btn.on('pointerup', () => {
+      soundManager.playClick();
+      haptics.light();
+      this.scene.start('MainMenuScene');
+    });
   }
 
   private createNumbers(): void {
@@ -67,21 +79,12 @@ export class CountingScene extends Scene {
       const container = this.add.container(x, y);
       container.add([circle, text]);
       container.setSize(100, 100);
+      container.setData('number', num);
       
+      this.numberContainers.set(num, container);
+
       if (num === this.currentNumber) {
-        container.setInteractive(new Phaser.Geom.Circle(0, 0, 50), Phaser.Geom.Circle.Contains);
-        container.on('pointerdown', () => this.onNumberTap(num, container));
-        container.on('touchstart', () => this.onNumberTap(num, container));
-        
-        // Pulse animation
-        this.tweens.add({
-          targets: container,
-          scale: { from: 1, to: 1.15 },
-          duration: 800,
-          yoyo: true,
-          repeat: -1,
-          ease: 'Sine.easeInOut'
-        });
+        this.enableNumberInteraction(container, num);
       } else if (num < this.currentNumber) {
         // Completed numbers - green check
         const check = this.add.text(0, 0, '✓', { fontSize: '36px', color: '#4ade80' }).setOrigin(0.5);
@@ -89,6 +92,32 @@ export class CountingScene extends Scene {
       }
 
       this.numbers.push(text);
+    }
+  }
+
+  private enableNumberInteraction(container: GameObjects.Container, num: number): void {
+    container.setInteractive(new Phaser.Geom.Circle(0, 0, 50), Phaser.Geom.Circle.Contains);
+    
+    const pointerDownHandler = () => this.onNumberTap(num, container);
+    const touchStartHandler = () => this.onNumberTap(num, container);
+    
+    container.on('pointerdown', pointerDownHandler);
+    container.on('touchstart', touchStartHandler);
+    
+    // Store handlers for cleanup
+    container.setData('pointerDownHandler', pointerDownHandler);
+    container.setData('touchStartHandler', touchStartHandler);
+
+    // Pulse animation (respects reduced motion)
+    if (!accessibility.shouldReduceMotion()) {
+      this.tweens.add({
+        targets: container,
+        scale: { from: 1, to: 1.12 },
+        duration: 1000,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut'
+      });
     }
   }
 
@@ -108,16 +137,30 @@ export class CountingScene extends Scene {
     if (num !== this.currentNumber) return;
 
     this.tweens.killTweensOf(container);
+    soundManager.playNumber(num);
+    soundManager.playClick();
+    haptics.light();
     this.speakNumber(num);
     
     this.feedbackText.setText(`Great! That's ${num}!`).setVisible(true);
+    this.celebration.floatingText(container.x, container.y - 60, `+${num}!`, '#4ade80', '28px');
     this.time.delayedCall(1500, () => {
-      this.feedbackText.setVisible(false);
+      if (this.feedbackText && this.feedbackText.active) {
+        this.feedbackText.setVisible(false);
+      }
     });
 
-    // Add checkmark
+    // Add checkmark with pop animation
     const check = this.add.text(0, 0, '✓', { fontSize: '36px', color: '#4ade80' }).setOrigin(0.5);
     container.add(check);
+    if (!accessibility.shouldReduceMotion()) {
+      this.tweens.add({
+        targets: check,
+        scale: { from: 0, to: 1.2 },
+        duration: accessibility.getDuration(200),
+        ease: 'Back.easeOut'
+      });
+    }
     container.disableInteractive();
 
     this.currentNumber++;
@@ -125,30 +168,9 @@ export class CountingScene extends Scene {
     if (this.currentNumber <= 10) {
       // Enable next number
       this.time.delayedCall(500, () => {
-        const children = this.children.list;
-        let nextContainer: GameObjects.Container | null = null;
-        for (const c of children) {
-          if (c instanceof GameObjects.Container) {
-            const textObj = c.getAt(1);
-            if (textObj instanceof GameObjects.Text && textObj.text === this.currentNumber.toString()) {
-              nextContainer = c;
-              break;
-            }
-          }
-        }
-        if (nextContainer) {
-          nextContainer.setInteractive(new Phaser.Geom.Circle(0, 0, 50), Phaser.Geom.Circle.Contains);
-          nextContainer.on('pointerdown', () => this.onNumberTap(this.currentNumber, nextContainer));
-          nextContainer.on('touchstart', () => this.onNumberTap(this.currentNumber, nextContainer));
-          
-          this.tweens.add({
-            targets: nextContainer,
-            scale: { from: 1, to: 1.15 },
-            duration: 800,
-            yoyo: true,
-            repeat: -1,
-            ease: 'Sine.easeInOut'
-          });
+        const nextContainer = this.numberContainers.get(this.currentNumber);
+        if (nextContainer && nextContainer.active) {
+          this.enableNumberInteraction(nextContainer, this.currentNumber);
           
           // Update circle color
           const circle = nextContainer.getAt(0) as GameObjects.Graphics;
@@ -174,6 +196,17 @@ export class CountingScene extends Scene {
 
     const container = this.add.container(width / 2, height / 2);
     
+    // Success sound and haptics
+    soundManager.playSuccess();
+    haptics.success();
+    
+    // Celebration effects
+    if (!accessibility.shouldReduceMotion()) {
+      this.celebration.starBurst(width / 2, height / 2);
+      this.celebration.flash(0xffff00, 300);
+    }
+    this.celebration.floatingText(width / 2, height / 2 - 100, 'Amazing!', '#ffd700', '40px');
+
     const starsText = this.add.text(0, -60, '⭐⭐⭐', { fontSize: '60px' }).setOrigin(0.5);
     
     this.add.text(0, 20, 'Amazing! You counted to 10!', {
@@ -192,21 +225,57 @@ export class CountingScene extends Scene {
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     
     btn.on('pointerup', () => {
+      soundManager.playClick();
+      haptics.light();
       updateGameProgress('counting', this.starsEarned);
       this.scene.start('MainMenuScene');
     });
 
     container.add([starsText]);
+    
+    // Announce for screen readers
+    accessibility.announce('Congratulations! You counted to ten!');
   }
 
   private speakNumber(num: number): void {
     if ('speechSynthesis' in window) {
-      const utterance = new SpeechSynthesisUtterance(num.toString());
-      utterance.rate = 0.8;
-      utterance.pitch = 1.2;
-      utterance.lang = 'en-US';
+      // Cancel any pending speech
       speechSynthesis.cancel();
-      speechSynthesis.speak(utterance);
+      this.speechUtterance = new SpeechSynthesisUtterance(num.toString());
+      this.speechUtterance.rate = 0.8;
+      this.speechUtterance.pitch = 1.2;
+      this.speechUtterance.lang = 'en-US';
+      speechSynthesis.speak(this.speechUtterance);
     }
+  }
+
+  shutdown(): void {
+    this.cleanup();
+  }
+
+  private cleanup(): void {
+    // Cancel speech synthesis
+    if (this.speechUtterance) {
+      speechSynthesis.cancel();
+      this.speechUtterance = null;
+    }
+    
+    // Remove event listeners from all number containers
+    this.numberContainers.forEach((container) => {
+      if (container && container.active) {
+        const pointerDownHandler = container.getData('pointerDownHandler');
+        const touchStartHandler = container.getData('touchStartHandler');
+        if (pointerDownHandler) container.off('pointerdown', pointerDownHandler);
+        if (touchStartHandler) container.off('touchstart', touchStartHandler);
+      }
+    });
+    this.numberContainers.clear();
+    
+    // Cancel all pending delayed calls and tweens
+    this.time.removeAllEvents();
+    this.tweens.killAll();
+    
+    // Cleanup celebration
+    this.celebration?.cleanup();
   }
 }

@@ -1,8 +1,20 @@
 import { Scene, GameObjects } from 'phaser';
 import { GAME_CONFIGS, getProgress } from '../utils/GameData';
+import { soundManager } from '../utils/SoundManager';
+import { haptics } from '../utils/Haptics';
+import { accessibility } from '../utils/Accessibility';
+
+interface GameCardHandlers {
+  scaleUp: () => void;
+  scaleDown: () => void;
+  pressDown: () => void;
+  pointerUp: () => void;
+  touchEnd: () => void;
+}
 
 export class MainMenuScene extends Scene {
-  private gameCards: GameObjects.Container[] = [];
+  private gameCards: { container: GameObjects.Container; handlers: GameCardHandlers }[] = [];
+  private resizeHandler?: (gameSize: Phaser.Structs.Size) => void;
 
   constructor() {
     super({ key: 'MainMenuScene', active: false });
@@ -44,7 +56,6 @@ export class MainMenuScene extends Scene {
     const { width, height } = this.scale;
     const progress = getProgress();
     const cols = 3;
-    const rows = 2;
     const cardWidth = Math.min(220, (width - 80) / cols);
     const cardHeight = 180;
     const startX = (width - (cardWidth * cols + 20 * (cols - 1))) / 2;
@@ -56,8 +67,8 @@ export class MainMenuScene extends Scene {
       const x = startX + col * (cardWidth + 20) + cardWidth / 2;
       const y = startY + row * (cardHeight + 20) + cardHeight / 2;
 
-      const card = this.createGameCard(config, progress[config.key], x, y, cardWidth, cardHeight);
-      this.gameCards.push(card);
+      const cardData = this.createGameCard(config, progress[config.key], x, y, cardWidth, cardHeight);
+      this.gameCards.push(cardData);
     });
   }
 
@@ -68,7 +79,7 @@ export class MainMenuScene extends Scene {
     y: number,
     width: number,
     height: number
-  ): GameObjects.Container {
+  ): { container: GameObjects.Container; handlers: GameCardHandlers } {
     const container = this.add.container(x, y);
     container.setSize(width, height);
 
@@ -121,59 +132,119 @@ export class MainMenuScene extends Scene {
       Phaser.Geom.Rectangle.Contains
     );
 
-    container.on('pointerover', () => {
+    const scaleUp = () => {
+      if (accessibility.shouldReduceMotion()) return;
       bg.clear();
       bg.fillStyle(0xffffff, 0.25);
       bg.fillRoundedRect(-width/2, -height/2, width, height, 16);
       bg.lineStyle(2, 0xffffff, 0.5);
       bg.strokeRoundedRect(-width/2, -height/2, width, height, 16);
-      container.setScale(1.02);
-    });
+      this.tweens.add({
+        targets: container,
+        scale: 1.02,
+        duration: accessibility.getDuration(100),
+        ease: 'Power2.easeOut'
+      });
+    };
 
-    container.on('pointerout', () => {
+    const scaleDown = () => {
+      if (accessibility.shouldReduceMotion()) return;
       bg.clear();
       bg.fillStyle(0xffffff, 0.15);
       bg.fillRoundedRect(-width/2, -height/2, width, height, 16);
       bg.lineStyle(2, 0xffffff, 0.3);
       bg.strokeRoundedRect(-width/2, -height/2, width, height, 16);
-      container.setScale(1);
-    });
+      this.tweens.add({
+        targets: container,
+        scale: 1,
+        duration: accessibility.getDuration(100),
+        ease: 'Power2.easeOut'
+      });
+    };
 
-    container.on('pointerdown', () => {
-      container.setScale(0.98);
-    });
+    const pressDown = () => {
+      haptics.selection();
+      soundManager.playClick();
+      if (accessibility.shouldReduceMotion()) return;
+      this.tweens.add({
+        targets: container,
+        scale: 0.96,
+        duration: accessibility.getDuration(50),
+        ease: 'Power2.easeOut'
+      });
+    };
 
-    container.on('pointerup', () => {
-      container.setScale(1.02);
-      this.startGame(config);
-    });
+    const pressUp = () => {
+      if (accessibility.shouldReduceMotion()) return;
+      this.tweens.add({
+        targets: container,
+        scale: 1.02,
+        duration: accessibility.getDuration(100),
+        ease: 'Back.easeOut',
+        onComplete: () => this.startGame(config)
+      });
+    };
 
-    // Touch support
-    container.on('touchstart', () => {
-      container.setScale(0.98);
-    });
-    container.on('touchend', () => {
-      container.setScale(1.02);
-      this.startGame(config);
-    });
+    // touchend handler - no e.event needed, just call pressUp
+    const touchEnd = () => {
+      pressUp();
+    };
 
-    return container;
+    container.on('pointerover', scaleUp);
+    container.on('pointerout', scaleDown);
+    container.on('pointerdown', pressDown);
+    container.on('pointerup', pressUp);
+    container.on('touchstart', pressDown);
+    container.on('touchend', touchEnd);
+
+    return {
+      container,
+      handlers: { scaleUp, scaleDown, pressDown, pointerUp: pressUp, touchEnd }
+    };
   }
 
   private startGame(config: { scene: string }): void {
+    soundManager.playClick();
+    haptics.light();
     this.scene.start(config.scene);
   }
 
   private setupResizeHandler(): void {
-    this.scale.on('resize', (gameSize: Phaser.Structs.Size) => {
+    this.resizeHandler = (gameSize: Phaser.Structs.Size) => {
       this.cameras.main.setViewport(0, 0, gameSize.width, gameSize.height);
       this.refreshLayout();
-    });
+    };
+    this.scale.on('resize', this.resizeHandler);
   }
 
   private refreshLayout(): void {
-    this.gameCards.forEach(card => card.destroy());
+    this.gameCards.forEach(card => card.container.destroy());
     this.gameCards = [];
     this.createGameGrid();
+  }
+
+  shutdown(): void {
+    // Remove resize handler
+    if (this.resizeHandler) {
+      this.scale.off('resize', this.resizeHandler);
+      this.resizeHandler = undefined;
+    }
+
+    // Remove all event listeners from game cards
+    this.gameCards.forEach(card => {
+      const { container, handlers } = card;
+      if (container && container.active) {
+        container.off('pointerover', handlers.scaleUp);
+        container.off('pointerout', handlers.scaleDown);
+        container.off('pointerdown', handlers.pressDown);
+        container.off('pointerup', handlers.pointerUp);
+        container.off('touchstart', handlers.pressDown);
+        container.off('touchend', handlers.touchEnd);
+      }
+    });
+    this.gameCards = [];
+
+    // Kill all tweens
+    this.tweens.killAll();
   }
 }

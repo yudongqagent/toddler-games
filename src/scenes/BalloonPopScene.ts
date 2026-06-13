@@ -1,5 +1,8 @@
 import { Scene, GameObjects } from 'phaser';
 import { updateGameProgress } from '../utils/GameData';
+import { soundManager } from '../utils/SoundManager';
+import { haptics } from '../utils/Haptics';
+import { accessibility } from '../utils/Accessibility';
 
 const BALLOON_COLORS = [
   0xff6b6b, 0x4ecdc4, 0xffe66d, 0x95e1d3, 0xd1a3ff, 0xffbe76
@@ -9,6 +12,8 @@ interface Balloon {
   container: GameObjects.Container;
   color: number;
   popped: boolean;
+  pointerDownHandler?: () => void;
+  touchStartHandler?: () => void;
 }
 
 export class BalloonPopScene extends Scene {
@@ -18,6 +23,7 @@ export class BalloonPopScene extends Scene {
   private feedbackText!: GameObjects.Text;
   private starsEarned: number = 0;
   private spawnTimer?: Phaser.Time.TimerEvent;
+  private isShutdown: boolean = false;
 
   constructor() {
     super({ key: 'BalloonPopScene', active: false });
@@ -74,6 +80,7 @@ export class BalloonPopScene extends Scene {
   }
 
   private startSpawning(): void {
+    if (this.isShutdown) return;
     this.spawnTimer = this.time.addEvent({
       delay: 1200,
       callback: this.spawnBalloon,
@@ -85,6 +92,7 @@ export class BalloonPopScene extends Scene {
   }
 
   private spawnBalloon(): void {
+    if (this.isShutdown) return;
     if (this.balloons.filter(b => !b.popped).length >= 8) return;
     if (this.score >= 20) { this.showCompletion(); return; }
 
@@ -116,8 +124,13 @@ export class BalloonPopScene extends Scene {
     const balloonData: Balloon = { container, color, popped: false };
     container.setData('balloonData', balloonData);
     
-    container.on('pointerdown', () => this.popBalloon(balloonData));
-    container.on('touchstart', () => this.popBalloon(balloonData));
+    // Store handlers for cleanup
+    const pointerDownHandler = () => this.popBalloon(balloonData);
+    const touchStartHandler = () => this.popBalloon(balloonData);
+    container.on('pointerdown', pointerDownHandler);
+    container.on('touchstart', touchStartHandler);
+    balloonData.pointerDownHandler = pointerDownHandler;
+    balloonData.touchStartHandler = touchStartHandler;
 
     // Float up animation
     this.tweens.add({
@@ -127,15 +140,15 @@ export class BalloonPopScene extends Scene {
       duration: 2000,
       ease: 'Sine.easeOut',
       onComplete: () => {
-        if (!balloonData.popped) {
-          this.driftBalloon(container);
+        if (!this.isShutdown && !balloonData.popped) {
+          this.driftBalloon(container, balloonData);
         }
       }
     });
 
     // Auto-remove after time
     this.time.delayedCall(10000, () => {
-      if (!balloonData.popped && container.active) {
+      if (!this.isShutdown && !balloonData.popped && container.active) {
         this.tweens.add({
           targets: container, alpha: 0, duration: 500,
           onComplete: () => this.removeBalloon(balloonData)
@@ -146,8 +159,9 @@ export class BalloonPopScene extends Scene {
     this.balloons.push(balloonData);
   }
 
-  private driftBalloon(container: GameObjects.Container): void {
-    const scale = this.scale;
+  private driftBalloon(container: GameObjects.Container, data: Balloon): void {
+    if (this.isShutdown || data.popped || !container.active) return;
+    
     this.tweens.add({
       targets: container,
       x: container.x + Phaser.Math.Between(-50, 50),
@@ -155,16 +169,15 @@ export class BalloonPopScene extends Scene {
       duration: 3000,
       ease: 'Sine.easeInOut',
       onComplete: () => {
-        const data = container.getData('balloonData') as Balloon;
-        if (data && !data.popped && container.active) {
-          this.driftBalloon(container);
+        if (!this.isShutdown && !data.popped && container.active) {
+          this.driftBalloon(container, data);
         }
       }
     });
   }
 
   private popBalloon(data: Balloon): void {
-    if (data.popped) return;
+    if (data.popped || this.isShutdown) return;
     data.popped = true;
     this.score++;
     this.scoreText.setText(`Pop balloons: ${this.score}`);
@@ -189,7 +202,7 @@ export class BalloonPopScene extends Scene {
     this.tweens.add({ targets: popup, y: popup.y - 50, alpha: 0, duration: 800, onComplete: () => popup.destroy() });
 
     this.feedbackText.setText(`Pop! ${this.score}`).setColor('#4ade80').setVisible(true);
-    this.time.delayedCall(500, () => this.feedbackText.setVisible(false));
+    this.time.delayedCall(500, () => { if (this.feedbackText && this.feedbackText.active) this.feedbackText.setVisible(false); });
   }
 
   private createPopParticles(x: number, y: number, color: number): void {
@@ -215,7 +228,12 @@ export class BalloonPopScene extends Scene {
   }
 
   private removeBalloon(data: Balloon): void {
-    data.container.destroy();
+    // Remove event listeners
+    if (data.container && data.container.active) {
+      if (data.pointerDownHandler) data.container.off('pointerdown', data.pointerDownHandler);
+      if (data.touchStartHandler) data.container.off('touchstart', data.touchStartHandler);
+      data.container.destroy();
+    }
     this.balloons = this.balloons.filter(b => b !== data);
   }
 
@@ -233,7 +251,7 @@ export class BalloonPopScene extends Scene {
     const { width, height } = this.scale;
     this.starsEarned = this.score >= 20 ? 3 : this.score >= 15 ? 2 : 1;
     
-    const starsText = '⭐'.repeat(this.starsEarned);
+    const starsText = Array(this.starsEarned + 1).join('⭐');
     
     const overlay = this.add.graphics();
     overlay.fillStyle(0x000000, 0.7);
@@ -256,7 +274,13 @@ export class BalloonPopScene extends Scene {
   }
 
   private cleanupBalloons(): void {
-    this.balloons.forEach(b => b.container.destroy());
+    this.balloons.forEach(b => {
+      if (b.container && b.container.active) {
+        if (b.pointerDownHandler) b.container.off('pointerdown', b.pointerDownHandler);
+        if (b.touchStartHandler) b.container.off('touchstart', b.touchStartHandler);
+        b.container.destroy();
+      }
+    });
     this.balloons = [];
   }
 
@@ -267,6 +291,10 @@ export class BalloonPopScene extends Scene {
   }
 
   shutdown(): void {
-    this.cleanupAndExit();
+    this.isShutdown = true;
+    if (this.spawnTimer) this.spawnTimer.remove(false);
+    this.cleanupBalloons();
+    this.time.removeAllEvents();
+    this.tweens.killAll();
   }
 }

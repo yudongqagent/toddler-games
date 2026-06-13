@@ -1,5 +1,9 @@
 import { Scene, GameObjects } from 'phaser';
 import { updateGameProgress } from '../utils/GameData';
+import { soundManager } from '../utils/SoundManager';
+import { haptics } from '../utils/Haptics';
+import { Celebration } from '../utils/Celebration';
+import { accessibility } from '../utils/Accessibility';
 
 const CARD_EMOJIS = ['🍎','🍌','🍇','🍓','🥕','🥦','🚌','🚗','🚲','🛴','🏠','🌲','🌸','🐸','🐰','🦋'];
 
@@ -20,12 +24,15 @@ export class MemoryMatchScene extends Scene {
   private feedbackText!: GameObjects.Text;
   private starsEarned: number = 0;
   private canFlip: boolean = true;
+  private celebration!: Celebration;
+  private cardTapHandlers: Map<GameObjects.Container, () => void> = new Map();
 
   constructor() {
     super({ key: 'MemoryMatchScene', active: false });
   }
 
   create(): void {
+    this.celebration = new Celebration(this);
     this.createBackground();
     this.createBackButton();
     this.createScoreDisplay();
@@ -45,7 +52,11 @@ export class MemoryMatchScene extends Scene {
       fontSize: '24px', color: '#fff', backgroundColor: 'rgba(0,0,0,0.3)',
       padding: { x: 16, y: 8 }, fontFamily: 'Arial, sans-serif'
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-    btn.on('pointerup', () => this.scene.start('MainMenuScene'));
+    btn.on('pointerup', () => {
+      soundManager.playClick();
+      haptics.light();
+      this.scene.start('MainMenuScene');
+    });
   }
 
   private createScoreDisplay(): void {
@@ -128,8 +139,12 @@ export class MemoryMatchScene extends Scene {
       };
       
       container.setData('cardData', card);
-      container.on('pointerdown', () => this.onCardTap(card));
-      container.on('touchstart', () => this.onCardTap(card));
+      
+      const handler = () => this.onCardTap(card);
+      this.cardTapHandlers.set(container, handler);
+      
+      container.on('pointerdown', handler);
+      container.on('touchstart', handler);
       
       this.cards.push(card);
     });
@@ -216,7 +231,13 @@ export class MemoryMatchScene extends Scene {
       this.score++;
       this.scoreText.setText(`Matches: ${this.score}/8  Moves: ${this.moves}`);
       
+      soundManager.playMatch();
+      haptics.medium();
       this.feedbackText.setText('Match! 🎉').setColor('#4ade80').setVisible(true);
+      this.celebration.floatingText(this.firstCard.container.x, this.firstCard.container.y - 60, 'Match!', '#4ade80', '32px');
+      if (!accessibility.shouldReduceMotion()) {
+        this.celebration.burst({ x: this.firstCard.container.x, y: this.firstCard.container.y, count: 10 });
+      }
       
       // Celebration animation
       [this.firstCard, this.secondCard].forEach(card => {
@@ -229,23 +250,34 @@ export class MemoryMatchScene extends Scene {
         });
         const check = this.add.text(0, 0, '✓', { fontSize: '36px', color: '#4ade80' }).setOrigin(0.5);
         card.container.add(check);
+        
+        // Remove tap handlers for matched cards
+        const handler = this.cardTapHandlers.get(card.container);
+        if (handler) {
+          card.container.off('pointerdown', handler);
+          card.container.off('touchstart', handler);
+          this.cardTapHandlers.delete(card.container);
+        }
+        card.container.disableInteractive();
       });
       
       if (this.score >= 8) {
         this.time.delayedCall(1000, () => this.showCompletion());
       } else {
         this.time.delayedCall(800, () => {
-          this.feedbackText.setVisible(false);
+          if (this.feedbackText && this.feedbackText.active) this.feedbackText.setVisible(false);
           this.resetTurn();
         });
       }
     } else {
       // No match
+      soundManager.playError();
+      haptics.error();
       this.feedbackText.setText('No match, try again').setColor('#ff6b6b').setVisible(true);
       this.hideCard(this.firstCard);
       this.hideCard(this.secondCard);
       this.time.delayedCall(800, () => {
-        this.feedbackText.setVisible(false);
+        if (this.feedbackText && this.feedbackText.active) this.feedbackText.setVisible(false);
         this.resetTurn();
       });
     }
@@ -261,7 +293,16 @@ export class MemoryMatchScene extends Scene {
     const { width, height } = this.scale;
     this.starsEarned = this.moves <= 14 ? 3 : this.moves <= 18 ? 2 : 1;
     
-    const starsText = '⭐'.repeat(this.starsEarned);
+    soundManager.playSuccess();
+    haptics.success();
+    
+    if (!accessibility.shouldReduceMotion()) {
+      this.celebration.starBurst(width / 2, height / 2);
+      this.celebration.flash(0xffff00, 300);
+    }
+    this.celebration.floatingText(width / 2, height / 2 - 100, 'Amazing!', '#ffd700', '40px');
+    
+    const starsText = Array(this.starsEarned + 1).join('⭐');
     
     const overlay = this.add.graphics();
     overlay.fillStyle(0x000000, 0.7);
@@ -278,8 +319,32 @@ export class MemoryMatchScene extends Scene {
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     
     btn.on('pointerup', () => {
+      soundManager.playClick();
+      haptics.light();
       updateGameProgress('memory', this.starsEarned);
       this.scene.start('MainMenuScene');
     });
+    
+    accessibility.announce(`Congratulations! You completed the memory game in ${this.moves} moves!`);
+  }
+ 
+  shutdown(): void {
+    // Remove all card tap handlers
+    this.cardTapHandlers.forEach((handler, container) => {
+      if (container && container.active) {
+        container.off('pointerdown', handler);
+        container.off('touchstart', handler);
+      }
+    });
+    this.cardTapHandlers.clear();
+    
+    // Destroy all cards
+    this.cards.forEach(card => card.container.destroy());
+    this.cards = [];
+    
+    // Cleanup
+    this.celebration?.cleanup();
+    this.tweens.killAll();
+    this.time.removeAllEvents();
   }
 }

@@ -1,5 +1,9 @@
-import { Scene, GameObjects, Input } from 'phaser';
+import { Scene, GameObjects } from 'phaser';
 import { updateGameProgress } from '../utils/GameData';
+import { soundManager } from '../utils/SoundManager';
+import { haptics } from '../utils/Haptics';
+import { Celebration } from '../utils/Celebration';
+import { accessibility } from '../utils/Accessibility';
 
 const COLORS = [
   { name: 'Red', value: 0xff6b6b, light: 0xffa8a8 },
@@ -17,12 +21,15 @@ export class ColorMatchScene extends Scene {
   private scoreText!: GameObjects.Text;
   private feedbackText!: GameObjects.Text;
   private starsEarned: number = 0;
+  private celebration!: Celebration;
+  private colorTapHandlers: Map<GameObjects.Container, () => void> = new Map();
 
   constructor() {
     super({ key: 'ColorMatchScene', active: false });
   }
 
   create(): void {
+    this.celebration = new Celebration(this);
     this.createBackground();
     this.createBackButton();
     this.createScoreDisplay();
@@ -45,7 +52,11 @@ export class ColorMatchScene extends Scene {
       padding: { x: 16, y: 8 },
       fontFamily: 'Arial, sans-serif'
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-    btn.on('pointerup', () => this.scene.start('MainMenuScene'));
+    btn.on('pointerup', () => {
+      soundManager.playClick();
+      haptics.light();
+      this.scene.start('MainMenuScene');
+    });
   }
 
   private createScoreDisplay(): void {
@@ -108,7 +119,6 @@ export class ColorMatchScene extends Scene {
     // Create color options (3x2 grid)
     const options = [...COLORS].sort(() => Math.random() - 0.5).slice(0, 6);
     const cols = 3;
-    const rows = 2;
     const spacingX = width / (cols + 1);
     const startY = height / 2 + 20;
 
@@ -131,33 +141,52 @@ export class ColorMatchScene extends Scene {
       container.setSize(100, 100);
       container.setInteractive(new Phaser.Geom.Circle(0, 0, 50), Phaser.Geom.Circle.Contains);
       
-      container.on('pointerdown', () => this.onColorTap(container, color));
-      container.on('touchstart', () => this.onColorTap(container, color));
+      const handler = () => this.onColorTap(container, color);
+      this.colorTapHandlers.set(container, handler);
+      
+      container.on('pointerdown', handler);
+      container.on('touchstart', handler);
 
       this.colorCircles.push(container);
     });
   }
 
   private onColorTap(container: GameObjects.Container, color: typeof COLORS[0]): void {
+    // Remove handler to prevent double-tap
+    const handler = this.colorTapHandlers.get(container);
+    if (handler) {
+      container.off('pointerdown', handler);
+      container.off('touchstart', handler);
+      this.colorTapHandlers.delete(container);
+    }
     container.disableInteractive();
     
     if (color.name === this.targetColor.name) {
       // Correct!
+      soundManager.playClick();
+      soundManager.playSuccess();
+      haptics.medium();
       this.score++;
       this.feedbackText.setText('Correct! 🎉').setColor('#4ade80').setVisible(true);
+      this.celebration.floatingText(container.x, container.y - 60, 'Match!', '#4ade80', '32px');
       
       // Checkmark
       const check = this.add.text(0, 0, '✓', { fontSize: '48px', color: '#4ade80' }).setOrigin(0.5);
       container.add(check);
       
-      // Pop animation
-      this.tweens.add({
-        targets: container,
-        scale: { from: 1, to: 1.3 },
-        duration: 200,
-        yoyo: true,
-        ease: 'Back.easeOut'
-      });
+      if (!accessibility.shouldReduceMotion()) {
+        // Pop animation
+        this.tweens.add({
+          targets: container,
+          scale: { from: 1, to: 1.3 },
+          duration: accessibility.getDuration(200),
+          yoyo: true,
+          ease: 'Back.easeOut'
+        });
+        
+        // Burst particles
+        this.celebration.burst({ x: container.x, y: container.y, count: 15 });
+      }
 
       if (this.score >= 6) {
         this.time.delayedCall(1000, () => this.showCompletion());
@@ -169,16 +198,24 @@ export class ColorMatchScene extends Scene {
       }
     } else {
       // Wrong
+      soundManager.playError();
+      haptics.error();
       this.feedbackText.setText('Try again!').setColor('#ff6b6b').setVisible(true);
-      this.tweens.add({
-        targets: container,
-        x: { from: container.x, to: container.x - 10 },
-        duration: 100,
-        yoyo: true,
-        repeat: 3,
-        ease: 'Sine.easeInOut',
-        onComplete: () => container.setInteractive(new Phaser.Geom.Circle(0, 0, 50), Phaser.Geom.Circle.Contains)
-      });
+      this.celebration.floatingText(container.x, container.y - 60, 'Not quite', '#ff6b6b', '28px');
+      
+      if (!accessibility.shouldReduceMotion()) {
+        this.tweens.add({
+          targets: container,
+          x: { from: container.x, to: container.x - 10 },
+          duration: accessibility.getDuration(100),
+          yoyo: true,
+          repeat: 3,
+          ease: 'Sine.easeInOut',
+          onComplete: () => container.setInteractive(new Phaser.Geom.Circle(0, 0, 50), Phaser.Geom.Circle.Contains)
+        });
+      } else {
+        container.setInteractive(new Phaser.Geom.Circle(0, 0, 50), Phaser.Geom.Circle.Contains);
+      }
     }
   }
 
@@ -187,7 +224,17 @@ export class ColorMatchScene extends Scene {
     const stars = this.score >= 6 ? 3 : this.score >= 4 ? 2 : 1;
     this.starsEarned = stars;
     
-    const starsText = '⭐'.repeat(stars);
+    // Success effects
+    soundManager.playSuccess();
+    haptics.success();
+    
+    if (!accessibility.shouldReduceMotion()) {
+      this.celebration.starBurst(width / 2, height / 2);
+      this.celebration.flash(0xffff00, 300);
+    }
+    this.celebration.floatingText(width / 2, height / 2 - 100, 'Perfect!', '#ffd700', '40px');
+    
+    const starsText = Array(stars + 1).join('⭐');
     
     const overlay = this.add.graphics();
     overlay.fillStyle(0x000000, 0.7);
@@ -210,8 +257,34 @@ export class ColorMatchScene extends Scene {
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     
     btn.on('pointerup', () => {
+      soundManager.playClick();
+      haptics.light();
       updateGameProgress('colors', this.starsEarned);
       this.scene.start('MainMenuScene');
     });
+    
+    accessibility.announce('Congratulations! You matched all the colors!');
+  }
+ 
+  shutdown(): void {
+    // Remove all color tap handlers
+    this.colorTapHandlers.forEach((handler, container) => {
+      if (container && container.active) {
+        container.off('pointerdown', handler);
+        container.off('touchstart', handler);
+      }
+    });
+    this.colorTapHandlers.clear();
+    
+    // Destroy all containers
+    this.colorCircles.forEach(c => c.destroy());
+    this.colorCircles = [];
+    
+    // Cleanup celebration
+    this.celebration?.cleanup();
+    
+    // Kill all tweens and delayed calls
+    this.tweens.killAll();
+    this.time.removeAllEvents();
   }
 }
