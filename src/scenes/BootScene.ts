@@ -5,6 +5,7 @@ export class BootScene extends Scene {
   private progressText!: Phaser.GameObjects.Text;
   private progressBar!: Phaser.GameObjects.Graphics;
   private progressBarBg!: Phaser.GameObjects.Graphics;
+  private _started: boolean = false;
 
   constructor() {
     super({ key: 'BootScene', active: false });
@@ -25,23 +26,17 @@ export class BootScene extends Scene {
 
     this.loadAssets();
     
-    // If no assets to load, 'complete' may not fire - start immediately
-    // Check multiple conditions for robustness
-    this.time.delayedCall(0, () => {
-      const load = this.load;
-      const hasQueue = load.list?.size > 0 || load.totalToLoad > 0;
-      if (!hasQueue || !load.isLoading) {
-        this.startMainMenu();
-      }
-    });
-    
-    // Also start immediately if loader is already done (synchronous)
-    if (this.load.list?.size === 0 && this.load.totalToLoad === 0) {
+    // ROBUST FIX: Always start MainMenuScene after 100ms if 'complete' hasn't fired
+    // This handles the case where no assets are queued and 'complete' never fires
+    this.time.delayedCall(100, () => {
       this.startMainMenu();
-    }
+    });
   }
 
   private startMainMenu(): void {
+    if (this._started) return;
+    this._started = true;
+    
     this.loadingText.setText('Ready!');
     this.progressText.setText('100%');
     this.updateProgressBar(1);
