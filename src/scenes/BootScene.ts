@@ -37,6 +37,8 @@ export class BootScene extends Scene {
     if (this._started) return;
     this._started = true;
     
+    BootScene.hideLoadingOverlay();
+    
     this.loadingText.setText('Ready!');
     this.progressText.setText('100%');
     this.updateProgressBar(1);
