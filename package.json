@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deploy:verify": "node scripts/verify-deploy.js"
   },
   "dependencies": {
     "phaser": "^3.80.0"
