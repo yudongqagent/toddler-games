@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#7c5cff">
-<title>Animal Sudoku 🐾</title>
+<title>Sudoku Fun 🐾</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐶</text></svg>">
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
@@ -26,13 +26,18 @@
   .screen {
     position:absolute; inset:0;
     display:flex; flex-direction:column; align-items:center; justify-content:center;
-    gap:min(3vh,20px);
+    gap:min(2.5vh,18px);
     padding:max(10px, env(safe-area-inset-top)) 12px max(10px, env(safe-area-inset-bottom));
     transition:opacity .25s, transform .25s;
   }
   .screen.hidden { opacity:0; pointer-events:none; transform:scale(.96); }
 
   /* ---------- MENU ---------- */
+  /* scroll when the menu doesn't fit (short/landscape screens), center when it does */
+  #menu { overflow-y:auto; justify-content:flex-start; }
+  #menu > * { flex-shrink:0; }
+  #menu > :first-child { margin-top:auto; }
+  #menu > :last-child { margin-bottom:auto; }
   #menu h1 {
     font-size:clamp(30px, 8vw, 56px);
     color:#fff;
@@ -41,7 +46,25 @@
     animation:bob 2.5s ease-in-out infinite;
   }
   @keyframes bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
-  #menu .subtitle { font-size:clamp(16px,4vw,24px); color:#ffffffdd; margin-top:-8px; }
+  #menu .subtitle { font-size:clamp(15px,4vw,22px); color:#ffffffdd; margin-top:-6px; }
+
+  .style-toggle {
+    display:flex; gap:0;
+    background:#ffffff55;
+    border-radius:999px;
+    padding:5px;
+  }
+  .style-btn {
+    border:none; cursor:pointer;
+    border-radius:999px;
+    padding:10px 22px;
+    font-family:inherit; font-weight:800;
+    font-size:clamp(15px,4vw,20px);
+    background:transparent; color:#ffffffcc;
+    transition:background .15s, color .15s;
+  }
+  .style-btn.active { background:#fff; color:#5b3fd4; box-shadow:0 2px 8px rgba(0,0,0,.15); }
+
   .levels {
     display:grid; grid-template-columns:repeat(2, minmax(140px, 220px));
     gap:min(3vw,18px); width:min(92vw,500px);
@@ -50,14 +73,14 @@
   .level-btn {
     border:none; cursor:pointer;
     border-radius:26px;
-    padding:min(3vh,22px) 10px;
+    padding:min(2.6vh,20px) 10px;
     font-family:inherit;
     display:flex; flex-direction:column; align-items:center; gap:4px;
     box-shadow:0 6px 0 rgba(0,0,0,.18);
     transition:transform .1s;
   }
   .level-btn:active { transform:translateY(4px) scale(.97); box-shadow:0 2px 0 rgba(0,0,0,.18); }
-  .level-btn .emoji { font-size:clamp(34px,9vw,54px); }
+  .level-btn .emoji { font-size:clamp(32px,8vw,50px); }
   .level-btn .name { font-size:clamp(17px,4.5vw,24px); font-weight:800; color:#4a3800; }
   .level-btn .desc { font-size:clamp(12px,3vw,15px); font-weight:700; color:#4a380099; }
   .level-btn .stars { font-size:clamp(12px,3vw,16px); min-height:1.2em; letter-spacing:1px; }
@@ -102,8 +125,11 @@
     border:2px solid #e3defc;
     position:relative;
     cursor:pointer;
+    font-weight:800;
   }
   .cell.given { background:#f4f1ff; }
+  .cell.sel { background:#fff3ad; box-shadow:inset 0 0 0 3px #ffc93d; animation:selpulse 1.2s ease-in-out infinite; }
+  @keyframes selpulse { 0%,100%{box-shadow:inset 0 0 0 3px #ffc93d} 50%{box-shadow:inset 0 0 0 5px #ffb300} }
   .cell .sym { line-height:1; pointer-events:none; }
   .cell.pop .sym { animation:pop .35s; }
   @keyframes pop { 0%{transform:scale(0)} 70%{transform:scale(1.25)} 100%{transform:scale(1)} }
@@ -115,16 +141,19 @@
   @keyframes glow { 0%,100%{background:#fff} 50%{background:#fff3ad} }
 
   #tray {
-    display:flex; gap:min(2.5vw,14px);
+    display:flex; flex-wrap:wrap; justify-content:center;
+    gap:var(--tray-gap, 10px);
     padding:8px;
+    max-width:96vw;
   }
   .tray-btn {
     border:none; cursor:pointer;
     width:var(--tray-size); height:var(--tray-size);
-    border-radius:22px;
+    border-radius:26%;
     background:#ffffffee;
     box-shadow:0 5px 0 rgba(0,0,0,.15);
-    font-size:calc(var(--tray-size) * .62);
+    font-size:calc(var(--tray-size) * .58);
+    font-weight:800;
     line-height:1;
     transition:transform .12s, box-shadow .12s, background .12s;
     font-family:inherit;
@@ -183,20 +212,24 @@
 <body>
 
 <div id="menu" class="screen">
-  <h1>🐾 Animal Sudoku</h1>
-  <div class="subtitle">Every friend once in each row! ✨</div>
+  <h1>🐾 Sudoku Fun 🔢</h1>
+  <div class="subtitle" id="subtitle">Every friend once in each row! ✨</div>
+  <div class="style-toggle">
+    <button class="style-btn active" id="style-animal">🐾 Animals</button>
+    <button class="style-btn" id="style-classic">🔢 Numbers</button>
+  </div>
   <div class="levels">
     <button class="level-btn l1" data-level="0">
-      <span class="emoji">🐣</span><span class="name">Tiny</span><span class="desc">4×4 · super easy</span><span class="stars" id="stars0"></span>
+      <span class="emoji" id="emoji0"></span><span class="name" id="name0"></span><span class="desc" id="desc0"></span><span class="stars" id="stars0"></span>
     </button>
     <button class="level-btn l2" data-level="1">
-      <span class="emoji">🐥</span><span class="name">Small</span><span class="desc">4×4 · easy</span><span class="stars" id="stars1"></span>
+      <span class="emoji" id="emoji1"></span><span class="name" id="name1"></span><span class="desc" id="desc1"></span><span class="stars" id="stars1"></span>
     </button>
     <button class="level-btn l3" data-level="2">
-      <span class="emoji">🐯</span><span class="name">Big</span><span class="desc">6×6 · tricky</span><span class="stars" id="stars2"></span>
+      <span class="emoji" id="emoji2"></span><span class="name" id="name2"></span><span class="desc" id="desc2"></span><span class="stars" id="stars2"></span>
     </button>
     <button class="level-btn l4" data-level="3">
-      <span class="emoji">🦁</span><span class="name">Giant</span><span class="desc">6×6 · hard</span><span class="stars" id="stars3"></span>
+      <span class="emoji" id="emoji3"></span><span class="name" id="name3"></span><span class="desc" id="desc3"></span><span class="stars" id="stars3"></span>
     </button>
   </div>
   <button class="round-btn" id="sound-toggle" aria-label="Toggle sound">🔊</button>
@@ -227,7 +260,7 @@
 <script>
 'use strict';
 /* ============================================================
-   Animal Sudoku — a picture sudoku for ages 3–6.
+   Sudoku Fun — picture & number sudoku for kids.
    Single file, no dependencies.
    ============================================================ */
 
@@ -238,14 +271,27 @@ const THEMES = [
   ['🐙','🐠','🐬','🦀','🐢','🐳'],
   ['🌸','🌻','🌈','⭐️','🍄','🦋'],
 ];
+const DIGIT_COLORS = ['#e74c3c','#e67e22','#c9a218','#27ae60','#16a085','#2980b9','#7d3fc4','#d444a8','#8d6e63'];
 
-// level: n = grid size, boxW/boxH = sub-box shape, blanks = removed cells
-const LEVELS = [
-  { name:'Tiny 🐣',  n:4, boxW:2, boxH:2, blanks:4  },
-  { name:'Small 🐥', n:4, boxW:2, boxH:2, blanks:8  },
-  { name:'Big 🐯',   n:6, boxW:3, boxH:2, blanks:10 },
-  { name:'Giant 🦁', n:6, boxW:3, boxH:2, blanks:16 },
-];
+// n = grid size, boxW/boxH = sub-box shape, blanks = cells removed
+const LEVELS = {
+  animal: [
+    { name:'Tiny',     emoji:'🐣', desc:'4×4 · super easy', n:4, boxW:2, boxH:2, blanks:4  },
+    { name:'Small',    emoji:'🐥', desc:'4×4 · easy',       n:4, boxW:2, boxH:2, blanks:8  },
+    { name:'Big',      emoji:'🐯', desc:'6×6 · tricky',     n:6, boxW:3, boxH:2, blanks:10 },
+    { name:'Giant',    emoji:'🦁', desc:'6×6 · hard',       n:6, boxW:3, boxH:2, blanks:16 },
+  ],
+  classic: [
+    { name:'Starter',  emoji:'✏️', desc:'4×4 · easy',       n:4, boxW:2, boxH:2, blanks:8  },
+    { name:'Junior',   emoji:'📗', desc:'6×6 · medium',     n:6, boxW:3, boxH:2, blanks:16 },
+    { name:'Master',   emoji:'📘', desc:'9×9 · hard',       n:9, boxW:3, boxH:3, blanks:35 },
+    { name:'Champion', emoji:'🏆', desc:'9×9 · expert',     n:9, boxW:3, boxH:3, blanks:48 },
+  ],
+};
+const SUBTITLES = {
+  animal:'Every friend once in each row! ✨',
+  classic:'Every number once in each row! ✨',
+};
 
 const WIN_MSGS = ['Great job!','You did it!','Amazing!','Super star!','Fantastic!','Woohoo!'];
 
@@ -253,7 +299,7 @@ const WIN_MSGS = ['Great job!','You did it!','Amazing!','Super star!','Fantastic
 
 function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
 
-function candidatesOk(grid,r,c,v,L){
+function placeOk(grid,r,c,v,L){
   const n=L.n;
   for(let i=0;i<n;i++){
     if(grid[r*n+i]===v || grid[i*n+c]===v) return false;
@@ -265,34 +311,42 @@ function candidatesOk(grid,r,c,v,L){
   return true;
 }
 
-function fillGrid(grid,pos,L){
+// Find the empty cell with fewest candidates (MRV) — keeps 9x9 search fast.
+function bestCell(grid,L){
   const n=L.n;
-  if(pos===n*n) return true;
-  if(grid[pos]!==0) return fillGrid(grid,pos+1,L);
-  const r=Math.floor(pos/n), c=pos%n;
-  for(const v of shuffle([...Array(n).keys()].map(i=>i+1))){
-    if(candidatesOk(grid,r,c,v,L)){
-      grid[pos]=v;
-      if(fillGrid(grid,pos+1,L)) return true;
-      grid[pos]=0;
-    }
+  let bestPos=-1, bestCands=null;
+  for(let p=0;p<n*n;p++){
+    if(grid[p]!==0) continue;
+    const r=Math.floor(p/n), c=p%n, cands=[];
+    for(let v=1;v<=n;v++) if(placeOk(grid,r,c,v,L)) cands.push(v);
+    if(cands.length===0) return [p,cands];
+    if(!bestCands || cands.length<bestCands.length){ bestPos=p; bestCands=cands; if(cands.length===1) break; }
+  }
+  return [bestPos,bestCands];
+}
+
+function fillGrid(grid,L){
+  const [p,cands]=bestCell(grid,L);
+  if(p===-1) return true;
+  if(cands.length===0) return false;
+  for(const v of shuffle(cands)){
+    grid[p]=v;
+    if(fillGrid(grid,L)) return true;
+    grid[p]=0;
   }
   return false;
 }
 
-function countSolutions(grid,pos,L,limit){
-  const n=L.n;
-  while(pos<n*n && grid[pos]!==0) pos++;
-  if(pos===n*n) return 1;
-  const r=Math.floor(pos/n), c=pos%n;
+function countSolutions(grid,L,limit){
+  const [p,cands]=bestCell(grid,L);
+  if(p===-1) return 1;
+  if(cands.length===0) return 0;
   let count=0;
-  for(let v=1;v<=n;v++){
-    if(candidatesOk(grid,r,c,v,L)){
-      grid[pos]=v;
-      count+=countSolutions(grid,pos+1,L,limit-count);
-      grid[pos]=0;
-      if(count>=limit) return count;
-    }
+  for(const v of cands){
+    grid[p]=v;
+    count+=countSolutions(grid,L,limit-count);
+    grid[p]=0;
+    if(count>=limit) break;
   }
   return count;
 }
@@ -301,14 +355,14 @@ function countSolutions(grid,pos,L,limit){
 function makePuzzle(L){
   const n=L.n;
   const solution=new Array(n*n).fill(0);
-  fillGrid(solution,0,L);
+  fillGrid(solution,L);
   const puzzle=solution.slice();
   let removed=0;
   for(const idx of shuffle([...Array(n*n).keys()])){
     if(removed>=L.blanks) break;
     const saved=puzzle[idx];
     puzzle[idx]=0;
-    if(countSolutions(puzzle.slice(),0,L,2)===1) removed++;
+    if(countSolutions(puzzle.slice(),L,2)===1) removed++;
     else puzzle[idx]=saved;
   }
   return { puzzle, solution };
@@ -342,31 +396,65 @@ function buzz(ms){ if(navigator.vibrate) try{ navigator.vibrate(ms); }catch(e){}
 
 /* ---------------- state ---------------- */
 
-let levelIdx=0, L=LEVELS[0];
+let styleKey = localStorage.getItem('sudoku-style')==='classic' ? 'classic' : 'animal';
+let levelIdx=0, L=LEVELS[styleKey][0];
+let isClassic=false;
 let puzzle=[], solution=[], board=[];   // board = current player state
-let symbols=[];                          // emoji for values 1..n
-let selectedVal=0;                       // currently selected tray symbol (0 = none)
+let symbols=[];                          // display strings for values 1..n
+let selectedVal=0;                       // selected tray symbol (0 = none) — "stamp" mode
+let selectedCell=-1;                     // selected empty cell (-1 = none) — "slot first" mode
 let solvedFlag=false;
 
 const $=id=>document.getElementById(id);
 const boardEl=$('board'), trayEl=$('tray');
 
-function stars(){ try{ return JSON.parse(localStorage.getItem('sudoku-stars')||'[0,0,0,0]'); }catch(e){ return [0,0,0,0]; } }
-function addStar(i){ const s=stars(); s[i]=Math.min(s[i]+1,5); localStorage.setItem('sudoku-stars',JSON.stringify(s)); }
-function renderStars(){ stars().forEach((v,i)=>{ $('stars'+i).textContent = '⭐️'.repeat(v); }); }
+/* stars: { animal:[0,0,0,0], classic:[0,0,0,0] } (migrates old flat-array format) */
+function stars(){
+  try{
+    const raw=JSON.parse(localStorage.getItem('sudoku-stars')||'null');
+    if(Array.isArray(raw)) return { animal:raw, classic:[0,0,0,0] };
+    if(raw && raw.animal) return raw;
+  }catch(e){}
+  return { animal:[0,0,0,0], classic:[0,0,0,0] };
+}
+function addStar(){
+  const s=stars();
+  s[styleKey][levelIdx]=Math.min(s[styleKey][levelIdx]+1,5);
+  localStorage.setItem('sudoku-stars',JSON.stringify(s));
+}
 
 /* ---------------- rendering ---------------- */
 
+function renderMenu(){
+  const s=stars();
+  $('subtitle').textContent=SUBTITLES[styleKey];
+  $('style-animal').classList.toggle('active',styleKey==='animal');
+  $('style-classic').classList.toggle('active',styleKey==='classic');
+  LEVELS[styleKey].forEach((lv,i)=>{
+    $('emoji'+i).textContent=lv.emoji;
+    $('name'+i).textContent=lv.name;
+    $('desc'+i).textContent=lv.desc;
+    $('stars'+i).textContent='⭐️'.repeat(s[styleKey][i]);
+  });
+}
+
 function layoutSizes(){
   const n=L.n;
-  // Board must fit width and leave room for topbar + tray.
   const vw=Math.min(window.innerWidth, document.documentElement.clientWidth||1e9);
   const vh=window.innerHeight;
-  const boardMax=Math.min(vw*0.94, vh*0.62, 560);
+  // Board must fit width and leave room for topbar + tray.
+  const trayRows = n>6 && vw<560 ? 2 : 1;
+  const boardMax=Math.min(vw*0.94, vh*(trayRows===2?0.56:0.62), 560);
   const cell=Math.floor((boardMax-12)/n);
-  document.documentElement.style.setProperty('--tray-size', Math.min(Math.floor((vw*0.94-14*(n-1))/n), 84)+'px');
+  const gap=Math.min(vw*0.02, 12);
+  const perRow=Math.ceil(n/trayRows);
+  const ts=Math.min(Math.floor((vw*0.94-16-gap*(perRow-1))/perRow), 84);
+  document.documentElement.style.setProperty('--tray-size', ts+'px');
+  document.documentElement.style.setProperty('--tray-gap', gap+'px');
   return cell;
 }
+
+function symColor(v){ return isClassic ? DIGIT_COLORS[(v-1)%DIGIT_COLORS.length] : ''; }
 
 function renderBoard(){
   const n=L.n, cell=layoutSizes();
@@ -375,11 +463,11 @@ function renderBoard(){
   for(let i=0;i<n*n;i++){
     const r=Math.floor(i/n), c=i%n;
     const d=document.createElement('div');
-    d.className='cell'+(puzzle[i]!==0?' given':'');
+    d.className='cell'+(puzzle[i]!==0?' given':'')+(i===selectedCell?' sel':'');
     d.style.width=d.style.height=cell+'px';
     d.style.fontSize=Math.floor(cell*0.62)+'px';
     // thick borders between boxes, rounded outer corners
-    const bs='3px solid #7c5cff55';
+    const bs=(n===9?'2.5px':'3px')+' solid #7c5cff'+(n===9?'99':'55');
     if(c%L.boxW===0) d.style.borderLeft=bs;
     if(r%L.boxH===0) d.style.borderTop=bs;
     if(c===n-1) d.style.borderRight=bs;
@@ -391,7 +479,7 @@ function renderBoard(){
     if(i===n*n-1) d.style.borderBottomRightRadius=rad;
     const s=document.createElement('span');
     s.className='sym';
-    s.textContent=board[i]?symbols[board[i]-1]:'';
+    if(board[i]){ s.textContent=symbols[board[i]-1]; s.style.color=symColor(board[i]); }
     d.appendChild(s);
     d.addEventListener('click',()=>onCellTap(i,d));
     boardEl.appendChild(d);
@@ -404,6 +492,7 @@ function renderTray(){
     const b=document.createElement('button');
     b.className='tray-btn';
     b.textContent=symbols[v-1];
+    b.style.color=symColor(v);
     b.dataset.val=v;
     b.addEventListener('click',e=>{ e.preventDefault(); onTrayTap(v); });
     trayEl.appendChild(b);
@@ -423,12 +512,45 @@ function updateTray(){
   });
 }
 
+function selectCell(i){
+  if(selectedCell>=0 && boardEl.children[selectedCell]) boardEl.children[selectedCell].classList.remove('sel');
+  selectedCell=i;
+  if(i>=0) boardEl.children[i].classList.add('sel');
+}
+
 /* ---------------- interaction ---------------- */
+
+// Placing works in both orders: pick a symbol then stamp cells,
+// or pick an empty cell then choose its symbol.
+function tryPlace(i,v){
+  const el=boardEl.children[i];
+  if(solution[i]===v){
+    board[i]=v;
+    const s=el.querySelector('.sym');
+    s.textContent=symbols[v-1]; s.style.color=symColor(v);
+    el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+    if(i===selectedCell) selectCell(-1);
+    sfx('place'); buzz(20);
+    updateTray();
+    if(board.every((x,idx)=>x===solution[idx])) onWin();
+    return true;
+  }
+  const s=el.querySelector('.sym');
+  s.textContent=symbols[v-1]; s.style.color=symColor(v);
+  el.classList.remove('wrong'); void el.offsetWidth; el.classList.add('wrong');
+  sfx('wrong'); buzz([60,40,60]);
+  setTimeout(()=>{ s.textContent=''; el.classList.remove('wrong'); },500);
+  return false;
+}
 
 function onTrayTap(v){
   const counts=new Array(L.n+1).fill(0);
   board.forEach(x=>{ if(x) counts[x]++; });
   if(counts[v]>=L.n) return;
+  if(selectedCell>=0){            // slot-first mode: fill the chosen cell
+    tryPlace(selectedCell,v);
+    return;
+  }
   selectedVal = (selectedVal===v) ? 0 : v;
   sfx('tap');
   updateTray();
@@ -436,36 +558,27 @@ function onTrayTap(v){
 
 function onCellTap(i,el){
   if(solvedFlag) return;
-  if(puzzle[i]!==0 || board[i]!==0) { sfx('tap'); return; }
-  if(!selectedVal) {
-    // nudge: wiggle the tray so kids know to pick an animal first
-    trayEl.animate([{transform:'translateY(0)'},{transform:'translateY(-8px)'},{transform:'translateY(0)'}],{duration:300});
+  if(puzzle[i]!==0 || board[i]!==0){ sfx('tap'); selectCell(-1); return; }
+  if(selectedVal){                // stamp mode: place the chosen symbol
+    tryPlace(i,selectedVal);
     return;
   }
-  if(solution[i]===selectedVal){
-    board[i]=selectedVal;
-    el.querySelector('.sym').textContent=symbols[selectedVal-1];
-    el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
-    sfx('place'); buzz(20);
-    updateTray();
-    if(board.every((v,idx)=>v===solution[idx])) onWin();
-  } else {
-    el.querySelector('.sym').textContent=symbols[selectedVal-1];
-    el.classList.remove('wrong'); void el.offsetWidth; el.classList.add('wrong');
-    sfx('wrong'); buzz([60,40,60]);
-    setTimeout(()=>{ el.querySelector('.sym').textContent=''; el.classList.remove('wrong'); },500);
-  }
+  // slot-first mode: highlight this cell, next tray tap fills it
+  selectCell(i===selectedCell?-1:i);
+  sfx('tap');
 }
 
 function onHint(){
   if(solvedFlag) return;
   const empties=board.map((v,i)=>v===0?i:-1).filter(i=>i>=0);
   if(!empties.length) return;
-  const i=empties[Math.floor(Math.random()*empties.length)];
+  const i=selectedCell>=0 ? selectedCell : empties[Math.floor(Math.random()*empties.length)];
   const el=boardEl.children[i];
   board[i]=solution[i];
-  el.querySelector('.sym').textContent=symbols[solution[i]-1];
+  const s=el.querySelector('.sym');
+  s.textContent=symbols[solution[i]-1]; s.style.color=symColor(solution[i]);
   el.classList.add('pop','hintglow');
+  if(i===selectedCell) selectCell(-1);
   sfx('hint');
   updateTray();
   setTimeout(()=>el.classList.remove('hintglow'),2100);
@@ -475,13 +588,16 @@ function onHint(){
 /* ---------------- flow ---------------- */
 
 function newGame(idx){
-  levelIdx=idx; L=LEVELS[idx];
-  symbols=shuffle(THEMES[Math.floor(Math.random()*THEMES.length)].slice()).slice(0,L.n);
+  levelIdx=idx; L=LEVELS[styleKey][idx];
+  isClassic = styleKey==='classic';
+  symbols = isClassic
+    ? [...Array(L.n).keys()].map(i=>String(i+1))
+    : shuffle(THEMES[Math.floor(Math.random()*THEMES.length)].slice()).slice(0,L.n);
   const p=makePuzzle(L);
   puzzle=p.puzzle; solution=p.solution;
   board=puzzle.slice();
-  selectedVal=0; solvedFlag=false;
-  $('level-label').textContent=L.name;
+  selectedVal=0; selectedCell=-1; solvedFlag=false;
+  $('level-label').textContent=L.name+' '+L.emoji;
   renderBoard(); renderTray();
   $('menu').classList.add('hidden');
   $('game').classList.remove('hidden');
@@ -505,7 +621,7 @@ function confettiBurst(){
 
 function onWin(){
   solvedFlag=true;
-  addStar(levelIdx);
+  addStar();
   sfx('win'); buzz([80,60,80,60,160]);
   confettiBurst();
   $('win-msg').textContent=WIN_MSGS[Math.floor(Math.random()*WIN_MSGS.length)];
@@ -513,10 +629,17 @@ function onWin(){
 }
 
 function toMenu(){
-  renderStars();
+  renderMenu();
   $('game').classList.add('hidden');
   $('win').classList.remove('show');
   $('menu').classList.remove('hidden');
+}
+
+function setStyle(key){
+  styleKey=key;
+  localStorage.setItem('sudoku-style',key);
+  sfx('tap');
+  renderMenu();
 }
 
 /* ---------------- wire up ---------------- */
@@ -524,6 +647,8 @@ function toMenu(){
 document.querySelectorAll('.level-btn').forEach(b=>{
   b.addEventListener('click',()=>{ sfx('tap'); newGame(+b.dataset.level); });
 });
+$('style-animal').addEventListener('click',()=>setStyle('animal'));
+$('style-classic').addEventListener('click',()=>setStyle('classic'));
 $('back-btn').addEventListener('click',()=>{ sfx('tap'); toMenu(); });
 $('menu-btn').addEventListener('click',()=>{ sfx('tap'); toMenu(); });
 $('hint-btn').addEventListener('click',onHint);
@@ -540,7 +665,7 @@ window.addEventListener('resize',()=>{ if(!$('game').classList.contains('hidden'
 // block pinch zoom on iOS (double-tap zoom is disabled via touch-action:manipulation)
 document.addEventListener('gesturestart',e=>e.preventDefault());
 
-renderStars();
+renderMenu();
 </script>
 </body>
 </html>
