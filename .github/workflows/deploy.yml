@@ -15,136 +15,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build
-        run: npm run build
-        env:
-          NODE_ENV: production
-
-      - name: Verify build output
-        run: |
-          echo "=== Build verification ==="
-          ls -la dist/
-          echo "=== Checking for required files ==="
-          test -f dist/index.html || exit 1
-          test -f dist/assets/index-*.js || exit 1
-          test -f dist/assets/phaser-*.js || exit 1
-          
-          # Verify bundle contains key fixes
-          echo "=== Verifying critical fixes in bundle ==="
-          bundle=$(ls dist/assets/index-*.js | head -1)
-          grep -q "hideLoadingOverlay" "$bundle" || { echo "❌ hideLoadingOverlay not found in bundle"; exit 1; }
-          grep -q "delayedCall(100" "$bundle" || { echo "❌ 100ms fallback not found"; exit 1; }
-          grep -q "startMainMenu" "$bundle" || { echo "❌ startMainMenu not found"; exit 1; }
-          grep -q "_started" "$bundle" || { echo "❌ _started guard not found"; exit 1; }
-          echo "✅ All critical fixes verified in bundle"
-          
-          # Verify no console.log/debug code
-          if grep -q "console\.(log|debug|warn)" "$bundle" | grep -v "console.warn" | grep -v "console.error"; then
-            echo "⚠️ Console debug statements found (non-critical)"
-          fi
-
-      - name: Extract version for cache busting
-        id: version
-        run: |
-          # Use git short SHA as version for cache busting
-          VERSION=$(git rev-parse --short HEAD)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-
-      - name: Inject cache-busting version into HTML
-        run: |
-          VERSION=${{ steps.version.outputs.version }}
-          sed -i "s|<script type=\"module\" crossorigin src=\"\(/toddler-games/assets/index-[^\"]*\)\"|<script type=\"module\" crossorigin src=\"\1?v=$VERSION\"|g" dist/index.html
-          sed -i "s|<link rel=\"modulepreload\" crossorigin href=\"\(/toddler-games/assets/phaser-[^\"]*\)\"|<link rel=\"modulepreload\" crossorigin href=\"\1?v=$VERSION\"|g" dist/index.html
-          echo "=== Updated index.html with cache busting v$VERSION ==="
-          head -20 dist/index.html
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: ./dist
-
   deploy:
-    needs: build
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-
-  verify:
-    needs: deploy
-    runs-on: ubuntu-latest
-    steps:
-      - name: Verify deployment
-        run: |
-          echo "=== Waiting for GitHub Pages CDN to propagate ==="
-          sleep 30
-          
-          # Check if the deployed version matches our commit
-          DEPLOY_URL="https://yudongqagent.github.io/toddler-games/"
-          echo "Checking $DEPLOY_URL"
-          
-          # Get deployed HTML
-          DEPLOYED_HTML=$(curl -s -L "$DEPLOY_URL" || echo "FAILED")
-          if [[ "$DEPLOYED_HTML" == "FAILED" ]]; then
-            echo "❌ Failed to fetch deployed page"
-            exit 1
-          fi
-          
-          # Extract bundle hash from deployed page
-          DEPLOYED_BUNDLE=$(echo "$DEPLOYED_HTML" | grep -o 'assets/index-[^"]*' | head -1)
-          echo "Deployed bundle: $DEPLOYED_BUNDLE"
-          
-          # Verify bundle can be fetched
-          BUNDLE_URL="https://yudongqagent.github.io/toddler-games/$DEPLOYED_BUNDLE"
-          BUNDLE_CONTENT=$(curl -s -L "$BUNDLE_URL" || echo "FAILED")
-          
-          if [[ "$BUNDLE_CONTENT" == "FAILED" ]]; then
-            echo "❌ Failed to fetch deployed bundle"
-            exit 1
-          fi
-          
-          # Verify critical fixes in deployed bundle
-          if ! echo "$BUNDLE_CONTENT" | grep -q "hideLoadingOverlay"; then
-            echo "❌ Deployed bundle missing hideLoadingOverlay fix"
-            exit 1
-          fi
-          
-          if ! echo "$BUNDLE_CONTENT" | grep -q "delayedCall(100"; then
-            echo "❌ Deployed bundle missing 100ms fallback"
-            exit 1
-          fi
-          
-          if ! echo "$BUNDLE_CONTENT" | grep -q "_started\|this\._started"; then
-            echo "❌ Deployed bundle missing _started guard"
-            exit 1
-          fi
-          
-          # Verify no loading screen stuck - check for game container
-          if echo "$DEPLOYED_HTML" | grep -q 'game-container'; then
-            echo "✅ Game container present in deployed HTML"
-          else
-            echo "⚠️ Game container not found in deployed HTML"
-          fi
-          
-          echo "✅ Deployment verification passed!"
-          echo "🎮 Game live at: $DEPLOY_URL"
