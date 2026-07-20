@@ -132,12 +132,14 @@
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   }
   #board-area { display:flex; flex-direction:column; align-items:center; gap:min(2vh,14px); }
+  /* the board frame doubles as the grid lines: thin gaps between cells,
+     wide gaps between boxes — the sudoku box rule made visible */
   #board {
     display:grid;
-    background:#ffffff;
+    background:#b7a8ec;
     border-radius:22px;
     padding:8px;
-    box-shadow:0 12px 28px rgba(60,40,150,.28), inset 0 2px 0 rgba(255,255,255,.9);
+    box-shadow:0 12px 28px rgba(60,40,150,.28), inset 0 2px 0 rgba(255,255,255,.35);
   }
   .cell {
     display:flex; align-items:center; justify-content:center;
@@ -148,9 +150,10 @@
     font-weight:800;
     transition:background .15s;
   }
-  .cell.alt { background:#efe9ff; }
+  .cell.alt { background:#f4efff; }
   .cell.hole { background:#e9e3fa; box-shadow:inset 0 3px 7px rgba(96,70,200,.22); }
   .cell.alt.hole { background:#e0d8f7; }
+  .cell.flashm { background:#d9f6bd !important; box-shadow:inset 0 0 0 2px #9ade6d; }
   .cell.rc { background:#fff3c9; }
   .cell.match { background:#d9f6bd; box-shadow:inset 0 0 0 2px #9ade6d; }
   .cell.sel { background:#ffe063 !important; box-shadow:inset 0 0 0 3px #ffc21d; animation:selpulse 1.2s ease-in-out infinite; z-index:2; }
@@ -160,10 +163,15 @@
   @keyframes pop { 0%{transform:scale(0)} 70%{transform:scale(1.3)} 100%{transform:scale(1)} }
   .cell.wrong { animation:shake .4s; }
   .cell.wrong .sym { animation:fadeout .5s forwards; }
+  .cell.shake { animation:shake .4s; }
   @keyframes shake { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-6px)} 40%,80%{transform:translateX(6px)} }
   @keyframes fadeout { to{opacity:0; transform:scale(.3);} }
   .cell.hintglow { animation:glow 1s ease-in-out 2; }
   @keyframes glow { 0%,100%{background:#fff} 50%{background:#fff3ad} }
+  .cell.conflict { background:#ffdede !important; box-shadow:inset 0 0 0 3px #ff8080; }
+  .cell.conflict .sym { animation:confwob .9s ease-in-out infinite; }
+  @keyframes confwob { 0%,100%{transform:rotate(-7deg)} 50%{transform:rotate(7deg)} }
+  .cell.explain { background:#fff3ad !important; box-shadow:inset 0 0 0 3px #ffd34d; }
   .cell.cellwin { animation:cellwin .55s both; z-index:1; }
   @keyframes cellwin {
     0%{transform:scale(1)}
@@ -212,12 +220,31 @@
     font-family:inherit;
   }
   .tray-btn:active { transform:scale(.92); }
+  .tray-btn { position:relative; }
   .tray-btn.selected {
     background:#ffe063;
     transform:translateY(-6px) scale(1.08);
     box-shadow:0 10px 0 rgba(0,0,0,.15), 0 0 16px 2px #ffd34d88;
   }
   .tray-btn.done { opacity:.3; transform:scale(.85); }
+  /* how many of this symbol are still missing */
+  .tray-btn .cnt {
+    position:absolute; top:-7px; right:-7px;
+    min-width:22px; height:22px; padding:0 5px;
+    border-radius:999px;
+    background:#7c5cff; color:#fff;
+    font-size:13px; font-weight:800;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 2px 4px rgba(0,0,0,.25);
+    pointer-events:none;
+  }
+  .tray-btn.done .cnt { display:none; }
+  .tray-btn.eraser.selected { background:#ffd0e6; box-shadow:0 10px 0 rgba(0,0,0,.15), 0 0 16px 2px #ff9ecb88; }
+  .tray-btn.hintpulse { animation:traypulse .8s ease-in-out 4; }
+  @keyframes traypulse {
+    0%,100%{transform:translateY(0) scale(1)}
+    50%{transform:translateY(-9px) scale(1.12); box-shadow:0 12px 0 rgba(0,0,0,.15), 0 0 18px 4px #ffd34daa;}
+  }
 
   /* floating praise words + sparkles */
   .praise {
@@ -239,6 +266,27 @@
   @keyframes sparkfly {
     0%{transform:translate(-50%,-50%) scale(.4); opacity:1}
     100%{transform:translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(1.1); opacity:0}
+  }
+
+  /* speech bubble for hint explanations */
+  #hint-bubble {
+    position:fixed; left:50%; top:calc(env(safe-area-inset-top) + 74px);
+    transform:translateX(-50%) scale(.8);
+    z-index:48;
+    background:#fff; border-radius:18px;
+    padding:10px 18px;
+    font-weight:800; color:#5b3fd4;
+    font-size:clamp(15px,4.2vw,21px);
+    box-shadow:0 8px 24px rgba(60,40,150,.3);
+    max-width:min(88vw,480px); text-align:center;
+    opacity:0; pointer-events:none;
+    transition:opacity .25s, transform .25s;
+  }
+  #hint-bubble.show { opacity:1; transform:translateX(-50%) scale(1); }
+  #hint-bubble::after {
+    content:''; position:absolute; left:50%; top:100%;
+    transform:translateX(-50%);
+    border:10px solid transparent; border-top-color:#fff;
   }
 
   /* ---------- WIN OVERLAY ---------- */
@@ -339,6 +387,8 @@
   <div id="tray"></div>
 </div>
 
+<div id="hint-bubble"></div>
+
 <div id="win">
   <div class="win-card">
     <div class="big" id="win-big">🎉</div>
@@ -384,8 +434,8 @@ const LEVELS = {
   ],
 };
 const SUBTITLES = {
-  animal:'Every friend once in each row! ✨',
-  classic:'Every number once in each row! ✨',
+  animal:'Every friend once in each row, column & box! ✨',
+  classic:'Every number once in each row, column & box! ✨',
 };
 
 const WIN_MSGS = ['Great job!','You did it!','Amazing!','Super star!','Fantastic!','Woohoo!'];
@@ -490,6 +540,8 @@ function sfx(name){
     }
     if(name==='wrong'){ tone(220,0,.15,'sine',.1); tone(180,.12,.2,'sine',.1); }
     if(name==='hint') { tone(880,0,.08,'sine',.12); tone(1100,.08,.1,'sine',.12); }
+    if(name==='poof') { tone(320,0,.08,'triangle',.12); tone(200,.05,.14,'sine',.1); }
+    if(name==='no')   { tone(240,0,.12,'sine',.09); }
     if(name==='unit') { [659,880,1175].forEach((f,i)=>tone(f,i*.08,.14,'triangle',.15)); }
     if(name==='win')  { [523,659,784,1047,1319].forEach((f,i)=>tone(f,i*.12,.25,'triangle',.16)); }
   }catch(e){}
@@ -505,6 +557,7 @@ let puzzle=[], solution=[], board=[];   // board = current player state
 let symbols=[];                          // display strings for values 1..n
 let selectedVal=0;                       // selected tray symbol (0 = none) — "stamp" mode
 let selectedCell=-1;                     // selected empty cell (-1 = none) — "slot first" mode
+let eraserOn=false;                      // eraser tool selected
 let solvedFlag=false;
 let streak=0;                            // consecutive correct placements
 
@@ -549,22 +602,31 @@ function layoutSizes(){
   // Board must fit width and leave room for topbar + progress + tray.
   const trayRows = n>6 && vw<560 ? 2 : 1;
   const boardMax=Math.min(vw*0.94, vh*(trayRows===2?0.54:0.6), 620);
-  const gap = n===9?2:4;
-  const cell=Math.floor((boardMax-16-gap*(n-1))/n);
+  const gap = n===9?2:3;                 // thin line between cells
+  const bgap = n===9?6:8;                // thick line between boxes
+  const sx=n/L.boxW-1, sy=n/L.boxH-1;    // box separators per axis
+  const cell=Math.min(
+    Math.floor((boardMax-16-sx*bgap-(n+sx-1)*gap)/n),
+    Math.floor((boardMax-16-sy*bgap-(n+sy-1)*gap)/n));
   const tgap=Math.min(vw*0.02, 12);
-  const perRow=Math.ceil(n/trayRows);
+  const perRow=Math.ceil((n+1)/trayRows);   // +1 for the eraser
   const ts=Math.min(Math.floor((vw*0.94-16-tgap*(perRow-1))/perRow), 84);
   document.documentElement.style.setProperty('--tray-size', ts+'px');
   document.documentElement.style.setProperty('--tray-gap', tgap+'px');
-  return {cell, gap};
+  return {cell, gap, bgap, sx};
 }
 
 function symColor(v){ return isClassic ? DIGIT_COLORS[(v-1)%DIGIT_COLORS.length] : ''; }
 function boxOf(i){ const n=L.n,r=Math.floor(i/n),c=i%n; return Math.floor(r/L.boxH)*100+Math.floor(c/L.boxW); }
 
 function renderBoard(){
-  const n=L.n, {cell,gap}=layoutSizes();
-  boardEl.style.gridTemplateColumns=`repeat(${n}, ${cell}px)`;
+  const n=L.n, {cell,gap,bgap,sx}=layoutSizes();
+  // spacer tracks between boxes render as thick lines of the board color
+  const colTracks=[], rowTracks=[];
+  for(let c=0;c<n;c++){ if(c>0&&c%L.boxW===0) colTracks.push(bgap+'px'); colTracks.push(cell+'px'); }
+  for(let r=0;r<n;r++){ if(r>0&&r%L.boxH===0) rowTracks.push(bgap+'px'); rowTracks.push(cell+'px'); }
+  boardEl.style.gridTemplateColumns=colTracks.join(' ');
+  boardEl.style.gridTemplateRows=rowTracks.join(' ');
   boardEl.style.gap=gap+'px';
   boardEl.innerHTML='';
   for(let i=0;i<n*n;i++){
@@ -572,6 +634,8 @@ function renderBoard(){
     const d=document.createElement('div');
     const altBox=(Math.floor(r/L.boxH)+Math.floor(c/L.boxW))%2===1;
     d.className='cell'+(altBox?' alt':'')+(board[i]===0?' hole':'')+(i===selectedCell?' sel':'');
+    d.style.gridColumn=c+Math.floor(c/L.boxW)+1;
+    d.style.gridRow=r+Math.floor(r/L.boxH)+1;
     d.style.width=d.style.height=cell+'px';
     d.style.fontSize=Math.floor(cell*0.62)+'px';
     const s=document.createElement('span');
@@ -581,9 +645,10 @@ function renderBoard(){
     d.addEventListener('click',()=>onCellTap(i,d));
     boardEl.appendChild(d);
   }
-  const boardW=cell*n+gap*(n-1)+16;
+  const boardW=cell*n+sx*bgap+(n+sx-1)*gap+16;
   $('pwrap').style.width=boardW+'px';
   updateHighlights();
+  updateConflicts();
   updateProgress();
 }
 
@@ -592,12 +657,23 @@ function renderTray(){
   for(let v=1;v<=L.n;v++){
     const b=document.createElement('button');
     b.className='tray-btn';
-    b.textContent=symbols[v-1];
-    b.style.color=symColor(v);
+    const t=document.createElement('span');
+    t.textContent=symbols[v-1];
+    t.style.color=symColor(v);
+    b.appendChild(t);
+    const cnt=document.createElement('span');
+    cnt.className='cnt';
+    b.appendChild(cnt);
     b.dataset.val=v;
     b.addEventListener('click',e=>{ e.preventDefault(); onTrayTap(v); });
     trayEl.appendChild(b);
   }
+  const er=document.createElement('button');
+  er.className='tray-btn eraser';
+  er.textContent='🧽';
+  er.setAttribute('aria-label','Eraser');
+  er.addEventListener('click',e=>{ e.preventDefault(); onEraserTap(); });
+  trayEl.appendChild(er);
   updateTray();
 }
 
@@ -605,10 +681,12 @@ function updateTray(){
   const counts=new Array(L.n+1).fill(0);
   board.forEach(v=>{ if(v) counts[v]++; });
   trayEl.querySelectorAll('.tray-btn').forEach(b=>{
+    if(b.classList.contains('eraser')){ b.classList.toggle('selected',eraserOn); return; }
     const v=+b.dataset.val;
     const done=counts[v]>=L.n;
     b.classList.toggle('done',done);
     b.classList.toggle('selected',v===selectedVal && !done);
+    b.querySelector('.cnt').textContent=Math.max(0,L.n-counts[v]);
     if(done && selectedVal===v) selectedVal=0;
   });
   updateHighlights();
@@ -696,7 +774,7 @@ function celebrateUnits(i){
   const boxCells=[];
   for(let rr=br;rr<br+L.boxH;rr++) for(let cc=bc;cc<bc+L.boxW;cc++) boxCells.push(rr*n+cc);
   for(const cells of [rowCells,colCells,boxCells]){
-    if(cells.every(p=>board[p]>0)) units.push(cells);
+    if(cells.every(p=>board[p]===solution[p])) units.push(cells);
   }
   if(!units.length) return false;
   const seen=new Set();
@@ -716,48 +794,114 @@ function celebrateUnits(i){
   return true;
 }
 
+/* ---------------- conflicts ---------------- */
+
+// All rows, columns, and boxes as {kind, cells[]}.
+function unitList(){
+  const n=L.n, units=[];
+  for(let r=0;r<n;r++) units.push({kind:'row', cells:[...Array(n).keys()].map(c=>r*n+c)});
+  for(let c=0;c<n;c++) units.push({kind:'column', cells:[...Array(n).keys()].map(r=>r*n+c)});
+  for(let br=0;br<n;br+=L.boxH)
+    for(let bc=0;bc<n;bc+=L.boxW){
+      const cells=[];
+      for(let r=br;r<br+L.boxH;r++) for(let c=bc;c<bc+L.boxW;c++) cells.push(r*n+c);
+      units.push({kind:'box', cells});
+    }
+  return units;
+}
+
+// Cells holding a value that appears twice in some row/column/box.
+function computeConflicts(){
+  const conf=new Set();
+  for(const u of unitList()){
+    const byVal={};
+    for(const p of u.cells){ const v=board[p]; if(v) (byVal[v]=byVal[v]||[]).push(p); }
+    for(const v in byVal) if(byVal[v].length>1) byVal[v].forEach(p=>conf.add(p));
+  }
+  return conf;
+}
+
+function updateConflicts(){
+  const conf=computeConflicts();
+  for(let i=0;i<board.length;i++){
+    const el=boardEl.children[i];
+    if(el) el.classList.toggle('conflict',conf.has(i));
+  }
+  return conf;
+}
+
 /* ---------------- interaction ---------------- */
 
 // Placing works in both orders: pick a symbol then stamp cells,
 // or pick an empty cell then choose its symbol.
+// The number always stays on the board; clashes light up red instead
+// of the answer being silently rejected.
 function tryPlace(i,v){
+  clearHintFx();                  // the player is acting — hint served its purpose
   const el=boardEl.children[i];
-  if(solution[i]===v){
-    board[i]=v;
-    streak++;
-    const s=el.querySelector('.sym');
-    s.textContent=symbols[v-1]; s.style.color=symColor(v);
-    el.classList.remove('hole');
-    el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
-    if(i===selectedCell) selectCell(-1);
-    sfx('place'); buzz(20);
-    sparkleBurst(el);
-    const unitDone=celebrateUnits(i);
-    if(unitDone || streak%3===0){
-      praiseAt(el,PRAISES[Math.floor(Math.random()*PRAISES.length)]);
-      mascotReact('🤩',900);
-    } else {
-      mascotReact('😄',700);
-    }
-    updateTray();
-    updateProgress();
-    if(board.every((x,idx)=>x===solution[idx])) onWin();
-    return true;
-  }
-  streak=0;
+  board[i]=v;
   const s=el.querySelector('.sym');
   s.textContent=symbols[v-1]; s.style.color=symColor(v);
-  el.classList.remove('wrong'); void el.offsetWidth; el.classList.add('wrong');
-  sfx('wrong'); buzz([60,40,60]);
-  mascotReact('😯',900);
-  setTimeout(()=>{ s.textContent=''; el.classList.remove('wrong'); },500);
-  return false;
+  el.classList.remove('hole');
+  el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+  if(i===selectedCell) selectCell(-1);
+  const conf=updateConflicts();
+  updateTray();
+  updateProgress();
+  if(conf.has(i)){
+    streak=0;
+    el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake');
+    setTimeout(()=>el.classList.remove('shake'),500);
+    sfx('wrong'); buzz([60,40,60]);
+    mascotReact('😯',900);
+    return false;
+  }
+  streak++;
+  sfx('place'); buzz(20);
+  sparkleBurst(el);
+  const unitDone=celebrateUnits(i);
+  if(unitDone || streak%3===0){
+    praiseAt(el,PRAISES[Math.floor(Math.random()*PRAISES.length)]);
+    mascotReact('🤩',900);
+  } else {
+    mascotReact('😄',700);
+  }
+  if(board.every((x,idx)=>x===solution[idx])) onWin();
+  return true;
+}
+
+// Remove a symbol the player placed (eraser tool, or tapping a red cell).
+function eraseCell(i){
+  clearHintFx();
+  board[i]=0;
+  const el=boardEl.children[i];
+  el.querySelector('.sym').textContent='';
+  el.classList.add('hole');
+  el.classList.remove('pop');
+  praiseAt(el,'💨');
+  sfx('poof'); buzz(15);
+  updateConflicts();
+  updateTray();
+  updateProgress();
+  if(!selectedVal && !eraserOn) selectCell(i);   // ready to drop a new symbol right in
+}
+
+// Tap any filled cell: light up all of its twins for a moment —
+// the classic "where are the other 3s?" move from big sudoku apps.
+let flashTimer=null;
+function flashMatches(v){
+  clearTimeout(flashTimer);
+  boardEl.querySelectorAll('.flashm').forEach(el=>el.classList.remove('flashm'));
+  for(let i=0;i<board.length;i++)
+    if(board[i]===v) boardEl.children[i].classList.add('flashm');
+  flashTimer=setTimeout(()=>boardEl.querySelectorAll('.flashm').forEach(el=>el.classList.remove('flashm')),1400);
 }
 
 function onTrayTap(v){
+  eraserOn=false;
   const counts=new Array(L.n+1).fill(0);
   board.forEach(x=>{ if(x) counts[x]++; });
-  if(counts[v]>=L.n) return;
+  if(counts[v]>=L.n){ updateTray(); return; }
   if(selectedCell>=0){            // slot-first mode: fill the chosen cell
     tryPlace(selectedCell,v);
     return;
@@ -767,9 +911,34 @@ function onTrayTap(v){
   updateTray();
 }
 
+function onEraserTap(){
+  eraserOn=!eraserOn;
+  selectedVal=0;
+  selectCell(-1);
+  sfx('tap');
+  updateTray();
+}
+
 function onCellTap(i,el){
   if(solvedFlag) return;
-  if(puzzle[i]!==0 || board[i]!==0){ sfx('tap'); selectCell(-1); return; }
+  const given=puzzle[i]!==0;
+  if(eraserOn){
+    if(!given && board[i]!==0){ eraseCell(i); }
+    else {                        // can't erase clues or empty spots — gentle "no"
+      el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake');
+      setTimeout(()=>el.classList.remove('shake'),450);
+      sfx('no');
+    }
+    return;
+  }
+  if(board[i]!==0){
+    // a red clashing symbol pops right out; anything else shows its twins
+    if(!given && el.classList.contains('conflict')){ eraseCell(i); return; }
+    flashMatches(board[i]);
+    el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+    sfx('tap');
+    return;
+  }
   if(selectedVal){                // stamp mode: place the chosen symbol
     tryPlace(i,selectedVal);
     return;
@@ -779,25 +948,115 @@ function onCellTap(i,el){
   sfx('tap');
 }
 
+/* ---------------- hints with explanations ---------------- */
+
+let hintTimers=[];
+function clearHintFx(){
+  hintTimers.forEach(clearTimeout);
+  hintTimers=[];
+  $('hint-bubble').classList.remove('show');
+  boardEl.querySelectorAll('.explain').forEach(el=>el.classList.remove('explain'));
+  trayEl.querySelectorAll('.hintpulse').forEach(el=>el.classList.remove('hintpulse'));
+}
+function showBubble(text,ms){
+  const b=$('hint-bubble');
+  b.textContent=text;
+  b.classList.add('show');
+  // sit just above the board so it never covers the cell it talks about
+  const bt=boardEl.getBoundingClientRect().top;
+  b.style.top=Math.max(8, bt-b.offsetHeight-16)+'px';
+  hintTimers.push(setTimeout(()=>b.classList.remove('show'),ms||3400));
+}
+function highlightCells(cells,ms){
+  cells.forEach(p=>{ const el=boardEl.children[p]; if(el) el.classList.add('explain'); });
+  hintTimers.push(setTimeout(()=>{
+    cells.forEach(p=>{ const el=boardEl.children[p]; if(el) el.classList.remove('explain'); });
+  },ms||2600));
+}
+
+function candsOf(i){
+  const n=L.n, r=Math.floor(i/n), c=i%n, out=[];
+  for(let v=1;v<=n;v++) if(placeOk(board,r,c,v,L)) out.push(v);
+  return out;
+}
+
+const KIND_NAMES={ row:'row', column:'column', box:'little square' };
+
+// Pick the most teachable next step: fix a misplaced symbol first, then
+// "last one in a unit", then "only symbol that fits", then "only spot for
+// this symbol", falling back to plain magic.
+function findHint(){
+  for(let i=0;i<board.length;i++)
+    if(puzzle[i]===0 && board[i]!==0 && board[i]!==solution[i])
+      return {type:'fix', i};
+  const empties=board.map((v,i)=>v===0?i:-1).filter(i=>i>=0);
+  if(!empties.length) return null;
+  if(selectedCell>=0 && board[selectedCell]===0){
+    const i=selectedCell;
+    return candsOf(i).length===1 ? {type:'single', i} : {type:'magic', i};
+  }
+  for(const u of unitList()){
+    const em=u.cells.filter(p=>board[p]===0);
+    if(em.length===1) return {type:'last', i:em[0], kind:u.kind, cells:u.cells};
+  }
+  for(const i of empties)
+    if(candsOf(i).length===1) return {type:'single', i};
+  for(const u of unitList()){
+    const have=new Set(u.cells.map(p=>board[p]).filter(v=>v));
+    for(let v=1;v<=L.n;v++){
+      if(have.has(v)) continue;
+      const spots=u.cells.filter(p=>board[p]===0 && placeOk(board,Math.floor(p/L.n),p%L.n,v,L));
+      if(spots.length===1) return {type:'only', i:spots[0], kind:u.kind, cells:u.cells};
+    }
+  }
+  return {type:'magic', i:empties[Math.floor(Math.random()*empties.length)]};
+}
+
+function pulseTrayBtn(v){
+  const b=trayEl.querySelector('.tray-btn[data-val="'+v+'"]');
+  if(!b) return;
+  b.classList.add('hintpulse');
+  hintTimers.push(setTimeout(()=>b.classList.remove('hintpulse'),3300));
+}
+
+// Hints teach instead of solving: point at the reasoning, select the spot,
+// pulse the right tray symbol — the player makes the move themselves.
 function onHint(){
   if(solvedFlag) return;
-  const empties=board.map((v,i)=>v===0?i:-1).filter(i=>i>=0);
-  if(!empties.length) return;
-  const i=selectedCell>=0 ? selectedCell : empties[Math.floor(Math.random()*empties.length)];
-  const el=boardEl.children[i];
-  board[i]=solution[i];
-  const s=el.querySelector('.sym');
-  s.textContent=symbols[solution[i]-1]; s.style.color=symColor(solution[i]);
-  el.classList.remove('hole');
-  el.classList.add('pop','hintglow');
-  if(i===selectedCell) selectCell(-1);
+  clearHintFx();
+  const h=findHint();
+  if(!h) return;
   sfx('hint');
-  mascotReact('🪄',900);
-  updateTray();
-  updateProgress();
-  celebrateUnits(i);
-  setTimeout(()=>el.classList.remove('hintglow'),2100);
-  if(board.every((v,idx)=>v===solution[idx])) onWin();
+  mascotReact('🤔',1600);
+  if(h.type==='fix'){
+    const sym=symbols[board[h.i]-1];
+    showBubble(computeConflicts().has(h.i)
+      ? 'Oops — two '+sym+' together! Tap the wiggly red '+sym+' to pop it out! 🧹'
+      : 'Hmm, '+sym+' is in the wrong spot. Grab the 🧽 and tap it!',9000);
+    highlightCells([h.i],9000);
+    return;
+  }
+  const v=solution[h.i], sym=symbols[v-1];
+  const kind=KIND_NAMES[h.kind]||'';
+  if(h.type==='single'){
+    // show the filled row/column/box friends that leave only one choice
+    const n=L.n, r=Math.floor(h.i/n), c=h.i%n;
+    const peers=new Set();
+    for(let k=0;k<n;k++){ peers.add(r*n+k); peers.add(k*n+c); }
+    const br=Math.floor(r/L.boxH)*L.boxH, bc=Math.floor(c/L.boxW)*L.boxW;
+    for(let rr=br;rr<br+L.boxH;rr++) for(let cc=bc;cc<bc+L.boxW;cc++) peers.add(rr*n+cc);
+    h.cells=[...peers].filter(p=>p!==h.i && board[p]>0);
+  }
+  const MSGS={
+    last:  'Look — this '+kind+' needs just one more: '+sym+'! Tap '+sym+', then the sparkly spot!',
+    single:'All the neighbors are taken, so only '+sym+' fits here. Your turn! 👉',
+    only:  sym+' has only one home left in this '+kind+'. Can you put it there?',
+    magic: 'Try this spot! Which friend is missing? 🤔',
+  };
+  showBubble(MSGS[h.type],9000);
+  if(h.cells) highlightCells(h.cells.filter(p=>p!==h.i),6000);
+  selectCell(h.i);                 // sparkly target — next tray tap fills it
+  if(h.type!=='magic') pulseTrayBtn(v);
 }
 
 /* ---------------- flow ---------------- */
@@ -811,7 +1070,8 @@ function newGame(idx){
   const p=makePuzzle(L);
   puzzle=p.puzzle; solution=p.solution;
   board=puzzle.slice();
-  selectedVal=0; selectedCell=-1; solvedFlag=false; streak=0;
+  selectedVal=0; selectedCell=-1; eraserOn=false; solvedFlag=false; streak=0;
+  clearHintFx();
   $('level-label').textContent=L.name+' '+L.emoji;
   $('mascot').textContent='😊';
   renderBoard(); renderTray();
@@ -856,6 +1116,7 @@ function onWin(){
 }
 
 function toMenu(){
+  clearHintFx();
   renderMenu();
   $('game').classList.add('hidden');
   $('win').classList.remove('show');

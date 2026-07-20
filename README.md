@@ -15,8 +15,16 @@ A sudoku game for kids ages 3–6 (and up). Two styles:
   (backtracking solver with minimum-remaining-values search)
 - Two ways to play, both supported: pick a symbol then stamp cells, or
   pick an empty cell then choose its symbol
-- Gentle feedback: wrong answers wiggle away, correct ones pop with a chime
-- 💡 hint button, confetti + fanfare celebration, stars saved per level
+- Bold grid lines between boxes make the box rule visible at every size
+- Gentle feedback: clashing answers stay on the board with the conflicting
+  cells glowing red so kids can see *why*; tap a red symbol to pop it out
+- 💡 hints teach instead of solving: a speech bubble explains the reasoning
+  ("This row needs just one more!", "Only 3 fits here!"), highlights the
+  proof cells, and pulses the right tray symbol — the child makes the move
+- 🧽 eraser tool for taking back placed symbols (clues are protected)
+- Tap any filled cell to light up its twins; tray badges count how many
+  of each symbol are still missing
+- Confetti + fanfare celebration, stars saved per level
 - Fits iPhone and iPad, works offline once loaded, no ads, no tracking
 
 ## Tech
