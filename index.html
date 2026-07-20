@@ -156,9 +156,11 @@
   .cell.alt { background:#f4efff; }
   .cell.hole { background:#e9e3fa; box-shadow:inset 0 3px 7px rgba(96,70,200,.22); }
   .cell.alt.hole { background:#e0d8f7; }
+  /* priority chain: rc < match < flashm < sel < conflict < explain —
+     all !important so alt/hole variants can never mask a highlight */
+  .cell.rc { background:#fff3c9 !important; }
+  .cell.match { background:#d9f6bd !important; box-shadow:inset 0 0 0 2px #9ade6d; }
   .cell.flashm { background:#d9f6bd !important; box-shadow:inset 0 0 0 2px #9ade6d; }
-  .cell.rc { background:#fff3c9; }
-  .cell.match { background:#d9f6bd; box-shadow:inset 0 0 0 2px #9ade6d; }
   .cell.sel { background:#ffe063 !important; box-shadow:inset 0 0 0 3px #ffc21d; animation:selpulse 1.2s ease-in-out infinite; z-index:2; }
   @keyframes selpulse { 0%,100%{box-shadow:inset 0 0 0 3px #ffc21d} 50%{box-shadow:inset 0 0 0 5px #ffae00} }
   .cell .sym { line-height:1; pointer-events:none; }
@@ -333,6 +335,15 @@
   .big-btn:active { transform:translateY(3px); box-shadow:0 2px 0 rgba(0,0,0,.18); }
   .primary { background:linear-gradient(#8de78a,#54c452); color:#0d4d0c; }
   .secondary { background:linear-gradient(#c9c2ff,#a394ff); color:#2e1e7a; }
+  .secret {
+    background:linear-gradient(#5a48a8,#39296e); color:#ffd34d;
+    box-shadow:0 5px 0 rgba(0,0,0,.3), inset 0 2px 0 rgba(255,255,255,.2), 0 0 14px 2px #ffd34d55;
+    animation:secretglow 1.6s ease-in-out infinite;
+  }
+  @keyframes secretglow {
+    0%,100%{box-shadow:0 5px 0 rgba(0,0,0,.3), inset 0 2px 0 rgba(255,255,255,.2), 0 0 10px 1px #ffd34d44;}
+    50%{box-shadow:0 5px 0 rgba(0,0,0,.3), inset 0 2px 0 rgba(255,255,255,.2), 0 0 20px 4px #ffd34d88;}
+  }
 
   .confetti {
     position:fixed; top:-8vh; z-index:60; pointer-events:none;
@@ -400,6 +411,7 @@
     <div id="win-stars"></div>
     <div class="win-sub" id="win-sub"></div>
     <div class="win-actions">
+      <button class="big-btn secret" id="secret-btn" style="display:none"></button>
       <button class="big-btn primary" id="again-btn">Play again</button>
       <button class="big-btn secondary" id="menu-btn">Menu</button>
     </div>
@@ -435,6 +447,8 @@ const LEVELS = {
     { name:'Junior',   emoji:'📗', desc:'6×6 · medium',     n:6, boxW:3, boxH:2, blanks:16 },
     { name:'Master',   emoji:'📘', desc:'9×9 · hard',       n:9, boxW:3, boxH:3, blanks:35 },
     { name:'Champion', emoji:'🏆', desc:'9×9 · expert',     n:9, boxW:3, boxH:3, blanks:48 },
+    // hidden level — only reachable from the Champion win screen
+    { name:'Legend',   emoji:'👑', desc:'9×9 · secret',     n:9, boxW:3, boxH:3, blanks:56 },
   ],
 };
 const SUBTITLES = {
@@ -459,6 +473,7 @@ const ICONS={
   grid:IC+' fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M12 4v16M4 12h16"/></svg>',
   trophy:IC+'><path d="M7 3h10v6a5 5 0 0 1-10 0V3z" fill="#ffd34d" stroke="#e0a80f" stroke-width="1.5"/><path d="M7 5H3.5v1.5A3.5 3.5 0 0 0 7 10M17 5h3.5v1.5A3.5 3.5 0 0 1 17 10" fill="none" stroke="#e0a80f" stroke-width="1.5"/><path d="M10.5 13.5h3V17h-3z" fill="#e0a80f"/><rect x="8" y="17" width="8" height="3.2" rx="1" fill="#c9931a"/></svg>',
   again:IC+' fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 2.3-5.7"/><path d="M6 2.5v4h4"/></svg>',
+  crown:IC+'><path d="M3.5 16.5 2.5 7l5.3 3.4L12 4.2l4.2 6.2L21.5 7l-1 9.5z" fill="#ffd34d" stroke="#e0a80f" stroke-width="1.4" stroke-linejoin="round"/><rect x="4.5" y="17.5" width="15" height="2.6" rx="1.3" fill="#e0a80f"/></svg>',
 };
 const STAR_PATH='M12 2.6l2.8 5.8 6.4.9-4.6 4.4 1.1 6.3L12 17l-5.7 3 1.1-6.3L2.8 9.3l6.4-.9z';
 
@@ -583,55 +598,23 @@ function tone(freq, t0, dur, type='sine', vol=0.18){
   o.connect(g); g.connect(ctx.destination);
   o.start(ctx.currentTime+t0); o.stop(ctx.currentTime+t0+dur+0.05);
 }
-// Marimba-style pluck: fundamental + inharmonic partials with fast decay.
-function pluck(freq,t0,vol=0.22,dur=0.5){
-  const ctx=ac(), t=ctx.currentTime+t0;
-  [[1,1],[2.76,.22],[5.4,.07]].forEach(([m,g])=>{
-    const o=ctx.createOscillator(), gn=ctx.createGain();
-    o.type='sine'; o.frequency.value=freq*m;
-    gn.gain.setValueAtTime(0.0001,t);
-    gn.gain.exponentialRampToValueAtTime(vol*g,t+0.008);
-    gn.gain.exponentialRampToValueAtTime(0.0001,t+dur*(m===1?1:0.55));
-    o.connect(gn); gn.connect(ctx.destination);
-    o.start(t); o.stop(t+dur+.05);
-  });
-}
-// Filtered noise burst: soft ticks and poofs.
-function puff(t0,dur,vol,fq){
-  const ctx=ac(), t=ctx.currentTime+t0;
-  const len=Math.max(1,(ctx.sampleRate*dur)|0);
-  const buf=ctx.createBuffer(1,len,ctx.sampleRate);
-  const d=buf.getChannelData(0);
-  for(let i=0;i<len;i++){ const e=1-i/len; d[i]=(Math.random()*2-1)*e*e; }
-  const s=ctx.createBufferSource(); s.buffer=buf;
-  const f=ctx.createBiquadFilter(); f.type='lowpass';
-  f.frequency.setValueAtTime(fq,t);
-  f.frequency.exponentialRampToValueAtTime(Math.max(120,fq*0.25),t+dur);
-  const g=ctx.createGain(); g.gain.value=vol;
-  s.connect(f); f.connect(g); g.connect(ctx.destination);
-  s.start(t);
-}
+// Streak climbs a major-pentatonic ladder — always musical, never dissonant.
+const PENTA=[1, 9/8, 5/4, 3/2, 5/3, 2, 9/4, 5/2];
 function sfx(name){
   if(!soundOn) return;
   try{
-    if(name==='tap'){ puff(0,.06,.5,2500); tone(640,0,.05,'triangle',.06); }
+    if(name==='tap')   tone(520,0,.08,'triangle',.12);
     if(name==='place'){
-      // pitch climbs a semitone per streak — little wins feel bigger and bigger
-      const base=440*Math.pow(2,Math.min(streak,8)/12);
-      pluck(base,0,.26); pluck(base*1.5,.07,.2);
-      tone(base*4,.05,.18,'sine',.045);
+      const base=523*PENTA[Math.min(streak,PENTA.length-1)];
+      tone(base,0,.1,'triangle',.16);
+      tone(base*1.5,.07,.14,'triangle',.14);
     }
-    if(name==='wrong'){ tone(285,0,.16,'sine',.08); tone(238,.14,.24,'sine',.08); }
-    if(name==='hint'){ pluck(1046,0,.14,.9); pluck(1318,.09,.12,.9); }
-    if(name==='poof'){ puff(0,.28,.55,1600); }
-    if(name==='no')  { tone(240,0,.12,'sine',.08); }
-    if(name==='unit'){ [523,659,784,1046].forEach((f,i)=>pluck(f,i*.07,.2)); }
-    if(name==='win'){
-      [523,659,784,1046].forEach((f,i)=>pluck(f,i*.11,.24));
-      [523,659,784,1046,1318].forEach(f=>{
-        tone(f,.55,.7,'triangle',.055); tone(f*1.004,.55,.7,'sine',.045);
-      });
-    }
+    if(name==='wrong'){ tone(220,0,.15,'sine',.1); tone(180,.12,.2,'sine',.1); }
+    if(name==='hint') { tone(880,0,.08,'sine',.12); tone(1100,.08,.1,'sine',.12); }
+    if(name==='poof') { tone(320,0,.08,'triangle',.12); tone(200,.05,.14,'sine',.1); }
+    if(name==='no')   { tone(240,0,.12,'sine',.09); }
+    if(name==='unit') { [659,880,1175].forEach((f,i)=>tone(f,i*.08,.14,'triangle',.15)); }
+    if(name==='win')  { [523,659,784,1047,1319].forEach((f,i)=>tone(f,i*.12,.25,'triangle',.16)); }
   }catch(e){}
 }
 function buzz(ms){ if(navigator.vibrate) try{ navigator.vibrate(ms); }catch(e){} }
@@ -654,16 +637,17 @@ const boardEl=$('board'), trayEl=$('tray');
 
 /* stars: { animal:[0,0,0,0], classic:[0,0,0,0] } (migrates old flat-array format) */
 function stars(){
+  const pad=a=>{ a=Array.isArray(a)?a.slice():[]; while(a.length<5) a.push(0); return a; };
   try{
     const raw=JSON.parse(localStorage.getItem('sudoku-stars')||'null');
-    if(Array.isArray(raw)) return { animal:raw, classic:[0,0,0,0] };
-    if(raw && raw.animal) return raw;
+    if(Array.isArray(raw)) return { animal:pad(raw), classic:pad([]) };
+    if(raw && raw.animal) return { animal:pad(raw.animal), classic:pad(raw.classic) };
   }catch(e){}
-  return { animal:[0,0,0,0], classic:[0,0,0,0] };
+  return { animal:pad([]), classic:pad([]) };
 }
 function addStar(){
   const s=stars();
-  s[styleKey][levelIdx]=Math.min(s[styleKey][levelIdx]+1,5);
+  s[styleKey][levelIdx]=Math.min((s[styleKey][levelIdx]||0)+1,5);
   localStorage.setItem('sudoku-stars',JSON.stringify(s));
   return s[styleKey][levelIdx];
 }
@@ -676,6 +660,7 @@ function renderMenu(){
   $('style-animal').classList.toggle('active',styleKey==='animal');
   $('style-classic').classList.toggle('active',styleKey==='classic');
   LEVELS[styleKey].forEach((lv,i)=>{
+    if(!$('emoji'+i)) return;   // hidden levels have no menu card
     $('emoji'+i).innerHTML = styleKey==='classic' ? levelGridIcon(lv,i===3) : lv.emoji;
     $('name'+i).textContent=lv.name;
     $('desc'+i).textContent=lv.desc;
@@ -1022,7 +1007,8 @@ function onCellTap(i,el){
     return;
   }
   if(board[i]!==0){
-    // a red clashing symbol pops right out; anything else shows its twins
+    // a red clashing symbol pops right out; any other filled cell —
+    // clue or player-placed — shows its twins
     if(!given && el.classList.contains('conflict')){ eraseCell(i); return; }
     flashMatches(board[i]);
     el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
@@ -1162,7 +1148,7 @@ function newGame(idx){
   board=puzzle.slice();
   selectedVal=0; selectedCell=-1; eraserOn=false; solvedFlag=false; streak=0;
   clearHintFx();
-  $('level-label').innerHTML=L.name+' '+(isClassic?levelGridIcon(L,levelIdx===3):L.emoji);
+  $('level-label').innerHTML=L.name+' '+(isClassic?levelGridIcon(L,levelIdx>=3):L.emoji);
   $('mascot').innerHTML=mascotSvg('happy');
   renderBoard(); renderTray();
   $('menu').classList.add('hidden');
@@ -1205,6 +1191,8 @@ function onWin(){
     ws.appendChild(s);
   }
   $('win-sub').textContent=earned>=5?'All 5 stars! You are a champion!':(L.name+' stars: '+earned+' of 5');
+  // beating Champion reveals the hidden Legend level
+  $('secret-btn').style.display=(styleKey==='classic' && levelIdx===3)?'':'none';
   setTimeout(()=>$('win').classList.add('show'),700);
 }
 
@@ -1234,6 +1222,7 @@ $('back-btn').addEventListener('click',()=>{ sfx('tap'); toMenu(); });
 $('menu-btn').addEventListener('click',()=>{ sfx('tap'); toMenu(); });
 $('hint-btn').addEventListener('click',onHint);
 $('again-btn').addEventListener('click',()=>{ sfx('tap'); newGame(levelIdx); });
+$('secret-btn').addEventListener('click',()=>{ sfx('tap'); newGame(4); });
 $('sound-toggle').addEventListener('click',()=>{
   soundOn=!soundOn;
   localStorage.setItem('sudoku-sound',soundOn?'on':'off');
@@ -1249,6 +1238,7 @@ $('menu-btn').innerHTML=ICONS.home+' Menu';
 $('again-btn').innerHTML=ICONS.again+' Play again';
 $('style-animal').innerHTML=ICONS.paw+' Animals';
 $('style-classic').innerHTML=ICONS.grid+' Numbers';
+$('secret-btn').innerHTML=ICONS.crown+' Secret: Legend';
 $('pstar').innerHTML=ICONS.star;
 $('mascot').innerHTML=mascotSvg('happy');
 
