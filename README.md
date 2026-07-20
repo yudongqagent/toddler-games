@@ -25,6 +25,9 @@ A sudoku game for kids ages 3–6 (and up). Two styles:
 - Tap any filled cell to light up its twins; tray badges count how many
   of each symbol are still missing
 - Confetti + fanfare celebration, stars saved per level
+- Professional SVG icon set and an expressive SVG mascot — emoji appear
+  only as game pieces; marimba-style WebAudio sounds with a streak that
+  climbs a semitone per correct answer
 - Fits iPhone and iPad, works offline once loaded, no ads, no tracking
 
 ## Tech

@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#7c5cff">
-<title>Sudoku Fun 🐾</title>
+<title>Sudoku Fun</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐶</text></svg>">
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
@@ -126,6 +126,9 @@
     font-family:inherit;
   }
   .round-btn:active { transform:translateY(3px); box-shadow:0 1px 0 rgba(0,0,0,.15); }
+  .round-btn { display:flex; align-items:center; justify-content:center; }
+  svg.ic { width:1em; height:1em; vertical-align:-0.12em; }
+  .style-btn svg.ic, .big-btn svg.ic { margin-right:3px; }
   #level-label {
     font-size:clamp(18px,4.5vw,26px); font-weight:800; color:#fff;
     text-shadow:0 2px 0 rgba(80,60,180,.3);
@@ -333,6 +336,7 @@
 
   .confetti {
     position:fixed; top:-8vh; z-index:60; pointer-events:none;
+    display:block;
     animation:fall linear forwards;
   }
   @keyframes fall {
@@ -348,11 +352,11 @@
 <div class="bub" style="width:16vmin;height:16vmin;right:14vw;bottom:12vh;animation-duration:12s;animation-delay:-9s"></div>
 
 <div id="menu" class="screen">
-  <h1>🐾 Sudoku Fun 🔢</h1>
+  <h1>Sudoku Fun</h1>
   <div class="subtitle" id="subtitle">Every friend once in each row! ✨</div>
   <div class="style-toggle">
-    <button class="style-btn active" id="style-animal">🐾 Animals</button>
-    <button class="style-btn" id="style-classic">🔢 Numbers</button>
+    <button class="style-btn active" id="style-animal">Animals</button>
+    <button class="style-btn" id="style-classic">Numbers</button>
   </div>
   <div class="levels">
     <button class="level-btn l1" data-level="0">
@@ -375,14 +379,14 @@
   <div class="topbar">
     <button class="round-btn" id="back-btn" aria-label="Back to menu">🏠</button>
     <div id="level-wrap">
-      <span id="mascot">😊</span>
+      <span id="mascot"></span>
       <span id="level-label"></span>
     </div>
     <button class="round-btn" id="hint-btn" aria-label="Hint">💡</button>
   </div>
   <div id="board-area">
     <div id="board"></div>
-    <div id="pwrap"><div id="pfill"><span id="pstar">⭐️</span></div></div>
+    <div id="pwrap"><div id="pfill"><span id="pstar"></span></div></div>
   </div>
   <div id="tray"></div>
 </div>
@@ -391,13 +395,13 @@
 
 <div id="win">
   <div class="win-card">
-    <div class="big" id="win-big">🎉</div>
+    <div class="big" id="win-big"></div>
     <div class="msg" id="win-msg">Great job!</div>
     <div id="win-stars"></div>
     <div class="win-sub" id="win-sub"></div>
     <div class="win-actions">
-      <button class="big-btn primary" id="again-btn">Play again 🔁</button>
-      <button class="big-btn secondary" id="menu-btn">Menu 🏠</button>
+      <button class="big-btn primary" id="again-btn">Play again</button>
+      <button class="big-btn secondary" id="menu-btn">Menu</button>
     </div>
   </div>
 </div>
@@ -434,13 +438,63 @@ const LEVELS = {
   ],
 };
 const SUBTITLES = {
-  animal:'Every friend once in each row, column & box! ✨',
-  classic:'Every number once in each row, column & box! ✨',
+  animal:'Every friend once in each row, column & box!',
+  classic:'Every number once in each row, column & box!',
 };
 
 const WIN_MSGS = ['Great job!','You did it!','Amazing!','Super star!','Fantastic!','Woohoo!'];
-const WIN_BIGS = ['🎉','🏆','🌈','🎈','🥳'];
-const PRAISES = ['Yay! 🎈','Nice! ✨','Wow! 🌟','Super! 💪','Cool! 😎','Great! 🎉'];
+const PRAISES = ['Yay!','Nice!','Wow!','Super!','Cool!','Great!'];
+
+/* ---------------- SVG icons (consistent, kid-friendly, no raw emoji chrome) ---------------- */
+
+const IC='<svg xmlns="http://www.w3.org/2000/svg" class="ic" viewBox="0 0 24 24" width="1em" height="1em"';
+const ICONS={
+  home:IC+' fill="none" stroke="#7c5cff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 11 12 4l8.5 7"/><path d="M6 9.5V20h12V9.5"/><path d="M10 20v-5h4v5"/></svg>',
+  bulb:IC+'><path d="M12 2.5a6.5 6.5 0 0 0-4 11.6c.9.7 1.5 1.5 1.5 2.4h5c0-.9.6-1.7 1.5-2.4a6.5 6.5 0 0 0-4-11.6z" fill="#ffd34d" stroke="#e0a80f" stroke-width="1.6"/><path d="M9.8 19.5h4.4M10.6 22h2.8" stroke="#8a6d00" stroke-width="1.8" stroke-linecap="round"/></svg>',
+  sound:IC+' fill="none" stroke="#7c5cff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h3.5L13 19V5L7.5 9.5H4z" fill="#7c5cff" stroke="none"/><path d="M16 9a4.5 4.5 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/></svg>',
+  mute:IC+' fill="none" stroke="#7c5cff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h3.5L13 19V5L7.5 9.5H4z" fill="#7c5cff" stroke="none"/><path d="M16.5 9.5l5 5m0-5l-5 5"/></svg>',
+  eraser:IC+'><rect x="3" y="8" width="18" height="9" rx="4.5" fill="#ffb3d1" stroke="#e2679f" stroke-width="1.6"/><circle cx="8" cy="11.5" r="1.1" fill="#e2679f" opacity=".55"/><circle cx="13" cy="14" r="1" fill="#e2679f" opacity=".55"/><circle cx="16.5" cy="11" r=".9" fill="#e2679f" opacity=".55"/></svg>',
+  star:IC+'><path d="M12 2.6l2.8 5.8 6.4.9-4.6 4.4 1.1 6.3L12 17l-5.7 3 1.1-6.3L2.8 9.3l6.4-.9z" fill="#ffd34d" stroke="#e0a80f" stroke-width="1.4" stroke-linejoin="round"/></svg>',
+  paw:IC+' fill="currentColor"><ellipse cx="12" cy="15.5" rx="4.6" ry="3.8"/><circle cx="6.6" cy="11.5" r="1.9"/><circle cx="10" cy="8.6" r="2"/><circle cx="14" cy="8.6" r="2"/><circle cx="17.4" cy="11.5" r="1.9"/></svg>',
+  grid:IC+' fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M12 4v16M4 12h16"/></svg>',
+  trophy:IC+'><path d="M7 3h10v6a5 5 0 0 1-10 0V3z" fill="#ffd34d" stroke="#e0a80f" stroke-width="1.5"/><path d="M7 5H3.5v1.5A3.5 3.5 0 0 0 7 10M17 5h3.5v1.5A3.5 3.5 0 0 1 17 10" fill="none" stroke="#e0a80f" stroke-width="1.5"/><path d="M10.5 13.5h3V17h-3z" fill="#e0a80f"/><rect x="8" y="17" width="8" height="3.2" rx="1" fill="#c9931a"/></svg>',
+  again:IC+' fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 2.3-5.7"/><path d="M6 2.5v4h4"/></svg>',
+};
+const STAR_PATH='M12 2.6l2.8 5.8 6.4.9-4.6 4.4 1.1 6.3L12 17l-5.7 3 1.1-6.3L2.8 9.3l6.4-.9z';
+
+// mini sudoku-grid icon showing each level's box layout
+function levelGridIcon(lv,gold){
+  const lines=[];
+  for(let x=lv.boxW;x<lv.n;x+=lv.boxW) lines.push('M'+(4+16*x/lv.n).toFixed(1)+' 4v16');
+  for(let y=lv.boxH;y<lv.n;y+=lv.boxH) lines.push('M4 '+(4+16*y/lv.n).toFixed(1)+'h16');
+  return IC+' fill="none" stroke="'+(gold?'#8a5a00':'#4a3800')+'" stroke-width="2" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="'+lines.join(' ')+'"/>'+
+    (gold?'<path d="M12 8.6l1.1 2.2 2.5.4-1.8 1.7.4 2.5-2.2-1.2-2.2 1.2.4-2.5-1.8-1.7 2.5-.4z" fill="#ffd34d" stroke="#e0a80f" stroke-width=".8"/>':'')+'</svg>';
+}
+
+/* ---------------- SVG mascot with expressions ---------------- */
+
+const M_STROKE='stroke="#7a4a12" stroke-width="1.7" fill="none" stroke-linecap="round"';
+const M_EYES={
+  dots:'<circle cx="8.7" cy="10" r="1.25" fill="#5c3a00"/><circle cx="15.3" cy="10" r="1.25" fill="#5c3a00"/>',
+  big:'<circle cx="8.7" cy="10" r="1.7" fill="#5c3a00"/><circle cx="15.3" cy="10" r="1.7" fill="#5c3a00"/>',
+  arcs:'<path d="M7.3 10.2q1.4-2.2 2.8 0M13.9 10.2q1.4-2.2 2.8 0" '+M_STROKE+'/>',
+};
+const M_FACES={
+  happy:{eyes:'dots',mouth:'<path d="M8.2 13.8q3.8 3.6 7.6 0" '+M_STROKE+'/>'},
+  joy:  {eyes:'dots',mouth:'<path d="M8 13.2a4 4 0 0 0 8 0z" fill="#7a4a12"/>'},
+  wow:  {eyes:'big', mouth:'<circle cx="12" cy="15" r="2.1" fill="#7a4a12"/>',
+         extra:'<path d="M6.8 7.2q1.6-1.1 3-.5M14.2 6.7q1.4-.6 3 .5" '+M_STROKE+'/>'},
+  oops: {eyes:'dots',mouth:'<circle cx="12" cy="15" r="1.5" fill="#7a4a12"/>'},
+  think:{eyes:'dots',mouth:'<path d="M9.3 15h4.2" '+M_STROKE+'/>',
+         extra:'<path d="M13.9 6.9q1.5-.9 3-.2" '+M_STROKE+'/>'},
+  party:{eyes:'arcs',mouth:'<path d="M8 13.2a4 4 0 0 0 8 0z" fill="#7a4a12"/>',
+         extra:'<circle cx="3.6" cy="4.4" r="1.1" fill="#ff8fb2"/><circle cx="20.4" cy="5" r="1.2" fill="#54c452"/><circle cx="20" cy="19.4" r="1" fill="#4aa3ff"/><circle cx="3.8" cy="19" r="1" fill="#ffd34d"/>'},
+};
+function mascotSvg(state){
+  const f=M_FACES[state]||M_FACES.happy;
+  return IC+'><circle cx="12" cy="12" r="9.6" fill="#ffd76e" stroke="#e8b83a" stroke-width="1.3"/>'+
+    M_EYES[f.eyes]+f.mouth+(f.extra||'')+'</svg>';
+}
 
 /* ---------------- puzzle generation ---------------- */
 
@@ -529,21 +583,55 @@ function tone(freq, t0, dur, type='sine', vol=0.18){
   o.connect(g); g.connect(ctx.destination);
   o.start(ctx.currentTime+t0); o.stop(ctx.currentTime+t0+dur+0.05);
 }
+// Marimba-style pluck: fundamental + inharmonic partials with fast decay.
+function pluck(freq,t0,vol=0.22,dur=0.5){
+  const ctx=ac(), t=ctx.currentTime+t0;
+  [[1,1],[2.76,.22],[5.4,.07]].forEach(([m,g])=>{
+    const o=ctx.createOscillator(), gn=ctx.createGain();
+    o.type='sine'; o.frequency.value=freq*m;
+    gn.gain.setValueAtTime(0.0001,t);
+    gn.gain.exponentialRampToValueAtTime(vol*g,t+0.008);
+    gn.gain.exponentialRampToValueAtTime(0.0001,t+dur*(m===1?1:0.55));
+    o.connect(gn); gn.connect(ctx.destination);
+    o.start(t); o.stop(t+dur+.05);
+  });
+}
+// Filtered noise burst: soft ticks and poofs.
+function puff(t0,dur,vol,fq){
+  const ctx=ac(), t=ctx.currentTime+t0;
+  const len=Math.max(1,(ctx.sampleRate*dur)|0);
+  const buf=ctx.createBuffer(1,len,ctx.sampleRate);
+  const d=buf.getChannelData(0);
+  for(let i=0;i<len;i++){ const e=1-i/len; d[i]=(Math.random()*2-1)*e*e; }
+  const s=ctx.createBufferSource(); s.buffer=buf;
+  const f=ctx.createBiquadFilter(); f.type='lowpass';
+  f.frequency.setValueAtTime(fq,t);
+  f.frequency.exponentialRampToValueAtTime(Math.max(120,fq*0.25),t+dur);
+  const g=ctx.createGain(); g.gain.value=vol;
+  s.connect(f); f.connect(g); g.connect(ctx.destination);
+  s.start(t);
+}
 function sfx(name){
   if(!soundOn) return;
   try{
-    if(name==='tap')   tone(520,0,.08,'triangle',.12);
+    if(name==='tap'){ puff(0,.06,.5,2500); tone(640,0,.05,'triangle',.06); }
     if(name==='place'){
-      // pitch climbs with the streak — little wins feel bigger and bigger
-      const base=600*(1+0.06*Math.min(streak,6));
-      tone(base,0,.09,'triangle'); tone(base*1.35,.07,.12,'triangle');
+      // pitch climbs a semitone per streak — little wins feel bigger and bigger
+      const base=440*Math.pow(2,Math.min(streak,8)/12);
+      pluck(base,0,.26); pluck(base*1.5,.07,.2);
+      tone(base*4,.05,.18,'sine',.045);
     }
-    if(name==='wrong'){ tone(220,0,.15,'sine',.1); tone(180,.12,.2,'sine',.1); }
-    if(name==='hint') { tone(880,0,.08,'sine',.12); tone(1100,.08,.1,'sine',.12); }
-    if(name==='poof') { tone(320,0,.08,'triangle',.12); tone(200,.05,.14,'sine',.1); }
-    if(name==='no')   { tone(240,0,.12,'sine',.09); }
-    if(name==='unit') { [659,880,1175].forEach((f,i)=>tone(f,i*.08,.14,'triangle',.15)); }
-    if(name==='win')  { [523,659,784,1047,1319].forEach((f,i)=>tone(f,i*.12,.25,'triangle',.16)); }
+    if(name==='wrong'){ tone(285,0,.16,'sine',.08); tone(238,.14,.24,'sine',.08); }
+    if(name==='hint'){ pluck(1046,0,.14,.9); pluck(1318,.09,.12,.9); }
+    if(name==='poof'){ puff(0,.28,.55,1600); }
+    if(name==='no')  { tone(240,0,.12,'sine',.08); }
+    if(name==='unit'){ [523,659,784,1046].forEach((f,i)=>pluck(f,i*.07,.2)); }
+    if(name==='win'){
+      [523,659,784,1046].forEach((f,i)=>pluck(f,i*.11,.24));
+      [523,659,784,1046,1318].forEach(f=>{
+        tone(f,.55,.7,'triangle',.055); tone(f*1.004,.55,.7,'sine',.045);
+      });
+    }
   }catch(e){}
 }
 function buzz(ms){ if(navigator.vibrate) try{ navigator.vibrate(ms); }catch(e){} }
@@ -588,10 +676,10 @@ function renderMenu(){
   $('style-animal').classList.toggle('active',styleKey==='animal');
   $('style-classic').classList.toggle('active',styleKey==='classic');
   LEVELS[styleKey].forEach((lv,i)=>{
-    $('emoji'+i).textContent=lv.emoji;
+    $('emoji'+i).innerHTML = styleKey==='classic' ? levelGridIcon(lv,i===3) : lv.emoji;
     $('name'+i).textContent=lv.name;
     $('desc'+i).textContent=lv.desc;
-    $('stars'+i).textContent='⭐️'.repeat(s[styleKey][i]);
+    $('stars'+i).innerHTML=ICONS.star.repeat(s[styleKey][i]);
   });
 }
 
@@ -617,6 +705,8 @@ function layoutSizes(){
 }
 
 function symColor(v){ return isClassic ? DIGIT_COLORS[(v-1)%DIGIT_COLORS.length] : ''; }
+// symbol as rich text for the hint bubble: colored bold digit, or the emoji piece
+function symTag(v){ return isClassic ? '<b style="color:'+symColor(v)+'">'+symbols[v-1]+'</b>' : symbols[v-1]; }
 function boxOf(i){ const n=L.n,r=Math.floor(i/n),c=i%n; return Math.floor(r/L.boxH)*100+Math.floor(c/L.boxW); }
 
 function renderBoard(){
@@ -670,7 +760,7 @@ function renderTray(){
   }
   const er=document.createElement('button');
   er.className='tray-btn eraser';
-  er.textContent='🧽';
+  er.innerHTML=ICONS.eraser;
   er.setAttribute('aria-label','Eraser');
   er.addEventListener('click',e=>{ e.preventDefault(); onEraserTap(); });
   trayEl.appendChild(er);
@@ -725,28 +815,28 @@ function selectCell(i){
 /* ---------------- juicy feedback ---------------- */
 
 let mascotTimer=null;
-function mascotReact(emo,ms){
+function mascotReact(state,ms){
   const m=$('mascot');
-  m.textContent=emo;
+  m.innerHTML=mascotSvg(state);
   m.classList.remove('bounce'); void m.offsetWidth; m.classList.add('bounce');
   clearTimeout(mascotTimer);
-  if(ms) mascotTimer=setTimeout(()=>{ m.textContent='😊'; },ms);
+  if(ms) mascotTimer=setTimeout(()=>{ m.innerHTML=mascotSvg('happy'); },ms);
 }
 
+const SPARK_COLORS=['#ffd34d','#ff9d5c','#a394ff','#54c452','#4aa3ff'];
 function sparkleBurst(el){
   const rect=el.getBoundingClientRect();
   const cx=rect.left+rect.width/2, cy=rect.top+rect.height/2;
-  const EMO=['✨','⭐️','🌟'];
   for(let k=0;k<6;k++){
     const s=document.createElement('span');
     s.className='spark';
-    s.textContent=EMO[k%3];
+    const sz=Math.max(12,rect.width*0.3);
+    s.innerHTML='<svg viewBox="0 0 24 24" width="'+sz+'" height="'+sz+'"><path d="'+STAR_PATH+'" fill="'+SPARK_COLORS[k%SPARK_COLORS.length]+'"/></svg>';
     const ang=Math.PI*2*k/6 + Math.random()*.6;
     const dist=rect.width*(0.8+Math.random()*0.6);
     s.style.setProperty('--dx',Math.cos(ang)*dist+'px');
     s.style.setProperty('--dy',Math.sin(ang)*dist+'px');
     s.style.left=cx+'px'; s.style.top=cy+'px';
-    s.style.fontSize=Math.max(12,rect.width*0.3)+'px';
     document.body.appendChild(s);
     setTimeout(()=>s.remove(),800);
   }
@@ -853,7 +943,7 @@ function tryPlace(i,v){
     el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake');
     setTimeout(()=>el.classList.remove('shake'),500);
     sfx('wrong'); buzz([60,40,60]);
-    mascotReact('😯',900);
+    mascotReact('oops',900);
     return false;
   }
   streak++;
@@ -862,9 +952,9 @@ function tryPlace(i,v){
   const unitDone=celebrateUnits(i);
   if(unitDone || streak%3===0){
     praiseAt(el,PRAISES[Math.floor(Math.random()*PRAISES.length)]);
-    mascotReact('🤩',900);
+    mascotReact('wow',900);
   } else {
-    mascotReact('😄',700);
+    mascotReact('joy',700);
   }
   if(board.every((x,idx)=>x===solution[idx])) onWin();
   return true;
@@ -958,9 +1048,9 @@ function clearHintFx(){
   boardEl.querySelectorAll('.explain').forEach(el=>el.classList.remove('explain'));
   trayEl.querySelectorAll('.hintpulse').forEach(el=>el.classList.remove('hintpulse'));
 }
-function showBubble(text,ms){
+function showBubble(html,ms){
   const b=$('hint-bubble');
-  b.textContent=text;
+  b.innerHTML=html;
   b.classList.add('show');
   // sit just above the board so it never covers the cell it talks about
   const bt=boardEl.getBoundingClientRect().top;
@@ -1027,16 +1117,16 @@ function onHint(){
   const h=findHint();
   if(!h) return;
   sfx('hint');
-  mascotReact('🤔',1600);
+  mascotReact('think',1600);
   if(h.type==='fix'){
-    const sym=symbols[board[h.i]-1];
+    const sym=symTag(board[h.i]);
     showBubble(computeConflicts().has(h.i)
-      ? 'Oops — two '+sym+' together! Tap the wiggly red '+sym+' to pop it out! 🧹'
-      : 'Hmm, '+sym+' is in the wrong spot. Grab the 🧽 and tap it!',9000);
+      ? 'Oops — two '+sym+' together! Tap the wiggly red '+sym+' to pop it out!'
+      : 'Hmm, '+sym+' is in the wrong spot. Grab the '+ICONS.eraser+' eraser and tap it!',9000);
     highlightCells([h.i],9000);
     return;
   }
-  const v=solution[h.i], sym=symbols[v-1];
+  const v=solution[h.i], sym=symTag(v);
   const kind=KIND_NAMES[h.kind]||'';
   if(h.type==='single'){
     // show the filled row/column/box friends that leave only one choice
@@ -1049,9 +1139,9 @@ function onHint(){
   }
   const MSGS={
     last:  'Look — this '+kind+' needs just one more: '+sym+'! Tap '+sym+', then the sparkly spot!',
-    single:'All the neighbors are taken, so only '+sym+' fits here. Your turn! 👉',
+    single:'All the neighbors are taken, so only '+sym+' fits here. Your turn!',
     only:  sym+' has only one home left in this '+kind+'. Can you put it there?',
-    magic: 'Try this spot! Which friend is missing? 🤔',
+    magic: 'Try this spot! Which '+(isClassic?'number':'friend')+' is missing?',
   };
   showBubble(MSGS[h.type],9000);
   if(h.cells) highlightCells(h.cells.filter(p=>p!==h.i),6000);
@@ -1072,22 +1162,25 @@ function newGame(idx){
   board=puzzle.slice();
   selectedVal=0; selectedCell=-1; eraserOn=false; solvedFlag=false; streak=0;
   clearHintFx();
-  $('level-label').textContent=L.name+' '+L.emoji;
-  $('mascot').textContent='😊';
+  $('level-label').innerHTML=L.name+' '+(isClassic?levelGridIcon(L,levelIdx===3):L.emoji);
+  $('mascot').innerHTML=mascotSvg('happy');
   renderBoard(); renderTray();
   $('menu').classList.add('hidden');
   $('game').classList.remove('hidden');
   $('win').classList.remove('show');
 }
 
+const CONF_COLORS=['#ffd34d','#ff9d5c','#ff8fb2','#54c452','#4aa3ff','#a394ff','#7df5b9'];
 function confettiBurst(){
-  const EMO=['🎉','⭐️','🌟','💛','💚','💙','🎈','✨'];
-  for(let k=0;k<46;k++){
+  for(let k=0;k<60;k++){
     const s=document.createElement('span');
     s.className='confetti';
-    s.textContent=EMO[Math.floor(Math.random()*EMO.length)];
+    const w=6+Math.random()*9, round=Math.random()<0.5;
+    s.style.width=w+'px';
+    s.style.height=(round?w:w*(0.45+Math.random()*0.5))+'px';
+    s.style.background=CONF_COLORS[k%CONF_COLORS.length];
+    s.style.borderRadius=round?'50%':'2px';
     s.style.left=Math.random()*100+'vw';
-    s.style.fontSize=(16+Math.random()*26)+'px';
     s.style.animationDuration=(2.2+Math.random()*2.5)+'s';
     s.style.animationDelay=(Math.random()*0.8)+'s';
     document.body.appendChild(s);
@@ -1099,15 +1192,15 @@ function onWin(){
   solvedFlag=true;
   const earned=addStar();
   sfx('win'); buzz([80,60,80,60,160]);
-  mascotReact('🥳');
+  mascotReact('party');
   confettiBurst();
-  $('win-big').textContent=WIN_BIGS[Math.floor(Math.random()*WIN_BIGS.length)];
+  $('win-big').innerHTML=ICONS.trophy;
   $('win-msg').textContent=WIN_MSGS[Math.floor(Math.random()*WIN_MSGS.length)];
   const ws=$('win-stars');
   ws.innerHTML='';
   for(let k=0;k<earned;k++){
     const s=document.createElement('span');
-    s.textContent='⭐️';
+    s.innerHTML=ICONS.star;
     s.style.animationDelay=(0.9+k*0.25)+'s';
     ws.appendChild(s);
   }
@@ -1144,10 +1237,20 @@ $('again-btn').addEventListener('click',()=>{ sfx('tap'); newGame(levelIdx); });
 $('sound-toggle').addEventListener('click',()=>{
   soundOn=!soundOn;
   localStorage.setItem('sudoku-sound',soundOn?'on':'off');
-  $('sound-toggle').textContent=soundOn?'🔊':'🔇';
+  $('sound-toggle').innerHTML=soundOn?ICONS.sound:ICONS.mute;
   sfx('tap');
 });
-$('sound-toggle').textContent=soundOn?'🔊':'🔇';
+
+/* icon chrome (SVG, no raw emoji) */
+$('sound-toggle').innerHTML=soundOn?ICONS.sound:ICONS.mute;
+$('back-btn').innerHTML=ICONS.home;
+$('hint-btn').innerHTML=ICONS.bulb;
+$('menu-btn').innerHTML=ICONS.home+' Menu';
+$('again-btn').innerHTML=ICONS.again+' Play again';
+$('style-animal').innerHTML=ICONS.paw+' Animals';
+$('style-classic').innerHTML=ICONS.grid+' Numbers';
+$('pstar').innerHTML=ICONS.star;
+$('mascot').innerHTML=mascotSvg('happy');
 
 window.addEventListener('resize',()=>{ if(!$('game').classList.contains('hidden')) { renderBoard(); } });
 // block pinch zoom on iOS (double-tap zoom is disabled via touch-action:manipulation)
