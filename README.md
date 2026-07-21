@@ -21,7 +21,11 @@ A sudoku game for kids ages 3–6 (and up). Two styles:
 - 💡 hints teach instead of solving: a speech bubble explains the reasoning
   ("This row needs just one more!", "Only 3 fits here!"), highlights the
   proof cells, and pulses the right tray symbol — the child makes the move
-- 🧽 eraser tool for taking back placed symbols (clues are protected)
+- 🧽 eraser tool for taking back placed symbols (clues are protected); when
+  active, the cells you can rub out light up pink
+- Always-visible ⚙️ settings (sound + vibration), a deep-linkable URL that
+  points at the exact level (e.g. `#classic-2`), and automatic save/resume —
+  close the tab mid-puzzle and reopen right where you left off
 - Tap any filled cell to light up its twins; tray badges count how many
   of each symbol are still missing
 - Confetti + fanfare celebration, stars saved per level

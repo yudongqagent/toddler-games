@@ -108,6 +108,9 @@
     flex:1; display:flex; align-items:center; justify-content:center; gap:10px;
     min-width:0;
   }
+  .tb-group { display:flex; gap:8px; }
+  /* reserve the top-right corner for the always-visible settings button */
+  .tb-spacer { width:clamp(44px,10vw,54px); flex:none; }
   #mascot {
     font-size:clamp(26px,7vw,38px);
     display:inline-block;
@@ -297,6 +300,55 @@
     border:10px solid transparent; border-top-color:#fff;
   }
 
+  /* ---------- SETTINGS (always-visible button + panel) ---------- */
+  .fab {
+    position:fixed; z-index:40;
+    top:max(10px, env(safe-area-inset-top)); right:max(10px, env(safe-area-inset-right));
+    width:clamp(44px,10vw,54px); height:clamp(44px,10vw,54px);
+    border-radius:50%; border:none; cursor:pointer;
+    background:#ffffffee;
+    box-shadow:0 4px 0 rgba(0,0,0,.15), inset 0 2px 0 rgba(255,255,255,.9);
+    display:flex; align-items:center; justify-content:center;
+    font-size:clamp(20px,5vw,26px);
+    transition:transform .1s;
+  }
+  .fab:active { transform:translateY(3px); box-shadow:0 1px 0 rgba(0,0,0,.15); }
+  .fab svg.ic { animation:spin 9s linear infinite; }
+  @keyframes spin { to{transform:rotate(360deg)} }
+
+  .modal {
+    position:absolute; inset:0; z-index:55;
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(60,40,150,.45); backdrop-filter:blur(3px);
+    opacity:0; pointer-events:none; transition:opacity .25s;
+  }
+  .modal.show { opacity:1; pointer-events:auto; }
+  .settings-card {
+    background:#fff; border-radius:28px; padding:24px 26px;
+    display:flex; flex-direction:column; gap:16px;
+    min-width:min(84vw,320px);
+    box-shadow:0 14px 40px rgba(0,0,0,.3);
+    animation:winpop .4s;
+  }
+  .settings-title { font-size:clamp(22px,6vw,28px); font-weight:800; color:#5b3fd4; text-align:center; }
+  .set-row { display:flex; align-items:center; justify-content:space-between; gap:20px; }
+  .set-label { font-size:clamp(17px,4.5vw,20px); font-weight:800; color:#4a3f7a; }
+  .switch {
+    width:58px; height:32px; border-radius:999px; border:none; padding:0;
+    background:#d7cffa; position:relative; cursor:pointer;
+    transition:background .2s;
+    box-shadow:inset 0 1px 3px rgba(60,40,150,.25);
+    flex:none;
+  }
+  .switch.on { background:#54c452; }
+  .switch .knob {
+    position:absolute; top:3px; left:3px;
+    width:26px; height:26px; border-radius:50%;
+    background:#fff; box-shadow:0 2px 4px rgba(0,0,0,.3);
+    transition:left .2s;
+  }
+  .switch.on .knob { left:29px; }
+
   /* ---------- WIN OVERLAY ---------- */
   #win {
     position:absolute; inset:0; z-index:50;
@@ -386,23 +438,42 @@
       <span class="emoji" id="emoji3"></span><span class="name" id="name3"></span><span class="desc" id="desc3"></span><span class="stars" id="stars3"></span>
     </button>
   </div>
-  <button class="round-btn" id="sound-toggle" aria-label="Toggle sound">🔊</button>
 </div>
 
 <div id="game" class="screen hidden">
   <div class="topbar">
-    <button class="round-btn" id="back-btn" aria-label="Back to menu">🏠</button>
+    <div class="tb-group">
+      <button class="round-btn" id="back-btn" aria-label="Back to menu">🏠</button>
+      <button class="round-btn" id="hint-btn" aria-label="Hint">💡</button>
+    </div>
     <div id="level-wrap">
       <span id="mascot"></span>
       <span id="level-label"></span>
     </div>
-    <button class="round-btn" id="hint-btn" aria-label="Hint">💡</button>
+    <div class="tb-spacer"></div>
   </div>
   <div id="board-area">
     <div id="board"></div>
     <div id="pwrap"><div id="pfill"><span id="pstar"></span></div></div>
   </div>
   <div id="tray"></div>
+</div>
+
+<button id="settings-btn" class="fab" aria-label="Settings"></button>
+
+<div id="settings" class="modal">
+  <div class="settings-card">
+    <div class="settings-title">Settings</div>
+    <div class="set-row">
+      <span class="set-label">Sound</span>
+      <button class="switch" id="sw-sound" aria-label="Toggle sound"><span class="knob"></span></button>
+    </div>
+    <div class="set-row">
+      <span class="set-label">Vibration</span>
+      <button class="switch" id="sw-vibe" aria-label="Toggle vibration"><span class="knob"></span></button>
+    </div>
+    <button class="big-btn secondary" id="settings-close">Done</button>
+  </div>
 </div>
 
 <div id="hint-bubble"></div>
@@ -475,20 +546,12 @@ const ICONS={
   paw:IC+' fill="currentColor"><ellipse cx="12" cy="15.5" rx="4.6" ry="3.8"/><circle cx="6.6" cy="11.5" r="1.9"/><circle cx="10" cy="8.6" r="2"/><circle cx="14" cy="8.6" r="2"/><circle cx="17.4" cy="11.5" r="1.9"/></svg>',
   grid:IC+' fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M12 4v16M4 12h16"/></svg>',
   smile:IC+' fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M8.2 14q3.8 3.2 7.6 0"/><circle cx="9" cy="9.8" r="1.1" fill="currentColor" stroke="none"/><circle cx="15" cy="9.8" r="1.1" fill="currentColor" stroke="none"/></svg>',
+  gear:IC+' fill="#7c5cff"><path d="M19.14 12.94a7.5 7.5 0 0 0 .05-.94 7.5 7.5 0 0 0-.05-.94l2.03-1.58a.5.5 0 0 0 .12-.61l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7 7 0 0 0-1.62-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54a7 7 0 0 0-1.62.94l-2.39-.96a.5.5 0 0 0-.6.22L2.74 8.87a.5.5 0 0 0 .12.61l2.03 1.58a7.5 7.5 0 0 0 0 1.88l-2.03 1.58a.5.5 0 0 0-.12.61l1.92 3.32a.5.5 0 0 0 .6.22l2.39-.96a7 7 0 0 0 1.62.94l.36 2.54a.5.5 0 0 0 .5.42h3.84a.5.5 0 0 0 .5-.42l.36-2.54a7 7 0 0 0 1.62-.94l2.39.96a.5.5 0 0 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.61l-2.03-1.58zM12 15.4A3.4 3.4 0 1 1 12 8.6a3.4 3.4 0 0 1 0 6.8z"/></svg>',
   trophy:IC+'><path d="M7 3h10v6a5 5 0 0 1-10 0V3z" fill="#ffd34d" stroke="#e0a80f" stroke-width="1.5"/><path d="M7 5H3.5v1.5A3.5 3.5 0 0 0 7 10M17 5h3.5v1.5A3.5 3.5 0 0 1 17 10" fill="none" stroke="#e0a80f" stroke-width="1.5"/><path d="M10.5 13.5h3V17h-3z" fill="#e0a80f"/><rect x="8" y="17" width="8" height="3.2" rx="1" fill="#c9931a"/></svg>',
   again:IC+' fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 2.3-5.7"/><path d="M6 2.5v4h4"/></svg>',
   crown:IC+'><path d="M3.5 16.5 2.5 7l5.3 3.4L12 4.2l4.2 6.2L21.5 7l-1 9.5z" fill="#ffd34d" stroke="#e0a80f" stroke-width="1.4" stroke-linejoin="round"/><rect x="4.5" y="17.5" width="15" height="2.6" rx="1.3" fill="#e0a80f"/></svg>',
 };
 const STAR_PATH='M12 2.6l2.8 5.8 6.4.9-4.6 4.4 1.1 6.3L12 17l-5.7 3 1.1-6.3L2.8 9.3l6.4-.9z';
-
-// mini sudoku-grid icon showing each level's box layout
-function levelGridIcon(lv,gold){
-  const lines=[];
-  for(let x=lv.boxW;x<lv.n;x+=lv.boxW) lines.push('M'+(4+16*x/lv.n).toFixed(1)+' 4v16');
-  for(let y=lv.boxH;y<lv.n;y+=lv.boxH) lines.push('M4 '+(4+16*y/lv.n).toFixed(1)+'h16');
-  return IC+' fill="none" stroke="'+(gold?'#8a5a00':'#4a3800')+'" stroke-width="2" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="'+lines.join(' ')+'"/>'+
-    (gold?'<path d="M12 8.6l1.1 2.2 2.5.4-1.8 1.7.4 2.5-2.2-1.2-2.2 1.2.4-2.5-1.8-1.7 2.5-.4z" fill="#ffd34d" stroke="#e0a80f" stroke-width=".8"/>':'')+'</svg>';
-}
 
 /* ---------------- SVG mascot with expressions ---------------- */
 
@@ -621,7 +684,8 @@ function sfx(name){
     if(name==='win')  { [523,659,784,1047,1319].forEach((f,i)=>tone(f,i*.12,.25,'triangle',.16)); }
   }catch(e){}
 }
-function buzz(ms){ if(navigator.vibrate) try{ navigator.vibrate(ms); }catch(e){} }
+let vibeOn = localStorage.getItem('sudoku-vibe') !== 'off';
+function buzz(ms){ if(vibeOn && navigator.vibrate) try{ navigator.vibrate(ms); }catch(e){} }
 
 /* ---------------- state ---------------- */
 
@@ -665,7 +729,7 @@ function renderMenu(){
   $('style-classic').classList.toggle('active',styleKey==='classic');
   LEVELS[styleKey].forEach((lv,i)=>{
     if(!$('emoji'+i)) return;   // hidden levels have no menu card
-    $('emoji'+i).innerHTML = styleKey==='classic' ? levelGridIcon(lv,i===3) : lv.emoji;
+    $('emoji'+i).textContent = lv.emoji;
     $('name'+i).textContent=lv.name;
     $('desc'+i).textContent=lv.desc;
     $('stars'+i).innerHTML=ICONS.star.repeat(s[styleKey][i]);
@@ -931,6 +995,7 @@ function tryPlace(i,v){
   const conf=updateConflicts();
   updateTray();
   updateProgress();
+  saveGame();
   if(conf.has(i)){
     streak=0;
     el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake');
@@ -966,6 +1031,7 @@ function eraseCell(i){
   updateConflicts();
   updateTray();
   updateProgress();
+  saveGame();
   if(!selectedVal && !eraserOn) selectCell(i);   // ready to drop a new symbol right in
 }
 
@@ -1143,25 +1209,81 @@ function onHint(){
   if(h.type!=='magic') pulseTrayBtn(v);
 }
 
+/* ---------------- save / resume ---------------- */
+
+// One save slot holds the current in-progress puzzle so closing the tab and
+// reopening drops the child right back where they were.
+function saveGame(){
+  if(solvedFlag) return;
+  try{ localStorage.setItem('sudoku-save', JSON.stringify(
+    { styleKey, levelIdx, symbols, puzzle, solution, board })); }catch(e){}
+}
+function loadSave(){ try{ return JSON.parse(localStorage.getItem('sudoku-save')||'null'); }catch(e){ return null; } }
+function clearSave(){ localStorage.removeItem('sudoku-save'); }
+
+function validSave(sv,key,idx){
+  return sv && sv.styleKey===key && sv.levelIdx===idx &&
+    LEVELS[key] && LEVELS[key][idx] &&
+    Array.isArray(sv.board) && Array.isArray(sv.puzzle) &&
+    Array.isArray(sv.solution) && Array.isArray(sv.symbols) &&
+    sv.board.length===LEVELS[key][idx].n*LEVELS[key][idx].n;
+}
+
 /* ---------------- flow ---------------- */
 
-function newGame(idx){
-  levelIdx=idx; L=LEVELS[styleKey][idx];
-  isClassic = styleKey==='classic';
+function makeFresh(){
   symbols = isClassic
     ? [...Array(L.n).keys()].map(i=>String(i+1))
     : shuffle(THEMES[Math.floor(Math.random()*THEMES.length)].slice()).slice(0,L.n);
   const p=makePuzzle(L);
-  puzzle=p.puzzle; solution=p.solution;
-  board=puzzle.slice();
+  puzzle=p.puzzle; solution=p.solution; board=puzzle.slice();
+}
+
+// Start a level: resume the saved puzzle if it's this exact level (and not
+// forced fresh), otherwise generate a new one. Does NOT touch the URL — the
+// router owns that.
+function enterLevel(key, idx, forceFresh){
+  if(!LEVELS[key] || idx<0 || idx>=LEVELS[key].length){ showMenu(); return; }
+  styleKey=key; levelIdx=idx; L=LEVELS[key][idx]; isClassic=(key==='classic');
+  const sv=forceFresh?null:loadSave();
+  if(validSave(sv,key,idx)){
+    symbols=sv.symbols.slice(); puzzle=sv.puzzle.slice();
+    solution=sv.solution.slice(); board=sv.board.slice();
+  } else {
+    makeFresh();
+  }
   selectedVal=0; selectedCell=-1; eraserOn=false; solvedFlag=false; streak=0;
   clearHintFx();
-  $('level-label').innerHTML=L.name+' '+(isClassic?levelGridIcon(L,levelIdx>=3):L.emoji);
+  $('level-label').textContent=L.name+' '+L.emoji;
   $('mascot').innerHTML=mascotSvg('happy');
   renderBoard(); renderTray();
+  saveGame();
   $('menu').classList.add('hidden');
-  $('game').classList.remove('hidden');
   $('win').classList.remove('show');
+  $('game').classList.remove('hidden');
+}
+
+function playAgain(){ clearSave(); enterLevel(styleKey, levelIdx, true); }
+
+/* ---------------- URL routing (deep-linkable game settings) ---------------- */
+
+function parseHash(){
+  const m=/^#?(animal|classic)-(\d+)$/.exec(location.hash);
+  return m ? { key:m[1], idx:+m[2] } : null;
+}
+function applyRoute(){
+  const r=parseHash();
+  if(r && LEVELS[r.key] && r.idx>=0 && r.idx<LEVELS[r.key].length) enterLevel(r.key, r.idx, false);
+  else showMenu();
+}
+// Navigate by changing the hash (so Back/Forward and shared links work).
+// Setting the same hash won't fire hashchange, so route directly in that case.
+function goLevel(key, idx){
+  const target='#'+key+'-'+idx;
+  if(location.hash===target) applyRoute(); else location.hash=target;
+}
+function goMenu(){
+  if(location.hash==='' || location.hash==='#') showMenu(); else location.hash='';
 }
 
 const CONF_COLORS=['#ffd34d','#ff9d5c','#ff8fb2','#54c452','#4aa3ff','#a394ff','#7df5b9'];
@@ -1184,6 +1306,7 @@ function confettiBurst(){
 
 function onWin(){
   solvedFlag=true;
+  clearSave();                    // finished — nothing to resume
   const earned=addStar();
   sfx('win'); buzz([80,60,80,60,160]);
   mascotReact('party');
@@ -1204,7 +1327,7 @@ function onWin(){
   setTimeout(()=>$('win').classList.add('show'),700);
 }
 
-function toMenu(){
+function showMenu(){
   clearHintFx();
   renderMenu();
   $('game').classList.add('hidden');
@@ -1222,24 +1345,35 @@ function setStyle(key){
 /* ---------------- wire up ---------------- */
 
 document.querySelectorAll('.level-btn').forEach(b=>{
-  b.addEventListener('click',()=>{ sfx('tap'); newGame(+b.dataset.level); });
+  b.addEventListener('click',()=>{ sfx('tap'); goLevel(styleKey, +b.dataset.level); });
 });
 $('style-animal').addEventListener('click',()=>setStyle('animal'));
 $('style-classic').addEventListener('click',()=>setStyle('classic'));
-$('back-btn').addEventListener('click',()=>{ sfx('tap'); toMenu(); });
-$('menu-btn').addEventListener('click',()=>{ sfx('tap'); toMenu(); });
+$('back-btn').addEventListener('click',()=>{ sfx('tap'); goMenu(); });
+$('menu-btn').addEventListener('click',()=>{ sfx('tap'); goMenu(); });
 $('hint-btn').addEventListener('click',onHint);
-$('again-btn').addEventListener('click',()=>{ sfx('tap'); newGame(levelIdx); });
-$('secret-btn').addEventListener('click',()=>{ sfx('tap'); newGame(4); });
-$('sound-toggle').addEventListener('click',()=>{
-  soundOn=!soundOn;
-  localStorage.setItem('sudoku-sound',soundOn?'on':'off');
-  $('sound-toggle').innerHTML=soundOn?ICONS.sound:ICONS.mute;
-  sfx('tap');
+$('again-btn').addEventListener('click',()=>{ sfx('tap'); playAgain(); });
+$('secret-btn').addEventListener('click',()=>{ sfx('tap'); goLevel('classic',4); });
+
+/* settings panel */
+function renderSwitches(){
+  $('sw-sound').classList.toggle('on', soundOn);
+  $('sw-vibe').classList.toggle('on', vibeOn);
+}
+$('settings-btn').addEventListener('click',()=>{ sfx('tap'); renderSwitches(); $('settings').classList.add('show'); });
+$('settings-close').addEventListener('click',()=>{ sfx('tap'); $('settings').classList.remove('show'); });
+$('settings').addEventListener('click',e=>{ if(e.target===$('settings')) $('settings').classList.remove('show'); });
+$('sw-sound').addEventListener('click',()=>{
+  soundOn=!soundOn; localStorage.setItem('sudoku-sound',soundOn?'on':'off');
+  renderSwitches(); if(soundOn) sfx('tap');
+});
+$('sw-vibe').addEventListener('click',()=>{
+  vibeOn=!vibeOn; localStorage.setItem('sudoku-vibe',vibeOn?'on':'off');
+  renderSwitches(); if(vibeOn) buzz(20);
 });
 
 /* icon chrome (SVG, no raw emoji) */
-$('sound-toggle').innerHTML=soundOn?ICONS.sound:ICONS.mute;
+$('settings-btn').innerHTML=ICONS.gear;
 $('back-btn').innerHTML=ICONS.home;
 $('hint-btn').innerHTML=ICONS.bulb;
 $('menu-btn').innerHTML=ICONS.home+' Menu';
@@ -1251,10 +1385,23 @@ $('pstar').innerHTML=ICONS.star;
 $('mascot').innerHTML=mascotSvg('happy');
 
 window.addEventListener('resize',()=>{ if(!$('game').classList.contains('hidden')) { renderBoard(); } });
+window.addEventListener('hashchange', applyRoute);
 // block pinch zoom on iOS (double-tap zoom is disabled via touch-action:manipulation)
 document.addEventListener('gesturestart',e=>e.preventDefault());
 
 renderMenu();
+// Boot: honor a deep-link, else resume a saved game, else show the menu.
+(function boot(){
+  if(!parseHash()){
+    const sv=loadSave();
+    if(sv && LEVELS[sv.styleKey] && sv.levelIdx>=0 && sv.levelIdx<LEVELS[sv.styleKey].length){
+      styleKey=sv.styleKey;
+      location.hash='#'+sv.styleKey+'-'+sv.levelIdx;   // fires hashchange -> resume
+      return;
+    }
+  }
+  applyRoute();
+})();
 </script>
 </body>
 </html>
