@@ -529,6 +529,17 @@
   </div>
 </div>
 
+<div id="resume" class="modal">
+  <div class="settings-card">
+    <div class="settings-title">Welcome back!</div>
+    <div class="win-sub" id="resume-sub">Keep going, or start this level fresh?</div>
+    <div class="win-actions">
+      <button class="big-btn primary" id="resume-yes">Resume</button>
+      <button class="big-btn secondary" id="resume-new">New game</button>
+    </div>
+  </div>
+</div>
+
 <div id="hint-bubble"></div>
 
 <div id="win">
@@ -601,6 +612,7 @@ const ICONS={
   paw:IC+' fill="currentColor"><ellipse cx="12" cy="15.5" rx="4.6" ry="3.8"/><circle cx="6.6" cy="11.5" r="1.9"/><circle cx="10" cy="8.6" r="2"/><circle cx="14" cy="8.6" r="2"/><circle cx="17.4" cy="11.5" r="1.9"/></svg>',
   grid:IC+' fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M12 4v16M4 12h16"/></svg>',
   smile:IC+' fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M8.2 14q3.8 3.2 7.6 0"/><circle cx="9" cy="9.8" r="1.1" fill="currentColor" stroke="none"/><circle cx="15" cy="9.8" r="1.1" fill="currentColor" stroke="none"/></svg>',
+  play:IC+' fill="currentColor"><path d="M7 5.4v13.2a1 1 0 0 0 1.53.85l10.4-6.6a1 1 0 0 0 0-1.7L8.53 4.55A1 1 0 0 0 7 5.4z"/></svg>',
   gear:IC+' fill="#7c5cff"><path d="M19.14 12.94a7.5 7.5 0 0 0 .05-.94 7.5 7.5 0 0 0-.05-.94l2.03-1.58a.5.5 0 0 0 .12-.61l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7 7 0 0 0-1.62-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54a7 7 0 0 0-1.62.94l-2.39-.96a.5.5 0 0 0-.6.22L2.74 8.87a.5.5 0 0 0 .12.61l2.03 1.58a7.5 7.5 0 0 0 0 1.88l-2.03 1.58a.5.5 0 0 0-.12.61l1.92 3.32a.5.5 0 0 0 .6.22l2.39-.96a7 7 0 0 0 1.62.94l.36 2.54a.5.5 0 0 0 .5.42h3.84a.5.5 0 0 0 .5-.42l.36-2.54a7 7 0 0 0 1.62-.94l2.39.96a.5.5 0 0 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.61l-2.03-1.58zM12 15.4A3.4 3.4 0 1 1 12 8.6a3.4 3.4 0 0 1 0 6.8z"/></svg>',
   trophy:IC+'><path d="M7 3h10v6a5 5 0 0 1-10 0V3z" fill="#ffd34d" stroke="#e0a80f" stroke-width="1.5"/><path d="M7 5H3.5v1.5A3.5 3.5 0 0 0 7 10M17 5h3.5v1.5A3.5 3.5 0 0 1 17 10" fill="none" stroke="#e0a80f" stroke-width="1.5"/><path d="M10.5 13.5h3V17h-3z" fill="#e0a80f"/><rect x="8" y="17" width="8" height="3.2" rx="1" fill="#c9931a"/></svg>',
   again:IC+' fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 2.3-5.7"/><path d="M6 2.5v4h4"/></svg>',
@@ -1307,7 +1319,8 @@ function enterLevel(key, idx, forceFresh){
   if(!LEVELS[key] || idx<0 || idx>=LEVELS[key].length){ showMenu(); return; }
   styleKey=key; levelIdx=idx; L=LEVELS[key][idx]; isClassic=(key==='classic');
   const sv=forceFresh?null:loadSave();
-  if(validSave(sv,key,idx)){
+  const resuming=validSave(sv,key,idx);
+  if(resuming){
     symbols=sv.symbols.slice(); puzzle=sv.puzzle.slice();
     solution=sv.solution.slice(); board=sv.board.slice();
   } else {
@@ -1322,6 +1335,20 @@ function enterLevel(key, idx, forceFresh){
   $('menu').classList.add('hidden');
   $('win').classList.remove('show');
   $('game').classList.remove('hidden');
+  // Only ask when the saved game has real progress worth keeping or discarding
+  // (a level just opened but untouched has nothing meaningful to resume).
+  const hasProgress = resuming && sv.board.some((v,i)=> sv.puzzle[i]===0 && v!==0);
+  $('resume').classList.toggle('show', !!hasProgress);
+}
+
+// Discard the saved progress and lay out a brand-new puzzle for this level.
+function restartCurrent(){
+  clearSave();
+  makeFresh();
+  selectedVal=0; selectedCell=-1; eraserOn=false; solvedFlag=false; streak=0;
+  clearHintFx();
+  renderBoard(); renderTray();
+  saveGame();
 }
 
 function playAgain(){ clearSave(); enterLevel(styleKey, levelIdx, true); }
@@ -1425,6 +1452,7 @@ function onWin(){
 
 function showMenu(){
   clearHintFx();
+  $('resume').classList.remove('show');
   renderMenu();
   $('game').classList.add('hidden');
   $('win').classList.remove('show');
@@ -1456,6 +1484,8 @@ function renderSwitches(){
   $('sw-sound').classList.toggle('on', soundOn);
   $('sw-vibe').classList.toggle('on', vibeOn);
 }
+$('resume-yes').addEventListener('click',()=>{ sfx('tap'); $('resume').classList.remove('show'); });
+$('resume-new').addEventListener('click',()=>{ sfx('tap'); $('resume').classList.remove('show'); restartCurrent(); });
 $('settings-btn').addEventListener('click',()=>{ sfx('tap'); renderSwitches(); $('settings').classList.add('show'); });
 $('settings-close').addEventListener('click',()=>{ sfx('tap'); $('settings').classList.remove('show'); });
 $('settings').addEventListener('click',e=>{ if(e.target===$('settings')) $('settings').classList.remove('show'); });
@@ -1480,6 +1510,8 @@ $('again-btn').innerHTML=ICONS.again+' Play again';
 $('style-animal').innerHTML=ICONS.smile+' Emoji';
 $('style-classic').innerHTML=ICONS.grid+' Numbers';
 $('secret-btn').innerHTML=ICONS.crown+' Secret: Legend';
+$('resume-yes').innerHTML=ICONS.play+' Resume';
+$('resume-new').innerHTML=ICONS.again+' New game';
 $('pstar').innerHTML=ICONS.star;
 $('mascot').innerHTML=mascotSvg('happy');
 
