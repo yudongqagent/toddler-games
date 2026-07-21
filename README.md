@@ -20,7 +20,10 @@ A sudoku game for kids ages 3–6 (and up). Two styles:
   cells glowing red so kids can see *why*; tap a red symbol to pop it out
 - 💡 hints teach instead of solving: a speech bubble explains the reasoning
   ("This row needs just one more!", "Only 3 fits here!"), highlights the
-  proof cells, and pulses the right tray symbol — the child makes the move
+  proof cells, and pulses the right tray symbol — the child makes the move.
+  For a misplaced symbol it explains *why*: a visible duplicate ("two 6s in
+  the same row — one must move") or, when the clash isn't visible, it rings the
+  wrong cell and glows the spot where that symbol actually belongs
 - 🧽 eraser tool for taking back placed symbols (clues are protected); when
   active, the cells you can rub out light up pink
 - Always-visible ⚙️ settings (sound, plus vibration where the device

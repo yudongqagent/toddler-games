@@ -183,6 +183,9 @@
   .cell.conflict .sym { animation:confwob .9s ease-in-out infinite; }
   @keyframes confwob { 0%,100%{transform:rotate(-7deg)} 50%{transform:rotate(7deg)} }
   .cell.explain { background:#fff3ad !important; box-shadow:inset 0 0 0 3px #ffd34d; }
+  /* the cell a hint says is misplaced: orange ring + gentle wiggle */
+  .cell.hintwrong { box-shadow:inset 0 0 0 3px #ff8a3d !important; }
+  .cell.hintwrong .sym { animation:confwob .9s ease-in-out infinite; }
   .cell.cellwin { animation:cellwin .55s both; z-index:1; }
   @keyframes cellwin {
     0%{transform:scale(1)}
@@ -1179,6 +1182,7 @@ function clearHintFx(){
   hintTimers=[];
   $('hint-bubble').classList.remove('show');
   boardEl.querySelectorAll('.explain').forEach(el=>el.classList.remove('explain'));
+  boardEl.querySelectorAll('.hintwrong').forEach(el=>el.classList.remove('hintwrong'));
   trayEl.querySelectorAll('.hintpulse').forEach(el=>el.classList.remove('hintpulse'));
 }
 function showBubble(html,ms){
@@ -1196,11 +1200,44 @@ function highlightCells(cells,ms){
     cells.forEach(p=>{ const el=boardEl.children[p]; if(el) el.classList.remove('explain'); });
   },ms||2600));
 }
+// mark cells a hint calls out as misplaced (orange ring + wiggle)
+function highlightWrong(cells,ms){
+  cells.forEach(p=>{ const el=boardEl.children[p]; if(el) el.classList.add('hintwrong'); });
+  hintTimers.push(setTimeout(()=>{
+    cells.forEach(p=>{ const el=boardEl.children[p]; if(el) el.classList.remove('hintwrong'); });
+  },ms||2600));
+}
 
 function candsOf(i){
   const n=L.n, r=Math.floor(i/n), c=i%n, out=[];
   for(let v=1;v<=n;v++) if(placeOk(board,r,c,v,L)) out.push(v);
   return out;
+}
+
+// the three units cell i belongs to, as [kindName, cells[]]
+function unitsOf(i){
+  const n=L.n, r=Math.floor(i/n), c=i%n;
+  const row=[...Array(n).keys()].map(k=>r*n+k);
+  const col=[...Array(n).keys()].map(k=>k*n+c);
+  const br=Math.floor(r/L.boxH)*L.boxH, bc=Math.floor(c/L.boxW)*L.boxW, box=[];
+  for(let rr=br;rr<br+L.boxH;rr++) for(let cc=bc;cc<bc+L.boxW;cc++) box.push(rr*n+cc);
+  return [['row',row],['column',col],['little square',box]];
+}
+
+// A same-valued neighbour that makes v at i a visible duplicate (the clash the
+// child can see): returns {j, kind} of the first row/column/box partner.
+function conflictPartner(i,v){
+  for(const [kind,cells] of unitsOf(i))
+    for(const j of cells) if(j!==i && board[j]===v) return {j, kind};
+  return null;
+}
+
+// Where the mis-placed symbol v actually belongs: the empty cell in a unit it
+// shares with i whose solution is v. Lets the hint say "it goes HERE, not there".
+function fixHome(i,v){
+  for(const [kind,cells] of unitsOf(i))
+    for(const p of cells) if(p!==i && solution[p]===v && board[p]===0) return {home:p, kind};
+  return null;
 }
 
 const KIND_NAMES={ row:'row', column:'column', box:'little square' };
@@ -1252,11 +1289,29 @@ function onHint(){
   sfx('hint');
   mascotReact('think',1600);
   if(h.type==='fix'){
-    const sym=symTag(board[h.i]);
-    showBubble(computeConflicts().has(h.i)
-      ? 'Oops — two '+sym+' together! Tap the wiggly red '+sym+' to pop it out!'
-      : 'Hmm, '+sym+' is in the wrong spot. Grab the '+ICONS.eraser+' eraser and tap it!',9000);
-    highlightCells([h.i],9000);
+    const v=board[h.i], sym=symTag(v);
+    const partner=conflictPartner(h.i,v);
+    if(partner){
+      // the child can SEE the clash: two identical symbols share a line/box
+      showBubble('Look — there are two '+sym+'s in the same '+partner.kind+'! Each '+
+        partner.kind+' can hold just one '+sym+', so one must move. Tap a red '+sym+
+        ' to pop it out.',9000);
+      highlightWrong([h.i,partner.j],9000);
+    } else {
+      // legal-looking but not the answer: show where this symbol truly belongs
+      const fh=fixHome(h.i,v);
+      if(fh){
+        showBubble('This '+sym+' is in the wrong place — every '+fh.kind+' has just one '+
+          sym+', and its real home is the glowing spot. Lift this '+sym+' out with the '+
+          ICONS.eraser+' and pop it there!',9000);
+        highlightWrong([h.i],9000);
+        highlightCells([fh.home],9000);   // yellow target it belongs in
+      } else {
+        showBubble('This square needs a different '+(isClassic?'number':'friend')+' — the '+
+          sym+' can\'t stay here. Lift it out with the '+ICONS.eraser+' and look again!',9000);
+        highlightWrong([h.i],9000);
+      }
+    }
     return;
   }
   const v=solution[h.i], sym=symTag(v);
