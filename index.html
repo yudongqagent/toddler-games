@@ -915,10 +915,16 @@ function updateHighlights(){
   }
 }
 
+// Progress tracks only the blanks the player must fill (not the given clues),
+// counting correct placements — so the bar starts empty and reaches 100%
+// exactly when the puzzle is solved.
 function updateProgress(){
-  const total=board.length||1;
-  const filled=board.filter(v=>v>0).length;
-  $('pfill').style.width=Math.round(100*filled/total)+'%';
+  let need=0, done=0;
+  for(let i=0;i<board.length;i++){
+    if(puzzle[i]===0){ need++; if(board[i]===solution[i]) done++; }
+  }
+  const pct = need ? Math.round(100*done/need) : 100;
+  $('pfill').style.width=pct+'%';
 }
 
 // 'sel' is applied by updateHighlights, so this just moves the state + refreshes.
