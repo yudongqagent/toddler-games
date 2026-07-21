@@ -358,16 +358,54 @@
     opacity:0; pointer-events:none; transition:opacity .3s;
   }
   #win.show { opacity:1; pointer-events:auto; }
+  /* rotating rays of light behind the card */
+  .sunburst {
+    position:absolute; left:50%; top:50%;
+    width:150vmax; height:150vmax; border-radius:50%;
+    background:repeating-conic-gradient(from 0deg,
+      rgba(255,255,255,.18) 0deg 11deg, transparent 11deg 22deg);
+    pointer-events:none; opacity:0;
+    transform:translate(-50%,-50%) scale(.4);
+    transition:opacity .5s;
+  }
+  #win.show .sunburst { opacity:1; animation:sunspin 16s linear infinite; }
+  @keyframes sunspin {
+    from{ transform:translate(-50%,-50%) rotate(0) scale(1); }
+    to{ transform:translate(-50%,-50%) rotate(360deg) scale(1); }
+  }
   .win-card {
+    position:relative; overflow:visible;
     background:#fff; border-radius:30px;
-    padding:28px 34px;
+    padding:30px 34px 28px;
     display:flex; flex-direction:column; align-items:center; gap:12px;
     box-shadow:0 14px 40px rgba(0,0,0,.3);
-    animation:winpop .5s;
+    animation:winpop .6s cubic-bezier(.34,1.56,.64,1);
     max-width:88vw;
   }
-  @keyframes winpop { 0%{transform:scale(.4) rotate(-6deg)} 70%{transform:scale(1.1)} 100%{transform:scale(1)} }
-  .win-card .big { font-size:clamp(44px,12vw,72px); }
+  @keyframes winpop { 0%{transform:scale(.3) rotate(-8deg)} 65%{transform:scale(1.08)} 100%{transform:scale(1)} }
+  .win-mascot {
+    position:absolute; top:-32px; left:50%; font-size:58px;
+    transform:translateX(-50%);
+    animation:winmascot 1s ease-in-out infinite;
+    filter:drop-shadow(0 4px 4px rgba(0,0,0,.25));
+  }
+  @keyframes winmascot {
+    0%,100%{ transform:translateX(-50%) translateY(0) rotate(-7deg); }
+    50%{ transform:translateX(-50%) translateY(-11px) rotate(7deg); }
+  }
+  .win-card .big {
+    font-size:clamp(48px,13vw,78px);
+    margin-top:8px;
+    animation:trophyin .7s cubic-bezier(.34,1.6,.5,1) both,
+              trophyshine 2.4s .7s ease-in-out infinite;
+  }
+  @keyframes trophyin { 0%{transform:scale(0) rotate(-40deg)} 60%{transform:scale(1.3) rotate(10deg)} 100%{transform:scale(1) rotate(0)} }
+  @keyframes trophyshine {
+    0%,100%{ transform:rotate(0) translateY(0); filter:drop-shadow(0 3px 4px rgba(0,0,0,.2)); }
+    25%{ transform:rotate(-5deg); }
+    50%{ transform:rotate(0) translateY(-6px); filter:drop-shadow(0 8px 10px rgba(255,180,0,.5)); }
+    75%{ transform:rotate(5deg); }
+  }
   .win-card .msg { font-size:clamp(22px,6vw,34px); font-weight:800; color:#5b3fd4; text-align:center; }
   #win-stars { display:flex; gap:6px; min-height:1.3em; }
   #win-stars span {
@@ -408,6 +446,21 @@
   @keyframes fall {
     to { transform:translateY(115vh) rotate(720deg); opacity:.7; }
   }
+  /* party-popper cannons from the bottom corners: outer flings sideways,
+     inner arcs up then falls, piece spins — a real parabola */
+  .cann-x {
+    position:fixed; z-index:60; pointer-events:none; bottom:2vh;
+    animation:cannX 1.9s cubic-bezier(.15,.5,.5,1) forwards;
+  }
+  @keyframes cannX { to{ transform:translateX(var(--tx)); } }
+  .cann-y { display:block; animation:cannY 1.9s cubic-bezier(.25,.7,.55,1) forwards; }
+  @keyframes cannY {
+    0%{ transform:translateY(0); opacity:1; }
+    40%{ transform:translateY(var(--rise)); opacity:1; }
+    100%{ transform:translateY(12vh); opacity:0; }
+  }
+  .cann-p { display:block; animation:cannSpin .5s linear infinite; }
+  @keyframes cannSpin { to{ transform:rotate(360deg); } }
 </style>
 </head>
 <body>
@@ -468,7 +521,7 @@
       <span class="set-label">Sound</span>
       <button class="switch" id="sw-sound" aria-label="Toggle sound"><span class="knob"></span></button>
     </div>
-    <div class="set-row">
+    <div class="set-row" id="row-vibe">
       <span class="set-label">Vibration</span>
       <button class="switch" id="sw-vibe" aria-label="Toggle vibration"><span class="knob"></span></button>
     </div>
@@ -479,7 +532,9 @@
 <div id="hint-bubble"></div>
 
 <div id="win">
+  <div class="sunburst" id="win-rays"></div>
   <div class="win-card">
+    <div class="win-mascot" id="win-mascot"></div>
     <div class="big" id="win-big"></div>
     <div class="msg" id="win-msg">Great job!</div>
     <div id="win-stars"></div>
@@ -1287,20 +1342,45 @@ function goMenu(){
 }
 
 const CONF_COLORS=['#ffd34d','#ff9d5c','#ff8fb2','#54c452','#4aa3ff','#a394ff','#7df5b9'];
+function confettiPiece(k){
+  const w=7+Math.random()*9, round=Math.random()<0.5;
+  const p=document.createElement('span');
+  p.style.width=w+'px';
+  p.style.height=(round?w:w*(0.4+Math.random()*0.55))+'px';
+  p.style.background=CONF_COLORS[k%CONF_COLORS.length];
+  p.style.borderRadius=round?'50%':'2px';
+  return p;
+}
+// gentle rain of confetti from the top
 function confettiBurst(){
-  for(let k=0;k<60;k++){
-    const s=document.createElement('span');
+  for(let k=0;k<70;k++){
+    const s=confettiPiece(k);
     s.className='confetti';
-    const w=6+Math.random()*9, round=Math.random()<0.5;
-    s.style.width=w+'px';
-    s.style.height=(round?w:w*(0.45+Math.random()*0.5))+'px';
-    s.style.background=CONF_COLORS[k%CONF_COLORS.length];
-    s.style.borderRadius=round?'50%':'2px';
     s.style.left=Math.random()*100+'vw';
     s.style.animationDuration=(2.2+Math.random()*2.5)+'s';
     s.style.animationDelay=(Math.random()*0.8)+'s';
     document.body.appendChild(s);
     setTimeout(()=>s.remove(),6000);
+  }
+}
+// party-popper burst arcing up from a bottom corner
+function confettiCannon(side){
+  const dir = side==='left' ? 1 : -1;
+  const originX = side==='left' ? '3vw' : '97vw';
+  for(let k=0;k<30;k++){
+    const outer=document.createElement('span');
+    outer.className='cann-x';
+    outer.style.left=originX;
+    outer.style.setProperty('--tx',(dir*(12+Math.random()*62))+'vw');
+    const inner=document.createElement('span');
+    inner.className='cann-y';
+    inner.style.setProperty('--rise', -(34+Math.random()*42)+'vh');
+    const p=confettiPiece(k);
+    p.className='cann-p';
+    p.style.animationDuration=(0.35+Math.random()*0.4)+'s';
+    inner.appendChild(p); outer.appendChild(inner);
+    document.body.appendChild(outer);
+    setTimeout(()=>outer.remove(),2600);
   }
 }
 
@@ -1310,7 +1390,10 @@ function onWin(){
   const earned=addStar();
   sfx('win'); buzz([80,60,80,60,160]);
   mascotReact('party');
+  $('win-mascot').innerHTML=mascotSvg('party');
   confettiBurst();
+  confettiCannon('left'); confettiCannon('right');
+  setTimeout(()=>{ if($('win').classList.contains('show')){ confettiCannon('left'); confettiCannon('right'); } }, 850);
   $('win-big').innerHTML=ICONS.trophy;
   $('win-msg').textContent=WIN_MSGS[Math.floor(Math.random()*WIN_MSGS.length)];
   const ws=$('win-stars');
@@ -1318,8 +1401,15 @@ function onWin(){
   for(let k=0;k<earned;k++){
     const s=document.createElement('span');
     s.innerHTML=ICONS.star;
-    s.style.animationDelay=(0.9+k*0.25)+'s';
+    const t=0.9+k*0.28;
+    s.style.animationDelay=t+'s';
     ws.appendChild(s);
+    // each star lands with its own sparkle + an ascending "ding"
+    setTimeout(()=>{
+      if(!$('win').classList.contains('show')) return;
+      if(soundOn){ try{ tone(784*Math.pow(1.122,k),0,.3,'triangle',.18); tone(1176*Math.pow(1.122,k),.04,.22,'triangle',.1); }catch(e){} }
+      sparkleBurst(s); buzz(20);
+    }, t*1000);
   }
   $('win-sub').textContent=earned>=5?'All 5 stars! You are a champion!':(L.name+' stars: '+earned+' of 5');
   // beating Champion reveals the hidden Legend level
@@ -1371,6 +1461,9 @@ $('sw-vibe').addEventListener('click',()=>{
   vibeOn=!vibeOn; localStorage.setItem('sudoku-vibe',vibeOn?'on':'off');
   renderSwitches(); if(vibeOn) buzz(20);
 });
+// The Vibration API doesn't exist on iOS Safari (iPhone/iPad) — hide the
+// toggle where it can't do anything rather than pretend it works.
+if(typeof navigator.vibrate!=='function') $('row-vibe').style.display='none';
 
 /* icon chrome (SVG, no raw emoji) */
 $('settings-btn').innerHTML=ICONS.gear;

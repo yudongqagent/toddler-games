@@ -23,12 +23,15 @@ A sudoku game for kids ages 3–6 (and up). Two styles:
   proof cells, and pulses the right tray symbol — the child makes the move
 - 🧽 eraser tool for taking back placed symbols (clues are protected); when
   active, the cells you can rub out light up pink
-- Always-visible ⚙️ settings (sound + vibration), a deep-linkable URL that
-  points at the exact level (e.g. `#classic-2`), and automatic save/resume —
-  close the tab mid-puzzle and reopen right where you left off
+- Always-visible ⚙️ settings (sound, plus vibration where the device
+  actually supports it — hidden on iOS, which has no Vibration API), a
+  deep-linkable URL that points at the exact level (e.g. `#classic-2`), and
+  automatic save/resume — close the tab mid-puzzle and reopen where you left off
 - Tap any filled cell to light up its twins; tray badges count how many
   of each symbol are still missing
-- Confetti + fanfare celebration, stars saved per level
+- Big celebration on a win: rotating sunburst rays, confetti rain plus
+  party-popper cannons, a bouncing mascot, a glowing trophy, and stars that
+  pop in one by one with an ascending chime. Stars saved per level
 - Professional SVG icon set and an expressive SVG mascot — emoji appear
   only as game pieces; marimba-style WebAudio sounds with a streak that
   climbs a semitone per correct answer
