@@ -156,11 +156,14 @@
   .cell.alt { background:#f4efff; }
   .cell.hole { background:#e9e3fa; box-shadow:inset 0 3px 7px rgba(96,70,200,.22); }
   .cell.alt.hole { background:#e0d8f7; }
-  /* priority chain: rc < match < flashm < sel < conflict < explain —
+  /* priority chain: rc < match < flashm < erasable < sel < conflict < explain —
      all !important so alt/hole variants can never mask a highlight */
   .cell.rc { background:#fff3c9 !important; }
   .cell.match { background:#d9f6bd !important; box-shadow:inset 0 0 0 2px #9ade6d; }
   .cell.flashm { background:#d9f6bd !important; box-shadow:inset 0 0 0 2px #9ade6d; }
+  /* eraser is active: pink-tinted, gently pulsing "you can rub me out" cells */
+  .cell.erasable { background:#ffe3f0 !important; animation:erasepulse 1.4s ease-in-out infinite; }
+  @keyframes erasepulse { 0%,100%{box-shadow:inset 0 0 0 2px #ff9ec4} 50%{box-shadow:inset 0 0 0 3px #ff5fa2} }
   .cell.sel { background:#ffe063 !important; box-shadow:inset 0 0 0 3px #ffc21d; animation:selpulse 1.2s ease-in-out infinite; z-index:2; }
   @keyframes selpulse { 0%,100%{box-shadow:inset 0 0 0 3px #ffc21d} 50%{box-shadow:inset 0 0 0 5px #ffae00} }
   .cell .sym { line-height:1; pointer-events:none; }
@@ -467,7 +470,7 @@ const ICONS={
   bulb:IC+'><path d="M12 2.5a6.5 6.5 0 0 0-4 11.6c.9.7 1.5 1.5 1.5 2.4h5c0-.9.6-1.7 1.5-2.4a6.5 6.5 0 0 0-4-11.6z" fill="#ffd34d" stroke="#e0a80f" stroke-width="1.6"/><path d="M9.8 19.5h4.4M10.6 22h2.8" stroke="#8a6d00" stroke-width="1.8" stroke-linecap="round"/></svg>',
   sound:IC+' fill="none" stroke="#7c5cff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h3.5L13 19V5L7.5 9.5H4z" fill="#7c5cff" stroke="none"/><path d="M16 9a4.5 4.5 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/></svg>',
   mute:IC+' fill="none" stroke="#7c5cff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h3.5L13 19V5L7.5 9.5H4z" fill="#7c5cff" stroke="none"/><path d="M16.5 9.5l5 5m0-5l-5 5"/></svg>',
-  eraser:IC+'><rect x="3" y="8" width="18" height="9" rx="4.5" fill="#ffb3d1" stroke="#e2679f" stroke-width="1.6"/><circle cx="8" cy="11.5" r="1.1" fill="#e2679f" opacity=".55"/><circle cx="13" cy="14" r="1" fill="#e2679f" opacity=".55"/><circle cx="16.5" cy="11" r=".9" fill="#e2679f" opacity=".55"/></svg>',
+  eraser:IC+'><g transform="rotate(-38 12 12)"><rect x="3.2" y="8.6" width="17.6" height="6.8" rx="2.4" fill="#ff9ec4" stroke="#c95689" stroke-width="1.5"/><path d="M9 8.6H5.6a2.4 2.4 0 0 0-2.4 2.4v2a2.4 2.4 0 0 0 2.4 2.4H9z" fill="#9bd0ff" stroke="#c95689" stroke-width="1.5" stroke-linejoin="round"/></g><circle cx="5.6" cy="20.3" r="1" fill="#ff9ec4"/><circle cx="8.9" cy="21.2" r=".8" fill="#9bd0ff"/></svg>',
   star:IC+'><path d="M12 2.6l2.8 5.8 6.4.9-4.6 4.4 1.1 6.3L12 17l-5.7 3 1.1-6.3L2.8 9.3l6.4-.9z" fill="#ffd34d" stroke="#e0a80f" stroke-width="1.4" stroke-linejoin="round"/></svg>',
   paw:IC+' fill="currentColor"><ellipse cx="12" cy="15.5" rx="4.6" ry="3.8"/><circle cx="6.6" cy="11.5" r="1.9"/><circle cx="10" cy="8.6" r="2"/><circle cx="14" cy="8.6" r="2"/><circle cx="17.4" cy="11.5" r="1.9"/></svg>',
   grid:IC+' fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M12 4v16M4 12h16"/></svg>',
@@ -767,8 +770,13 @@ function updateTray(){
   updateHighlights();
 }
 
-/* soft guidance: tint the selected cell's row/col/box, and glow cells
-   that already hold the selected symbol */
+/* Single source of truth for every persistent cell highlight — driven only
+   by state (selectedCell / selectedVal / eraserOn / board). Called after any
+   state change so highlights can never get out of sync:
+     sel      the chosen empty cell (slot-first mode)
+     rc       that cell's row / column / box (teaches the rule)
+     match    cells already holding the chosen tray symbol (stamp mode)
+     erasable player-placed cells the eraser can rub out (eraser mode) */
 function updateHighlights(){
   const n=L.n;
   const selR=selectedCell>=0?Math.floor(selectedCell/n):-1;
@@ -776,11 +784,14 @@ function updateHighlights(){
   const selB=selectedCell>=0?boxOf(selectedCell):-1;
   for(let i=0;i<n*n;i++){
     const el=boardEl.children[i];
-    if(!el) return;
+    if(!el) continue;
     const r=Math.floor(i/n), c=i%n;
-    el.classList.toggle('rc', selectedCell>=0 && i!==selectedCell &&
+    const isSel = i===selectedCell;
+    el.classList.toggle('sel', isSel);
+    el.classList.toggle('rc', !isSel && selectedCell>=0 &&
       (r===selR || c===selC || boxOf(i)===selB));
     el.classList.toggle('match', selectedVal>0 && board[i]===selectedVal);
+    el.classList.toggle('erasable', eraserOn && puzzle[i]===0 && board[i]!==0);
   }
 }
 
@@ -790,12 +801,8 @@ function updateProgress(){
   $('pfill').style.width=Math.round(100*filled/total)+'%';
 }
 
-function selectCell(i){
-  if(selectedCell>=0 && boardEl.children[selectedCell]) boardEl.children[selectedCell].classList.remove('sel');
-  selectedCell=i;
-  if(i>=0) boardEl.children[i].classList.add('sel');
-  updateHighlights();
-}
+// 'sel' is applied by updateHighlights, so this just moves the state + refreshes.
+function selectCell(i){ selectedCell=i; updateHighlights(); }
 
 /* ---------------- juicy feedback ---------------- */
 

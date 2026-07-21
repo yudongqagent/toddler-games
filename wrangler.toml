@@ -1,0 +1,6 @@
+name = "sudoku-fun"
+compatibility_date = "2024-09-23"
+pages_build_output_dir = "."
+
+# Single-file static game (index.html at repo root, no build step needed)
+# Deploy with: wrangler pages deploy .
