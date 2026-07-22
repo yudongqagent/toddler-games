@@ -317,6 +317,11 @@
     transform:translateX(-50%);
     border:10px solid transparent; border-top-color:#fff;
   }
+  /* when the card sits below the board, the tail points up instead */
+  #hint-bubble.below::after {
+    top:auto; bottom:100%;
+    border-top-color:transparent; border-bottom-color:#fff;
+  }
   #hint-x {
     position:absolute; top:-10px; right:-10px;
     width:34px; height:34px; border-radius:50%; border:none; cursor:pointer;
@@ -1762,6 +1767,14 @@ function applyStepVisuals(st){
   if(st.pulse!=null) pulseTrayBtn(st.pulse);
 }
 
+function collectStepCells(st){
+  const s=new Set([...(st.band||[]), ...(st.ev||[]), ...(st.wrongRing||[])]);
+  if(st.target!=null) s.add(st.target);
+  (st.cross||[]).forEach(m=>s.add(m.cell));
+  (st.focus||[]).forEach(m=>s.add(m.cell));
+  (st.arrows||[]).forEach(pr=>{ s.add(pr[0]); s.add(pr[1]); });
+  return [...s];
+}
 function renderHintStep(){
   const st=hintStory[hintStep];
   applyStepVisuals(st);
@@ -1772,8 +1785,23 @@ function renderHintStep(){
   $('hint-next').textContent = hintStep<total-1 ? 'Next ▸' : 'Got it! ✓';
   const b=$('hint-bubble');
   b.classList.add('show');
-  const bt=boardEl.getBoundingClientRect().top;
-  b.style.top=Math.max(8, bt-b.offsetHeight-14)+'px';
+  // Place the card where it hides nothing this step talks about: above the
+  // board normally, below the board when the action is in the top rows.
+  const br=boardEl.getBoundingClientRect();
+  const h=b.offsetHeight;
+  const aboveTop=Math.max(8, br.top-h-14);
+  const covers=collectStepCells(st).some(c=>{
+    const el=boardEl.children[c];
+    return el && el.getBoundingClientRect().top < aboveTop+h+12;
+  });
+  const belowTop=br.bottom+14;
+  if(covers && belowTop+h <= window.innerHeight-8){
+    b.style.top=belowTop+'px';
+    b.classList.add('below');
+  } else {
+    b.style.top=aboveTop+'px';
+    b.classList.remove('below');
+  }
 }
 function showStory(steps){
   hintStory=steps.filter(Boolean);
@@ -1797,37 +1825,33 @@ function pulseTrayBtn(v){
 
 /* ---------------- story builders ---------------- */
 
-// hidden single found on the live board: 2 steps
-function storyHidden(fs){
-  const v=fs.value, un=uname(fs.unitKind);
-  const empties=fs.unitCells.filter(p=>board[p]===0 && p!==fs.cell);
-  return [
-    { text:'This '+un+' still needs '+aSym(v)+' — but not in the crossed squares! '+
-           cap(aSym(v))+' already sees each one (follow the arrows).',
+// One step for a single found on grid gd. opts: {spot, ending, ring}
+// ring=true is the "a wrong number sits on this square" flavour: orange ring,
+// no gold target, ending tells the player to swap it.
+function singleStepFor(fs, gd, opts){
+  opts=opts||{};
+  const v=fs.value;
+  const spot=opts.spot||'the golden square';
+  const ending=opts.ending!==undefined?opts.ending:' Tap '+symTag(v)+'! ✨';
+  let st;
+  if(fs.tech==='hidden'){
+    const un=uname(fs.unitKind);
+    const empties=fs.unitCells.filter(p=>gd[p]===0 && p!==fs.cell);
+    st={ text:'Only '+spot+' can take '+aSym(v)+' in this '+un+' — the crossed squares already see one (follow the arrows).'+ending,
       band:fs.unitCells,
       cross:empties.map(p=>({cell:p, values:[v]})),
       ev:fs.blocks.map(b=>b.byCell),
-      arrows:fs.blocks.map(b=>[b.byCell, b.cell]) },
-    { text:'So '+symTag(v)+' has just one home here — the golden square. Tap '+symTag(v)+'! ✨',
-      band:fs.unitCells, target:fs.cell, pulse:v,
-      focus:[{cell:fs.cell, values:[v]}] },
-  ];
-}
-// naked single found on the live board: 2 steps
-function storyNaked(fs){
-  const v=fs.value;
-  return [
-    { text:'Look at the golden square — almost every '+PIECE()+' around it is taken: '+
-           takenAround(fs.blockers)+'!',
+      arrows:fs.blocks.map(b=>[b.byCell, b.cell]) };
+  } else {
+    st={ text:'Only '+symTag(v)+' fits '+spot+' — everything else is already around it: '+takenAround(fs.blockers)+'.'+ending,
       ev:fs.blockers.map(b=>b.cell),
-      arrows:fs.blockers.map(b=>[b.cell, fs.cell]),
-      target:fs.cell },
-    { text:'Only '+symTag(v)+' is left for this square. Tap '+symTag(v)+'! ✨',
-      target:fs.cell, pulse:v,
-      focus:[{cell:fs.cell, values:[v]}] },
-  ];
+      arrows:fs.blockers.map(b=>[b.cell, fs.cell]) };
+  }
+  if(opts.ring) st.wrongRing=[fs.cell];
+  else { st.target=fs.cell; st.pulse=v; st.focus=[{cell:fs.cell, values:[v]}]; }
+  return st;
 }
-function storySimple(fs){ return fs.tech==='naked' ? storyNaked(fs) : storyHidden(fs); }
+function storySimple(fs){ return [singleStepFor(fs, board)]; }
 
 // one story step for an advanced elimination from the solver trace
 function elimStep(d){
@@ -1881,37 +1905,48 @@ function elimStep(d){
   return st;
 }
 
-// final placement step of a chain: physical blockers become evidence+arrows,
-// chain-eliminated cells keep their crossed digit from earlier steps
-function chainFinalStep(chain){
+// Final placement step of a chain. Accounts for EVERY excluded value so the
+// conclusion connects to the steps before it: values the chain crossed out
+// are named and shown crossed in place; the rest get evidence arrows.
+function chainFinalStep(chain, gd, opts){
+  gd=gd||board; opts=opts||{};
   const p=chain.place, v=p.value;
+  const spot=opts.spot||'the golden square';
+  const ending=opts.ending!==undefined?opts.ending:' Tap '+symTag(v)+'! ✨';
+  let st;
   if(p.tech==='hidden single'){
     const un=uname(p.unitKind);
-    const empties=p.unitCells.filter(q=>board[q]===0 && q!==p.cell);
-    const ev=[], arrows=[], cross=[];
+    const empties=p.unitCells.filter(q=>gd[q]===0 && q!==p.cell);
+    const ev=[], arrows=[], cross=[]; let phys=0, chained=0;
     for(const q of empties){
-      const b=blockerFor(board,q,v);
-      if(b){ ev.push(b.cell); arrows.push([b.cell,q]); }
+      const b=blockerFor(gd,q,v);
+      if(b){ ev.push(b.cell); arrows.push([b.cell,q]); phys++; }
+      else chained++;
       cross.push({cell:q, values:[v]});
     }
-    return { text:'Now this '+un+' has just ONE home left for '+symTag(v)+' — the golden square. Tap '+symTag(v)+'! ✨',
-      band:p.unitCells, ev, arrows, cross, target:p.cell, pulse:v,
-      focus:[{cell:p.cell, values:[v]}] };
+    const clause = chained&&phys ? 'we just crossed it out of some spots, and the rest already see '+aSym(v)+' (arrows)'
+      : chained ? 'we just crossed it out of every other spot'
+      : 'every other spot already sees '+aSym(v)+' (arrows)';
+    st={ text:'So now only '+spot+' can take '+symTag(v)+' in this '+un+' — '+clause+'.'+ending,
+      band:p.unitCells, ev, arrows, cross };
+  } else {
+    const elimVals=[...new Set(chain.enablers.flatMap(d=>d.elims.filter(e=>e.cell===p.cell).map(e=>e.value)))];
+    const blockers=[];
+    for(let u=1;u<=L.n;u++){ if(u===v||elimVals.includes(u)) continue; const b=blockerFor(gd,p.cell,u); if(b) blockers.push({value:u, cell:b.cell, kind:b.kind}); }
+    const parts=[];
+    if(elimVals.length) parts.push('we just crossed out '+joinAnd(elimVals.map(symTag)));
+    if(blockers.length) parts.push(takenAround(blockers));
+    st={ text:'Look at '+spot+' now: '+joinAnd(parts)+' — only '+symTag(v)+' is left!'+ending,
+      ev:blockers.map(b=>b.cell), arrows:blockers.map(b=>[b.cell,p.cell]) };
+    if(!opts.ring && elimVals.length) st.cross=[{cell:p.cell, values:elimVals}];
   }
-  const blockers=[];
-  for(let u=1;u<=L.n;u++){ if(u===v) continue; const b=blockerFor(board,p.cell,u); if(b) blockers.push({value:u, cell:b.cell, kind:b.kind}); }
-  return { text:'After that, only '+symTag(v)+' can fit in the golden square. Tap '+symTag(v)+'! ✨',
-    ev:blockers.map(b=>b.cell), arrows:blockers.map(b=>[b.cell,p.cell]),
-    target:p.cell, pulse:v, focus:[{cell:p.cell, values:[v]}] };
+  if(opts.ring) st.wrongRing=[p.cell];
+  else { st.target=p.cell; st.pulse=v; st.focus=[{cell:p.cell, values:[v]}]; }
+  return st;
 }
 
-function storyChain(chain){
-  const steps=[];
-  if(chain.enablers.length)
-    steps.push({ text:'No easy square right now… time for a detective trick! 🕵️', dim:false });
-  for(const d of chain.enablers) steps.push(elimStep(d));
-  steps.push(chainFinalStep(chain));
-  return steps;
+function storyChain(chain, gd, finalOpts){
+  return [...chain.enablers.map(elimStep), chainFinalStep(chain, gd, finalOpts)];
 }
 
 // why a placed number is wrong
@@ -1920,34 +1955,20 @@ function storyWrong(i){
   const partner=conflictPartner(i,v);
   if(partner){
     const un=uname(partner.kind);
-    return [
-      { text:'Uh oh — this '+un+' already has '+aSym(v)+' (the green one)!',
-        band:partner.cells, ev:[partner.j], wrongRing:[i], arrows:[[partner.j,i]] },
-      { text:'Two '+sym+'s can\'t share a '+un+'. Tap the wiggly '+sym+' to pop it out!',
-        band:partner.cells, ev:[partner.j], wrongRing:[i] },
-    ];
+    return [{ text:'This '+un+' already has '+aSym(v)+' (green) — two '+sym+'s can\'t share a '+un+'! Tap the wiggly '+sym+' to pop it out.',
+      band:partner.cells, ev:[partner.j], wrongRing:[i], arrows:[[partner.j,i]] }];
   }
-  // clean all wrong guesses, then try to prove the square's true value
+  // clean all wrong guesses, then prove the square's true value
   const g=board.slice();
   for(let k=0;k<g.length;k++) if(puzzle[k]===0 && g[k]!==0 && g[k]!==solution[k]) g[k]=0;
+  const wrongOpts=real=>({ ring:true, spot:'this square',
+    ending:' So the '+sym+' can\'t stay — tap it to take it out, then place '+symTag(real)+'.' });
   const simple=findStep(g,i);
-  if(simple){
-    const steps=storySimple(simple);
-    const real=simple.value;
-    steps.unshift({ text:'Hmm, is '+sym+' right here? Let\'s play detective! 🕵️', wrongRing:[i], dim:false });
-    steps[steps.length-1]={ ...steps[steps.length-1], target:null,
-      text:'So this square is really '+symTag(real)+' — the '+sym+' can\'t stay! Tap the '+sym+' to take it out, then place '+symTag(real)+'.',
-      wrongRing:[i] };
-    return steps;
-  }
+  if(simple) return [ singleStepFor(simple, g, wrongOpts(simple.value)) ];
   const chain=chainAt(g,i);
   if(chain){
-    const steps=storyChain(chain);
-    const real=chain.place.value;
-    steps.unshift({ text:'Hmm, is '+sym+' right here? Let\'s play detective! 🕵️', wrongRing:[i], dim:false });
-    steps[steps.length-1]={ ...steps[steps.length-1], target:null,
-      text:'So this square is really '+symTag(real)+' — the '+sym+' can\'t stay! Tap the '+sym+' to take it out, then place '+symTag(real)+'.',
-      wrongRing:[i] };
+    const steps=storyChain(chain, g, wrongOpts(chain.place.value));
+    steps.forEach(st=>{ if(!(st.wrongRing||[]).includes(i)) st.wrongRing=[...(st.wrongRing||[]), i]; });
     return steps;
   }
   return [{ text:'This '+sym+' doesn\'t belong here. Rub it out with the eraser, then ask me again! 🧽',
@@ -1955,19 +1976,16 @@ function storyWrong(i){
 }
 
 // last-resort explanation for a square that even the engine can't force
-// (legacy saves): honest choices + the answer
+// (legacy saves): honest choices + the answer, in one step
 function storyChoices(g,i){
   const cands=candList(g,i), W=solution[i];
   const blockers=[];
   for(let u=1;u<=L.n;u++){ if(cands.includes(u)) continue; const b=blockerFor(g,i,u); if(b) blockers.push({value:u, cell:b.cell, kind:b.kind}); }
   const reason=takenAround(blockers);
-  return [
-    { text:'This one is a real puzzler! The golden square can be '+joinOr(cands.map(symTag))+
-        (reason?' — '+reason:'')+'.',
-      ev:blockers.map(b=>b.cell), arrows:blockers.map(b=>[b.cell,i]), target:i },
-    { text:'I\'ll let you in on the secret: here it\'s '+symTag(W)+'. Tap '+symTag(W)+'! ✨',
-      target:i, pulse:W, focus:[{cell:i, values:[W]}] },
-  ];
+  return [{ text:'A real puzzler! This square can be '+joinOr(cands.map(symTag))+
+      (reason?' — '+reason:'')+'. Secret: here it\'s '+symTag(W)+'. Tap '+symTag(W)+'! ✨',
+    ev:blockers.map(b=>b.cell), arrows:blockers.map(b=>[b.cell,i]),
+    target:i, pulse:W, focus:[{cell:i, values:[W]}] }];
 }
 function storyChoicesNarrowest(g){
   let best=-1, bestLen=99;
@@ -1992,10 +2010,12 @@ function onHint(){
     if(s){ showStory(storySimple(s)); return; }
     const chain=chainAt(board,i);
     if(chain){ showStory(storyChain(chain)); return; }
+    // not provable there — steer to a square we CAN crack, without a filler step
+    const pre='That square isn\'t certain yet — here\'s one we can crack! 🔍 ';
     const any=findStep(board);
-    if(any){ showStory([{text:'That square isn\'t certain yet — let\'s do an easier one first! 🔍', dim:false}, ...storySimple(any)]); return; }
+    if(any){ const steps=storySimple(any); steps[0]={...steps[0], text:pre+steps[0].text}; showStory(steps); return; }
     const chain2=chainAt(board,null);
-    if(chain2){ showStory([{text:'That square isn\'t certain yet — let\'s crack an easier one! 🔍', dim:false}, ...storyChain(chain2)]); return; }
+    if(chain2){ const steps=storyChain(chain2); steps[0]={...steps[0], text:pre+steps[0].text}; showStory(steps); return; }
     showStory(storyChoices(board,i)); return;
   }
   // 3) an obvious single anywhere?
