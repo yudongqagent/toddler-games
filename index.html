@@ -1326,6 +1326,11 @@ function joinAnd(parts){
   if(parts.length<=1) return parts[0]||'';
   return parts.slice(0,-1).join(', ')+' and '+parts[parts.length-1];
 }
+function joinOr(parts){
+  parts=parts.filter(Boolean);
+  if(parts.length<=1) return parts[0]||'';
+  return parts.slice(0,-1).join(', ')+' or '+parts[parts.length-1];
+}
 function cap(s){ return s ? s.charAt(0).toUpperCase()+s.slice(1) : s; }
 // "its row already has 1, 4; its column has 2; its box has 3, 5"
 function reasonNaked(step){
@@ -1391,6 +1396,34 @@ function explainWrong(i){
   if(other) hintTimers.push(setTimeout(()=>presentStep(other),1800));
 }
 
+// Always-sensible explanation for a single cell, even when it isn't fully
+// forced yet (e.g. a puzzle from an old save that needs advanced logic): show
+// the real eliminations that narrow it, then reveal the answer. Never a
+// reasonless "try this square".
+function explainCell(g,i){
+  const cands=candList(g,i), W=solution[i];
+  const blockers=[];
+  for(let u=1;u<=L.n;u++){ if(cands.includes(u)) continue; const b=blockerFor(g,i,u); if(b) blockers.push({value:u, cell:b.cell, kind:b.kind}); }
+  const reason=reasonNaked({blockers});
+  let msg;
+  if(cands.filter(v=>v!==W).length===0){
+    msg='The glowing square can only be '+symTag(W)+(reason?' — '+reason+', so no other '+PIECE()+' fits':'')+'! ✨';
+  } else {
+    msg='The glowing square must be '+joinOr(cands.map(symTag))+(reason?' ('+reason+')':'')+
+        ' — and here it\'s '+symTag(W)+'. Give it a try! ✨';
+  }
+  showBubble(msg,9000);
+  highlightCells(blockers.map(b=>b.cell),8000);
+  selectCell(i);
+  pulseTrayBtn(W);
+}
+// Pick the most-constrained empty square and explain it — the last-resort hint.
+function explainNarrowest(g){
+  let best=-1, bestLen=99;
+  for(let i=0;i<g.length;i++){ if(g[i]!==0) continue; const l=candList(g,i).length; if(l<bestLen){ best=i; bestLen=l; if(l<=1) break; } }
+  if(best>=0) explainCell(g,best);
+}
+
 function pulseTrayBtn(v){
   const b=trayEl.querySelector('.tray-btn[data-val="'+v+'"]');
   if(!b) return;
@@ -1408,21 +1441,26 @@ function onHint(){
   // 1) a wrong number on the board? explain why it can't be there.
   const wrong = board.findIndex((v,i)=> puzzle[i]===0 && v!==0 && v!==solution[i]);
   if(wrong>=0){ explainWrong(wrong); return; }
-  // 2) a specific empty cell is selected? explain THAT one when logic can.
+  // 2) a specific empty cell is selected? explain THAT one.
   if(selectedCell>=0 && board[selectedCell]===0){
     const s=findStep(board, selectedCell);
     if(s){ presentStep(s); return; }
-    showBubble('This square isn\'t certain yet — even careful thinking can\'t fill it first. Let\'s find an easier one! 🔍',6000);
+    // not forced here — if an easier forced square exists, steer there first;
+    // otherwise explain this very square with its real eliminations.
     const other=findStep(board);
-    if(other) hintTimers.push(setTimeout(()=>presentStep(other),1600));
+    if(other){
+      showBubble('This square isn\'t certain yet — let\'s do an easier one first! 🔍',6000);
+      hintTimers.push(setTimeout(()=>presentStep(other),1600));
+    } else {
+      explainCell(board, selectedCell);
+    }
     return;
   }
   // 3) the next forced step anywhere on the board.
   const step=findStep(board);
   if(step){ presentStep(step); return; }
-  // safety net (should not happen for logic-solvable puzzles)
-  const empties=board.map((v,i)=>v===0?i:-1).filter(i=>i>=0);
-  if(empties.length){ selectCell(empties[0]); showBubble('Try the glowing square! ✨',5000); }
+  // 4) no forced step (e.g. an old save needing advanced logic): still explain.
+  explainNarrowest(board);
 }
 
 /* ---------------- save / resume ---------------- */
