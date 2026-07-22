@@ -690,21 +690,55 @@ function fillGrid(grid,L){
   return false;
 }
 
-function countSolutions(grid,L,limit){
-  const [p,cands]=bestCell(grid,L);
-  if(p===-1) return 1;
-  if(cands.length===0) return 0;
-  let count=0;
-  for(const v of cands){
-    grid[p]=v;
-    count+=countSolutions(grid,L,limit-count);
-    grid[p]=0;
-    if(count>=limit) break;
+// Returns { puzzle, solution } — puzzle has 0 for blanks, unique solution guaranteed.
+// candidates for cell i on grid g under level L
+function candsAt(g,i,L){
+  const n=L.n, r=Math.floor(i/n), c=i%n, out=[];
+  for(let v=1;v<=n;v++) if(placeOk(g,r,c,v,L)) out.push(v);
+  return out;
+}
+// every row / column / box as a list of cell indices, for level L
+function unitsForL(L){
+  const n=L.n, u=[];
+  for(let r=0;r<n;r++) u.push([...Array(n).keys()].map(c=>r*n+c));
+  for(let c=0;c<n;c++) u.push([...Array(n).keys()].map(r=>r*n+c));
+  for(let br=0;br<n;br+=L.boxH) for(let bc=0;bc<n;bc+=L.boxW){
+    const cells=[]; for(let r=br;r<br+L.boxH;r++) for(let c=bc;c<bc+L.boxW;c++) cells.push(r*n+c);
+    u.push(cells);
   }
-  return count;
+  return u;
+}
+// Can this puzzle be finished using ONLY naked singles (a cell with one option)
+// and hidden singles (a value with one home in a unit)? i.e. never a guess.
+// This is exactly the reasoning the hint engine explains, so guaranteeing it
+// here means every hint can always walk a real logic chain.
+function logicSolvable(grid,L){
+  const n=L.n, g=grid.slice(), units=unitsForL(L);
+  let changed=true;
+  while(changed){
+    changed=false;
+    for(let i=0;i<n*n;i++){
+      if(g[i]!==0) continue;
+      const cand=candsAt(g,i,L);
+      if(cand.length===0) return false;              // contradiction
+      if(cand.length===1){ g[i]=cand[0]; changed=true; }
+    }
+    if(changed) continue;
+    for(const cells of units){
+      for(let v=1;v<=n && !changed;v++){
+        if(cells.some(p=>g[p]===v)) continue;
+        let spot=-1, cnt=0;
+        for(const p of cells) if(g[p]===0 && placeOk(g,Math.floor(p/n),p%n,v,L)){ spot=p; if(++cnt>1) break; }
+        if(cnt===1){ g[spot]=v; changed=true; }
+      }
+      if(changed) break;
+    }
+  }
+  return g.every(x=>x!==0);
 }
 
-// Returns { puzzle, solution } — puzzle has 0 for blanks, unique solution guaranteed.
+// Build a puzzle that is solvable by pure logic (no guessing). Removing cells
+// only while it stays logicSolvable also guarantees a unique solution.
 function makePuzzle(L){
   const n=L.n;
   const solution=new Array(n*n).fill(0);
@@ -715,7 +749,7 @@ function makePuzzle(L){
     if(removed>=L.blanks) break;
     const saved=puzzle[idx];
     puzzle[idx]=0;
-    if(countSolutions(puzzle.slice(),L,2)===1) removed++;
+    if(logicSolvable(puzzle,L)) removed++;
     else puzzle[idx]=saved;
   }
   return { puzzle, solution };
@@ -1208,10 +1242,17 @@ function highlightWrong(cells,ms){
   },ms||2600));
 }
 
-function candsOf(i){
+// candidates for cell i on an arbitrary grid g (the hint engine works on copies)
+function candList(g,i){
   const n=L.n, r=Math.floor(i/n), c=i%n, out=[];
-  for(let v=1;v<=n;v++) if(placeOk(board,r,c,v,L)) out.push(v);
+  for(let v=1;v<=n;v++) if(placeOk(g,r,c,v,L)) out.push(v);
   return out;
+}
+// a filled peer of i (row/col/box) holding value u — the reason u is blocked at i
+function blockerFor(g,i,u){
+  for(const [kind,cells] of unitsOf(i))
+    for(const p of cells) if(p!==i && g[p]===u) return {cell:p, kind};
+  return null;
 }
 
 // the three units cell i belongs to, as [kindName, cells[]]
@@ -1232,44 +1273,122 @@ function conflictPartner(i,v){
   return null;
 }
 
-// Where the mis-placed symbol v actually belongs: the empty cell in a unit it
-// shares with i whose solution is v. Lets the hint say "it goes HERE, not there".
-function fixHome(i,v){
-  for(const [kind,cells] of unitsOf(i))
-    for(const p of cells) if(p!==i && solution[p]===v && board[p]===0) return {home:p, kind};
+/* ---- deductive hint engine: naked & hidden singles with a reason chain ----
+   Every puzzle is generated to be solvable by exactly these two techniques
+   (see logicSolvable), so a forced next step always exists until it is done. */
+
+// naked single: a cell whose only remaining candidate is a single value
+function findNaked(g, only){
+  const list = only!=null ? [only] : [...Array(g.length).keys()];
+  for(const i of list){
+    if(g[i]!==0) continue;
+    const cand=candList(g,i);
+    if(cand.length===1){
+      const W=cand[0], blockers=[];
+      for(let u=1;u<=L.n;u++){ if(u===W) continue; const b=blockerFor(g,i,u); if(b) blockers.push({value:u, cell:b.cell, kind:b.kind}); }
+      return {tech:'naked', cell:i, value:W, blockers};
+    }
+  }
   return null;
 }
 
-const KIND_NAMES={ row:'row', column:'column', box:'little square' };
-
-// Pick the most teachable next step: fix a misplaced symbol first, then
-// "last one in a unit", then "only symbol that fits", then "only spot for
-// this symbol", falling back to plain magic.
-function findHint(){
-  for(let i=0;i<board.length;i++)
-    if(puzzle[i]===0 && board[i]!==0 && board[i]!==solution[i])
-      return {type:'fix', i};
-  const empties=board.map((v,i)=>v===0?i:-1).filter(i=>i>=0);
-  if(!empties.length) return null;
-  if(selectedCell>=0 && board[selectedCell]===0){
-    const i=selectedCell;
-    return candsOf(i).length===1 ? {type:'single', i} : {type:'magic', i};
-  }
+// hidden single: a value with exactly one possible home inside some unit
+function findHidden(g, only){
   for(const u of unitList()){
-    const em=u.cells.filter(p=>board[p]===0);
-    if(em.length===1) return {type:'last', i:em[0], kind:u.kind, cells:u.cells};
-  }
-  for(const i of empties)
-    if(candsOf(i).length===1) return {type:'single', i};
-  for(const u of unitList()){
-    const have=new Set(u.cells.map(p=>board[p]).filter(v=>v));
-    for(let v=1;v<=L.n;v++){
-      if(have.has(v)) continue;
-      const spots=u.cells.filter(p=>board[p]===0 && placeOk(board,Math.floor(p/L.n),p%L.n,v,L));
-      if(spots.length===1) return {type:'only', i:spots[0], kind:u.kind, cells:u.cells};
+    for(let W=1;W<=L.n;W++){
+      if(u.cells.some(p=>g[p]===W)) continue;
+      const spots=u.cells.filter(p=>g[p]===0 && placeOk(g,Math.floor(p/L.n),p%L.n,W,L));
+      if(spots.length!==1) continue;
+      const i=spots[0];
+      if(only!=null && i!==only) continue;
+      const blocks=[];
+      for(const p of u.cells){ if(p===i||g[p]!==0) continue; const b=blockerFor(g,p,W); if(b) blocks.push({cell:p, byCell:b.cell, kind:b.kind}); }
+      return {tech:'hidden', cell:i, value:W, unitKind:u.kind, unitCells:u.cells, blocks};
     }
   }
-  return {type:'magic', i:empties[Math.floor(Math.random()*empties.length)]};
+  return null;
+}
+
+// the simplest forced step (fewest cells to point at); `only` restricts to one target
+function findStep(g, only){
+  const nk=findNaked(g, only), hd=findHidden(g, only);
+  if(nk && hd) return (nk.blockers.length <= hd.blocks.length) ? nk : hd;
+  return nk || hd;
+}
+
+/* ---- turning a step into a kid-friendly explanation ---- */
+function PIECE(){ return isClassic?'number':'friend'; }
+// article + symbol so digits read naturally ("an 8", "a 3")
+function aSym(v){ return (isClassic && v===8 ? 'an ' : 'a ')+symTag(v); }
+function listSyms(vals){ return vals.map(symTag).join(', '); }
+function joinAnd(parts){
+  parts=parts.filter(Boolean);
+  if(parts.length<=1) return parts[0]||'';
+  return parts.slice(0,-1).join(', ')+' and '+parts[parts.length-1];
+}
+function cap(s){ return s ? s.charAt(0).toUpperCase()+s.slice(1) : s; }
+// "its row already has 1, 4; its column has 2; its box has 3, 5"
+function reasonNaked(step){
+  const by={row:[], column:[], 'little square':[]};
+  step.blockers.forEach(b=> by[b.kind].push(b.value));
+  const parts=[];
+  if(by.row.length) parts.push('its row already has '+listSyms(by.row));
+  if(by.column.length) parts.push('its column has '+listSyms(by.column));
+  if(by['little square'].length) parts.push('its box has '+listSyms(by['little square']));
+  return joinAnd(parts);
+}
+function reasonHidden(step){
+  return 'every other empty spot in this '+step.unitKind+' already has '+aSym(step.value)+' close by';
+}
+
+// Show a forced step: explain the chain, glow the proof, select the spot, pulse the value.
+function presentStep(step){
+  let msg, proof;
+  if(step.tech==='naked'){
+    msg='The glowing square can only be '+symTag(step.value)+' — '+reasonNaked(step)+
+        ', so no other '+PIECE()+' fits! ✨';
+    proof=step.blockers.map(b=>b.cell);
+  } else {
+    msg=cap(aSym(step.value))+' can only go in the glowing square — '+reasonHidden(step)+'! ✨';
+    proof=step.blocks.map(b=>b.byCell);
+  }
+  showBubble(msg,9000);
+  highlightCells(proof,8000);
+  selectCell(step.cell);
+  pulseTrayBtn(step.value);
+}
+
+// Explain why a placed number is wrong, walking the real logic.
+function explainWrong(i){
+  const v=board[i], sym=symTag(v);
+  const partner=conflictPartner(i,v);
+  if(partner){
+    showBubble('There\'s already '+aSym(v)+' in this '+partner.kind+' (the glowing one) — a '+
+      partner.kind+' can\'t have two '+sym+'s, so this '+sym+' has to go. Tap it to take it out!',9000);
+    highlightCells([partner.j],9000);
+    highlightWrong([i],9000);
+    return;
+  }
+  // clear away every wrong guess, then prove what this square must really be
+  const g=board.slice();
+  for(let k=0;k<g.length;k++) if(puzzle[k]===0 && g[k]!==0 && g[k]!==solution[k]) g[k]=0;
+  const step=findStep(g, i);
+  if(step){
+    const reason = step.tech==='naked'
+      ? reasonNaked(step)+', so no other '+PIECE()+' fits'
+      : reasonHidden(step);
+    showBubble('Take the '+sym+' out — this square is really '+symTag(step.value)+'! '+cap(reason)+'.',9000);
+    highlightWrong([i],9000);
+    highlightCells(step.tech==='naked'?step.blockers.map(b=>b.cell):step.blocks.map(b=>b.byCell),8000);
+    pulseTrayBtn(step.value);
+    return;
+  }
+  // not certain yet even after cleaning — don't guess; steer to a solvable spot
+  showBubble('This '+sym+' doesn\'t belong here, and this square isn\'t certain yet. Take it out with the '+
+    ICONS.eraser+' and let\'s do an easier square first! 🔍',9000);
+  highlightWrong([i],9000);
+  const other=findStep(g);
+  if(other) hintTimers.push(setTimeout(()=>presentStep(other),1800));
 }
 
 function pulseTrayBtn(v){
@@ -1279,62 +1398,31 @@ function pulseTrayBtn(v){
   hintTimers.push(setTimeout(()=>b.classList.remove('hintpulse'),3300));
 }
 
-// Hints teach instead of solving: point at the reasoning, select the spot,
-// pulse the right tray symbol — the player makes the move themselves.
+// Hints teach instead of solving: walk the logic, glow the proof, select the
+// spot, pulse the right symbol — the player still makes the move.
 function onHint(){
   if(solvedFlag) return;
   clearHintFx();
-  const h=findHint();
-  if(!h) return;
   sfx('hint');
   mascotReact('think',1600);
-  if(h.type==='fix'){
-    const v=board[h.i], sym=symTag(v);
-    const partner=conflictPartner(h.i,v);
-    if(partner){
-      // the child can SEE the clash: two identical symbols share a line/box
-      showBubble('Look — there are two '+sym+'s in the same '+partner.kind+'! Each '+
-        partner.kind+' can hold just one '+sym+', so one must move. Tap a red '+sym+
-        ' to pop it out.',9000);
-      highlightWrong([h.i,partner.j],9000);
-    } else {
-      // legal-looking but not the answer: show where this symbol truly belongs
-      const fh=fixHome(h.i,v);
-      if(fh){
-        showBubble('This '+sym+' is in the wrong place — every '+fh.kind+' has just one '+
-          sym+', and its real home is the glowing spot. Lift this '+sym+' out with the '+
-          ICONS.eraser+' and pop it there!',9000);
-        highlightWrong([h.i],9000);
-        highlightCells([fh.home],9000);   // yellow target it belongs in
-      } else {
-        showBubble('This square needs a different '+(isClassic?'number':'friend')+' — the '+
-          sym+' can\'t stay here. Lift it out with the '+ICONS.eraser+' and look again!',9000);
-        highlightWrong([h.i],9000);
-      }
-    }
+  // 1) a wrong number on the board? explain why it can't be there.
+  const wrong = board.findIndex((v,i)=> puzzle[i]===0 && v!==0 && v!==solution[i]);
+  if(wrong>=0){ explainWrong(wrong); return; }
+  // 2) a specific empty cell is selected? explain THAT one when logic can.
+  if(selectedCell>=0 && board[selectedCell]===0){
+    const s=findStep(board, selectedCell);
+    if(s){ presentStep(s); return; }
+    showBubble('This square isn\'t certain yet — even careful thinking can\'t fill it first. Let\'s find an easier one! 🔍',6000);
+    const other=findStep(board);
+    if(other) hintTimers.push(setTimeout(()=>presentStep(other),1600));
     return;
   }
-  const v=solution[h.i], sym=symTag(v);
-  const kind=KIND_NAMES[h.kind]||'';
-  if(h.type==='single'){
-    // show the filled row/column/box friends that leave only one choice
-    const n=L.n, r=Math.floor(h.i/n), c=h.i%n;
-    const peers=new Set();
-    for(let k=0;k<n;k++){ peers.add(r*n+k); peers.add(k*n+c); }
-    const br=Math.floor(r/L.boxH)*L.boxH, bc=Math.floor(c/L.boxW)*L.boxW;
-    for(let rr=br;rr<br+L.boxH;rr++) for(let cc=bc;cc<bc+L.boxW;cc++) peers.add(rr*n+cc);
-    h.cells=[...peers].filter(p=>p!==h.i && board[p]>0);
-  }
-  const MSGS={
-    last:  'Look — this '+kind+' needs just one more: '+sym+'! Tap '+sym+', then the sparkly spot!',
-    single:'All the neighbors are taken, so only '+sym+' fits here. Your turn!',
-    only:  sym+' has only one home left in this '+kind+'. Can you put it there?',
-    magic: 'Try this spot! Which '+(isClassic?'number':'friend')+' is missing?',
-  };
-  showBubble(MSGS[h.type],9000);
-  if(h.cells) highlightCells(h.cells.filter(p=>p!==h.i),6000);
-  selectCell(h.i);                 // sparkly target — next tray tap fills it
-  if(h.type!=='magic') pulseTrayBtn(v);
+  // 3) the next forced step anywhere on the board.
+  const step=findStep(board);
+  if(step){ presentStep(step); return; }
+  // safety net (should not happen for logic-solvable puzzles)
+  const empties=board.map((v,i)=>v===0?i:-1).filter(i=>i>=0);
+  if(empties.length){ selectCell(empties[0]); showBubble('Try the glowing square! ✨',5000); }
 }
 
 /* ---------------- save / resume ---------------- */
