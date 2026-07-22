@@ -12,9 +12,10 @@ A sudoku game for kids ages 3–6 (and up). Two styles:
 ## Features
 
 - Every puzzle is randomly generated and guaranteed solvable by pure logic —
-  no guessing. Cells are removed only while the grid stays solvable with naked
-  singles (a cell with one option) and hidden singles (a value with one home in
-  a row/column/box), which also guarantees a unique solution
+  no guessing. Most levels stay singles-only (naked/hidden singles) for young
+  kids. The secret **Legend** level generates genuinely hard 9×9s (≈95% need
+  advanced techniques) accepted only if the deductive engine can crack them, so
+  a full explanation always exists
 - Two ways to play, both supported: pick a symbol then stamp cells, or
   pick an empty cell then choose its symbol
 - Bold grid lines between boxes make the box rule visible at every size
@@ -32,6 +33,13 @@ A sudoku game for kids ages 3–6 (and up). Two styles:
   the square must really be ("take the 3 out — this square is really 8!"). If a
   square genuinely isn't forced yet, it says so honestly and points to one that
   is, teaching "don't guess — do the certain squares first"
+- On hard boards where there's no obvious move, the hint **walks the whole
+  derivation chain** step by step with spotlight pencil-marks: it shows each
+  advanced elimination (pointing/claiming, naked & hidden pairs/triples,
+  X-Wing, XY-Wing) — focusing the involved digit and crossing out where it's
+  ruled out — until the move is forced. The engine is verified sound (never
+  eliminates a true value) and complete (always finishes) across the puzzles it
+  accepts
 - 🧽 eraser tool for taking back placed symbols (clues are protected); when
   active, the cells you can rub out light up pink
 - Always-visible ⚙️ settings (sound, plus vibration where the device

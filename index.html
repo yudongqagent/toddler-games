@@ -170,6 +170,21 @@
   .cell.sel { background:#ffe063 !important; box-shadow:inset 0 0 0 3px #ffc21d; animation:selpulse 1.2s ease-in-out infinite; z-index:2; }
   @keyframes selpulse { 0%,100%{box-shadow:inset 0 0 0 3px #ffc21d} 50%{box-shadow:inset 0 0 0 5px #ffae00} }
   .cell .sym { line-height:1; pointer-events:none; }
+  /* spotlight candidate pencil-marks, shown only during a hint's derivation */
+  .cell .cands {
+    position:absolute; inset:0; pointer-events:none;
+    display:flex; align-items:center; justify-content:center; gap:.06em;
+    animation:markpop .25s ease-out;
+  }
+  @keyframes markpop { from{opacity:0; transform:scale(.6)} to{opacity:1; transform:scale(1)} }
+  .cell .cands span { font-size:.55em; font-weight:800; color:#7c5cff; line-height:1; }
+  .cell .cands.multi span { font-size:.4em; }
+  .cell .cands span.focus { color:#e67e22; }
+  .cell .cands span.crossed { color:#ff8a8a; position:relative; }
+  .cell .cands span.crossed::after {
+    content:''; position:absolute; left:-6%; right:-6%; top:46%; height:2.5px;
+    background:#ff5b6b; transform:rotate(-16deg); border-radius:2px;
+  }
   .cell.pop .sym { animation:pop .35s; }
   @keyframes pop { 0%{transform:scale(0)} 70%{transform:scale(1.3)} 100%{transform:scale(1)} }
   .cell.wrong { animation:shake .4s; }
@@ -591,7 +606,7 @@ const LEVELS = {
     { name:'Master',   emoji:'📘', desc:'9×9 · hard',       n:9, boxW:3, boxH:3, blanks:35 },
     { name:'Champion', emoji:'🏆', desc:'9×9 · expert',     n:9, boxW:3, boxH:3, blanks:48 },
     // hidden level — only reachable from the Champion win screen
-    { name:'Legend',   emoji:'👑', desc:'9×9 · secret',     n:9, boxW:3, boxH:3, blanks:56 },
+    { name:'Legend',   emoji:'👑', desc:'9×9 · secret',     n:9, boxW:3, boxH:3, blanks:58, hard:true },
   ],
 };
 const SUBTITLES = {
@@ -743,6 +758,7 @@ function makePuzzle(L){
   const n=L.n;
   const solution=new Array(n*n).fill(0);
   fillGrid(solution,L);
+  if(L.hard) return { puzzle:makeHardPuzzle(solution,L), solution };
   const puzzle=solution.slice();
   let removed=0;
   for(const idx of shuffle([...Array(n*n).keys()])){
@@ -753,6 +769,275 @@ function makePuzzle(L){
     else puzzle[idx]=saved;
   }
   return { puzzle, solution };
+}
+
+// count solutions up to `limit` (for uniqueness) — fast backtracking
+function countSolutions(grid,L,limit){
+  const [p,cands]=bestCell(grid,L);
+  if(p===-1) return 1;
+  if(cands.length===0) return 0;
+  let count=0;
+  for(const v of cands){
+    grid[p]=v;
+    count+=countSolutions(grid,L,limit-count);
+    grid[p]=0;
+    if(count>=limit) break;
+  }
+  return count;
+}
+
+// Dig as many holes as possible while keeping a UNIQUE solution, then (if it
+// needs logic beyond our engine) restore clues until the engine can crack it —
+// so it stays hard but every hint can still be derived.
+function digUnique(solution,L){
+  const n=L.n, puzzle=solution.slice(), removedOrder=[];
+  let removed=0;
+  for(const idx of shuffle([...Array(n*n).keys()])){
+    if(removed>=L.blanks) break;
+    const saved=puzzle[idx];
+    puzzle[idx]=0;
+    if(countSolutions(puzzle.slice(),L,2)===1){ removed++; removedOrder.push(idx); }
+    else puzzle[idx]=saved;
+  }
+  shuffle(removedOrder);
+  let gi=0;
+  while(!solve(puzzle,L).solved && gi<removedOrder.length){
+    puzzle[removedOrder[gi]]=solution[removedOrder[gi]]; gi++;
+  }
+  return puzzle;
+}
+// Hard puzzle: try several and keep the one needing the toughest technique, so
+// Legend genuinely demands advanced logic (not just singles).
+function makeHardPuzzle(solution,L){
+  let best=null, bestTier=-1;
+  for(let attempt=0; attempt<7; attempt++){
+    const pz=digUnique(solution,L);
+    const tier=solve(pz,L).hardestTier;
+    if(tier>bestTier){ best=pz; bestTier=tier; }
+    if(bestTier>=3) break;             // needs pairs or harder — hard enough
+  }
+  return best;
+}
+
+/* ============================================================
+   Deductive solver — a human-style logic engine used both to
+   generate hard puzzles and to walk the hint derivation chain.
+   Works on candidate bitmasks; every deduction records its reason.
+   ============================================================ */
+
+function bitcount(m){ let c=0; while(m){ m&=m-1; c++; } return c; }
+function bitsOf(m){ const out=[]; let v=1; while(m){ if(m&1) out.push(v); m>>=1; v++; } return out; }
+function kcombos(arr,k){
+  const res=[], n=arr.length;
+  (function rec(start,combo){
+    if(combo.length===k){ res.push(combo.slice()); return; }
+    for(let i=start;i<n;i++){ combo.push(arr[i]); rec(i+1,combo); combo.pop(); }
+  })(0,[]);
+  return res;
+}
+
+// precomputed geometry for a level
+let SCTX=null, SCTX_KEY='';
+function solverCtx(L){
+  const key=L.n+'-'+L.boxW+'-'+L.boxH;
+  if(SCTX && SCTX_KEY===key) return SCTX;
+  const n=L.n, bpr=n/L.boxW;
+  const rows=[],cols=[],boxes=[];
+  for(let r=0;r<n;r++) rows.push([...Array(n)].map((_,c)=>r*n+c));
+  for(let c=0;c<n;c++) cols.push([...Array(n)].map((_,r)=>r*n+c));
+  for(let b=0;b<n;b++) boxes.push([]);
+  const boxOfCell=i=>{ const r=Math.floor(i/n),c=i%n; return Math.floor(r/L.boxH)*bpr+Math.floor(c/L.boxW); };
+  for(let i=0;i<n*n;i++) boxes[boxOfCell(i)].push(i);
+  const units=[...rows.map(c=>({kind:'row',cells:c})),
+               ...cols.map(c=>({kind:'column',cells:c})),
+               ...boxes.map(c=>({kind:'little square',cells:c}))];
+  const peers=[]; for(let i=0;i<n*n;i++) peers.push(new Set());
+  for(const u of units) for(const a of u.cells) for(const b of u.cells) if(a!==b) peers[a].add(b);
+  SCTX={n,L,rows,cols,boxes,units,peers,boxOfCell}; SCTX_KEY=key;
+  return SCTX;
+}
+
+function computeCands(grid,ctx){
+  const n=ctx.n, cand=new Array(n*n).fill(0);
+  for(let i=0;i<n*n;i++){
+    if(grid[i]!==0) continue;
+    let m=0;
+    for(const q of ctx.peers[i]) if(grid[q]!==0) m|=1<<(grid[q]-1);
+    cand[i]=(~m)&((1<<n)-1);
+  }
+  return cand;
+}
+
+function applyDeduction(state,d,ctx){
+  if(d.kind==='place'){
+    state.grid[d.cell]=d.value; state.cand[d.cell]=0;
+    const b=~(1<<(d.value-1));
+    for(const q of ctx.peers[d.cell]) state.cand[q]&=b;
+  } else {
+    for(const e of d.elims) state.cand[e.cell]&=~(1<<(e.value-1));
+  }
+}
+
+/* ---- techniques: each returns the first deduction it finds, or null ---- */
+
+function tNakedSingle(s,ctx){
+  for(let i=0;i<s.cand.length;i++){
+    if(s.grid[i]!==0) continue;
+    const m=s.cand[i];
+    if(bitcount(m)===1) return {tier:1,kind:'place',tech:'naked single',cell:i,value:bitsOf(m)[0]};
+  }
+  return null;
+}
+function tHiddenSingle(s,ctx){
+  for(const u of ctx.units){
+    for(let v=1;v<=ctx.n;v++){
+      const b=1<<(v-1);
+      if(u.cells.some(p=>s.grid[p]===v)) continue;
+      let spot=-1,cnt=0;
+      for(const p of u.cells) if(s.grid[p]===0 && (s.cand[p]&b)){ spot=p; if(++cnt>1) break; }
+      if(cnt===1) return {tier:1,kind:'place',tech:'hidden single',cell:spot,value:v,unitKind:u.kind,unitCells:u.cells};
+    }
+  }
+  return null;
+}
+function tPointing(s,ctx){
+  for(const box of ctx.boxes){
+    for(let v=1;v<=ctx.n;v++){
+      const b=1<<(v-1);
+      const cells=box.filter(p=>s.grid[p]===0 && (s.cand[p]&b));
+      if(cells.length<2) continue;
+      const rs=new Set(cells.map(p=>Math.floor(p/ctx.n))), cs=new Set(cells.map(p=>p%ctx.n));
+      let lineCells=null,lineKind=null;
+      if(rs.size===1){ lineCells=ctx.rows[[...rs][0]]; lineKind='row'; }
+      else if(cs.size===1){ lineCells=ctx.cols[[...cs][0]]; lineKind='column'; }
+      if(!lineCells) continue;
+      const boxSet=new Set(box), elims=[];
+      for(const p of lineCells) if(!boxSet.has(p) && s.grid[p]===0 && (s.cand[p]&b)) elims.push({cell:p,value:v});
+      if(elims.length) return {tier:2,kind:'elim',tech:'pointing',value:v,elims,patternCells:cells,unitKind:lineKind,lineCells};
+    }
+  }
+  return null;
+}
+function tClaiming(s,ctx){
+  const lines=[...ctx.rows.map(c=>({kind:'row',cells:c})),...ctx.cols.map(c=>({kind:'column',cells:c}))];
+  for(const line of lines){
+    for(let v=1;v<=ctx.n;v++){
+      const b=1<<(v-1);
+      const cells=line.cells.filter(p=>s.grid[p]===0 && (s.cand[p]&b));
+      if(cells.length<2) continue;
+      const bs=new Set(cells.map(p=>ctx.boxOfCell(p)));
+      if(bs.size!==1) continue;
+      const box=ctx.boxes[[...bs][0]], lineSet=new Set(line.cells), elims=[];
+      for(const p of box) if(!lineSet.has(p) && s.grid[p]===0 && (s.cand[p]&b)) elims.push({cell:p,value:v});
+      if(elims.length) return {tier:2,kind:'elim',tech:'claiming',value:v,elims,patternCells:cells,unitKind:line.kind,boxCells:box};
+    }
+  }
+  return null;
+}
+function tNakedSubset(s,ctx,k){
+  for(const u of ctx.units){
+    const empt=u.cells.filter(p=>s.grid[p]===0);
+    if(empt.length<=k) continue;
+    for(const combo of kcombos(empt,k)){
+      let union=0; for(const p of combo) union|=s.cand[p];
+      if(bitcount(union)!==k) continue;
+      if(combo.some(p=>bitcount(s.cand[p])<2)) continue;
+      const elims=[];
+      for(const p of empt){ if(combo.includes(p)) continue; const common=s.cand[p]&union; if(common) for(const v of bitsOf(common)) elims.push({cell:p,value:v}); }
+      if(elims.length) return {tier:3,kind:'elim',tech:(k===2?'naked pair':'naked triple'),elims,patternCells:combo,values:bitsOf(union),unitKind:u.kind,unitCells:u.cells};
+    }
+  }
+  return null;
+}
+function tHiddenSubset(s,ctx,k){
+  for(const u of ctx.units){
+    const vals=[]; for(let v=1;v<=ctx.n;v++) if(!u.cells.some(p=>s.grid[p]===v)) vals.push(v);
+    if(vals.length<=k) continue;
+    for(const combo of kcombos(vals,k)){
+      const mask=combo.reduce((m,v)=>m|(1<<(v-1)),0);
+      const cells=u.cells.filter(p=>s.grid[p]===0 && (s.cand[p]&mask));
+      if(cells.length!==k) continue;
+      if(!combo.every(v=>{ const b=1<<(v-1); return cells.some(p=>s.cand[p]&b); })) continue;
+      const elims=[];
+      for(const p of cells){ const extra=s.cand[p]&~mask; if(extra) for(const v of bitsOf(extra)) elims.push({cell:p,value:v}); }
+      if(elims.length) return {tier:3,kind:'elim',tech:(k===2?'hidden pair':'hidden triple'),elims,patternCells:cells,values:combo,unitKind:u.kind,unitCells:u.cells};
+    }
+  }
+  return null;
+}
+function tXWing(s,ctx){
+  const n=ctx.n;
+  for(let v=1;v<=n;v++){
+    const b=1<<(v-1);
+    const rowCols=[];
+    for(let r=0;r<n;r++){ const cs=[]; for(let c=0;c<n;c++){ const p=r*n+c; if(s.grid[p]===0&&(s.cand[p]&b)) cs.push(c); } rowCols[r]=cs; }
+    for(let r1=0;r1<n;r1++){ if(rowCols[r1].length!==2) continue;
+      for(let r2=r1+1;r2<n;r2++){ if(rowCols[r2].length!==2) continue;
+        if(rowCols[r1][0]===rowCols[r2][0] && rowCols[r1][1]===rowCols[r2][1]){
+          const [c1,c2]=rowCols[r1], elims=[];
+          for(let r=0;r<n;r++){ if(r===r1||r===r2) continue; for(const c of [c1,c2]){ const p=r*n+c; if(s.grid[p]===0&&(s.cand[p]&b)) elims.push({cell:p,value:v}); } }
+          if(elims.length) return {tier:4,kind:'elim',tech:'X-Wing',value:v,elims,patternCells:[r1*n+c1,r1*n+c2,r2*n+c1,r2*n+c2],unitKind:'row'};
+        }
+      }
+    }
+    const colRows=[];
+    for(let c=0;c<n;c++){ const rs=[]; for(let r=0;r<n;r++){ const p=r*n+c; if(s.grid[p]===0&&(s.cand[p]&b)) rs.push(r); } colRows[c]=rs; }
+    for(let c1=0;c1<n;c1++){ if(colRows[c1].length!==2) continue;
+      for(let c2=c1+1;c2<n;c2++){ if(colRows[c2].length!==2) continue;
+        if(colRows[c1][0]===colRows[c2][0] && colRows[c1][1]===colRows[c2][1]){
+          const [r1,r2]=colRows[c1], elims=[];
+          for(let c=0;c<n;c++){ if(c===c1||c===c2) continue; for(const r of [r1,r2]){ const p=r*n+c; if(s.grid[p]===0&&(s.cand[p]&b)) elims.push({cell:p,value:v}); } }
+          if(elims.length) return {tier:4,kind:'elim',tech:'X-Wing',value:v,elims,patternCells:[r1*n+c1,r2*n+c1,r1*n+c2,r2*n+c2],unitKind:'column'};
+        }
+      }
+    }
+  }
+  return null;
+}
+function tXYWing(s,ctx){
+  const n=ctx.n;
+  const bi=[]; for(let i=0;i<n*n;i++) if(s.grid[i]===0 && bitcount(s.cand[i])===2) bi.push({i,m:s.cand[i]});
+  const see=(a,b)=>ctx.peers[a].has(b);
+  for(const piv of bi){
+    for(const p1 of bi){ if(p1.i===piv.i || !see(piv.i,p1.i)) continue;
+      const sh1=p1.m&piv.m; if(bitcount(sh1)!==1) continue;
+      const z1=p1.m&~piv.m; if(bitcount(z1)!==1) continue;
+      for(const p2 of bi){ if(p2.i===piv.i||p2.i===p1.i||!see(piv.i,p2.i)) continue;
+        const sh2=p2.m&piv.m; if(bitcount(sh2)!==1 || sh2===sh1) continue;
+        if((p2.m&~piv.m)!==z1) continue;              // same z
+        const z=bitsOf(z1)[0], elims=[];
+        for(let i=0;i<n*n;i++){ if(s.grid[i]!==0||i===piv.i||i===p1.i||i===p2.i) continue;
+          if((s.cand[i]&z1) && see(p1.i,i) && see(p2.i,i)) elims.push({cell:i,value:z}); }
+        if(elims.length) return {tier:4,kind:'elim',tech:'XY-Wing',value:z,elims,patternCells:[piv.i,p1.i,p2.i],unitKind:null};
+      }
+    }
+  }
+  return null;
+}
+
+const TECHS=[
+  tNakedSingle, tHiddenSingle, tPointing, tClaiming,
+  (s,c)=>tNakedSubset(s,c,2), (s,c)=>tHiddenSubset(s,c,2),
+  (s,c)=>tNakedSubset(s,c,3), (s,c)=>tHiddenSubset(s,c,3),
+  tXWing, tXYWing
+];
+
+// Solve as far as pure logic allows, recording the full reasoned trace.
+function solve(grid,L){
+  const ctx=solverCtx(L);
+  const state={grid:grid.slice(), cand:computeCands(grid,ctx)};
+  const trace=[]; let hardestTier=0, guard=0;
+  while(state.grid.some(v=>v===0)){
+    if(++guard>1000) break;
+    let d=null;
+    for(const t of TECHS){ d=t(state,ctx); if(d) break; }
+    if(!d) return {solved:false, trace, hardestTier, state, ctx};
+    hardestTier=Math.max(hardestTier,d.tier);
+    d.candBefore=state.cand.slice();   // snapshot for the hint's spotlight marks
+    applyDeduction(state,d,ctx);
+    trace.push(d);
+  }
+  return {solved:true, trace, hardestTier, state, ctx};
 }
 
 /* ---------------- sound (WebAudio, no assets) ---------------- */
@@ -1217,6 +1502,7 @@ function clearHintFx(){
   $('hint-bubble').classList.remove('show');
   boardEl.querySelectorAll('.explain').forEach(el=>el.classList.remove('explain'));
   boardEl.querySelectorAll('.hintwrong').forEach(el=>el.classList.remove('hintwrong'));
+  boardEl.querySelectorAll('.cands').forEach(el=>el.remove());
   trayEl.querySelectorAll('.hintpulse').forEach(el=>el.classList.remove('hintpulse'));
 }
 function showBubble(html,ms){
@@ -1388,7 +1674,20 @@ function explainWrong(i){
     pulseTrayBtn(step.value);
     return;
   }
-  // not certain yet even after cleaning — don't guess; steer to a solvable spot
+  // no obvious single here — can advanced logic prove this square's real value?
+  const chain=chainAt(g, i);
+  if(chain){
+    const views=buildChainViews(chain);
+    const last=views[views.length-1];
+    last.select=null;                 // the square is occupied by the wrong guess
+    last.html='So the '+sym+' is wrong — this square is really '+symTag(chain.place.value)+
+      '. Tap the '+sym+' to take it out, then place '+symTag(chain.place.value)+'!';
+    views.unshift({ html:'Hmm, is '+sym+' right here? Let\'s check the other squares…', spot:[i], marks:[] });
+    highlightWrong([i], 6e5);
+    walkChain(views);
+    return;
+  }
+  // still not certain — don't guess; steer to a solvable spot
   showBubble('This '+sym+' doesn\'t belong here, and this square isn\'t certain yet. Take it out with the '+
     ICONS.eraser+' and let\'s do an easier square first! 🔍',9000);
   highlightWrong([i],9000);
@@ -1424,6 +1723,126 @@ function explainNarrowest(g){
   if(best>=0) explainCell(g,best);
 }
 
+/* ---- advanced hints: walk the deductive chain with spotlight pencil-marks ---- */
+
+// Show only the value(s) a step is about: big focus digits in the pattern
+// squares, big crossed-out digits in the squares it clears.
+function markHtml(items){
+  const spans=items.map(it=>{
+    const cls=it.cross?'crossed':(it.focus?'focus':'');
+    return '<span'+(cls?' class="'+cls+'"':'')+'>'+it.v+'</span>';
+  }).join('');
+  return '<div class="cands'+(items.length>2?' multi':'')+'">'+spans+'</div>';
+}
+function setMarks(cell, items){
+  const el=boardEl.children[cell]; if(!el) return;
+  const old=el.querySelector('.cands'); if(old) old.remove();
+  el.insertAdjacentHTML('beforeend', markHtml(items));
+}
+// pencil-marks for one elimination step: focus the involved value(s) in the
+// pattern squares, cross the value(s) removed from the cleared squares.
+function stepMarks(d){
+  const involved=d.values||(d.value?[d.value]:[]);
+  const cross={};
+  for(const e of d.elims){ (cross[e.cell]=cross[e.cell]||[]).push(e.value); }
+  const cells=new Set([...(d.patternCells||[]), ...Object.keys(cross).map(Number)]);
+  const marks=[];
+  for(const c of cells){
+    const xs=cross[c]||[], items=[];
+    for(const v of involved) if(!xs.includes(v)) items.push({v, focus:true});
+    for(const v of xs) items.push({v, cross:true});
+    if(items.length) marks.push({cell:c, items});
+  }
+  return marks;
+}
+// kid-facing wording for each technique
+function elimText(d){
+  const k=d.unitKind, vs=d.values?joinAnd(d.values.map(symTag)):symTag(d.value);
+  switch(d.tech){
+    case 'pointing':      return 'in this box, '+aSym(d.value)+' can only sit in the glowing squares — and they all share the same '+k+'. So '+symTag(d.value)+' can\'t be anywhere else in that '+k+' (crossed out).';
+    case 'claiming':      return 'in this '+k+', '+aSym(d.value)+' can only sit inside one box — so '+symTag(d.value)+' can\'t be anywhere else in that box (crossed out).';
+    case 'naked pair':    return 'these two squares can only be '+vs+' — so those numbers are taken here and can\'t go in the other squares of this '+k+' (crossed out).';
+    case 'naked triple':  return 'these three squares only share '+vs+' between them — so no other square in this '+k+' can be those numbers (crossed out).';
+    case 'hidden pair':   return 'in this '+k+', '+vs+' can only go in these two squares — so those squares can\'t be anything else (crossed out).';
+    case 'hidden triple': return 'in this '+k+', '+vs+' can only go in these three squares — so nothing else can (crossed out).';
+    case 'X-Wing':        return 'an X-Wing! '+symTag(d.value)+' makes a rectangle on these four squares, so it can\'t be anywhere else in those two '+(k==='row'?'columns':'rows')+' (crossed out).';
+    case 'XY-Wing':       return 'an XY-Wing on these three squares forces '+symTag(d.value)+' out of any square that sees both tips (crossed out).';
+  }
+  return 'we can rule out '+symTag(d.value)+' here.';
+}
+
+// Is cell i a naked or hidden single in candidate grid `cand`?
+function singleAt(cand, i, ctx){
+  if(bitcount(cand[i])===1) return {tech:'naked single', cell:i, value:bitsOf(cand[i])[0]};
+  for(const u of ctx.units){
+    if(!u.cells.includes(i)) continue;
+    for(const v of bitsOf(cand[i])){
+      const b=1<<(v-1);
+      let only=true;
+      for(const p of u.cells){ if(p!==i && (cand[p]&b)){ only=false; break; } }
+      if(only) return {tech:'hidden single', cell:i, value:v, unitCells:u.cells};
+    }
+  }
+  return null;
+}
+
+// The derivation of the next placement (wantCell=null) or of a specific square,
+// using only eliminations valid on the CURRENT board (so marks stay truthful).
+function chainAt(board, wantCell){
+  const r=solve(board,L);
+  const fp=r.trace.findIndex(d=>d.kind==='place');
+  const preElims=(fp<0?r.trace:r.trace.slice(0,fp)).filter(d=>d.kind==='elim');
+  const cand = fp>=0 ? r.trace[fp].candBefore : (r.trace.length ? r.state.cand : computeCands(board,r.ctx));
+  let place;
+  if(wantCell==null){ if(fp<0) return null; place=r.trace[fp]; }
+  else { place=singleAt(cand, wantCell, r.ctx); if(!place) return null; }
+  const enablers=[];
+  for(const d of preElims){
+    const rel = place.tech==='naked single'
+      ? d.elims.some(e=>e.cell===place.cell)
+      : d.elims.some(e=>e.value===place.value && place.unitCells.includes(e.cell));
+    if(rel) enablers.push(d);
+  }
+  return { place, enablers };
+}
+
+function buildChainViews(chain){
+  const views=[];
+  for(const d of chain.enablers){
+    const spot=[...new Set([...(d.patternCells||[]), ...d.elims.map(e=>e.cell)])];
+    views.push({ html:cap(elimText(d)), spot, marks:stepMarks(d) });
+  }
+  const p=chain.place, some=chain.enablers.length>0;
+  let html;
+  if(p.tech==='naked single'){
+    html = some ? 'So now the glowing square can only be '+symTag(p.value)+' — tap '+symTag(p.value)+' to place it! ✨'
+                : 'The glowing square can only be '+symTag(p.value)+'! ✨';
+  } else {
+    html = some ? 'So now '+aSym(p.value)+' has only one home left in this '+p.unitKind+' — the glowing square. Tap '+symTag(p.value)+'! ✨'
+                : cap(aSym(p.value))+' can only go in the glowing square! ✨';
+  }
+  views.push({ html, spot:[p.cell], marks:[{cell:p.cell, items:[{v:p.value, focus:true}]}], select:p.cell, pulse:p.value });
+  return views;
+}
+
+// Present a multi-step derivation, auto-advancing through the chain.
+let walkIdx=0;
+function walkChain(views){
+  walkIdx=0;
+  (function step(){
+    boardEl.querySelectorAll('.explain').forEach(el=>el.classList.remove('explain'));
+    boardEl.querySelectorAll('.cands').forEach(el=>el.remove());
+    const v=views[walkIdx];
+    v.spot.forEach(c=>{ const el=boardEl.children[c]; if(el) el.classList.add('explain'); });
+    (v.marks||[]).forEach(m=> setMarks(m.cell, m.items));
+    const prefix = views.length>1 ? 'Step '+(walkIdx+1)+'/'+views.length+': ' : '';
+    showBubble(prefix+v.html, 6e5);
+    if(v.select!=null) selectCell(v.select);
+    if(v.pulse!=null) pulseTrayBtn(v.pulse);
+    if(walkIdx<views.length-1) hintTimers.push(setTimeout(()=>{ walkIdx++; step(); }, 4200));
+  })();
+}
+
 function pulseTrayBtn(v){
   const b=trayEl.querySelector('.tray-btn[data-val="'+v+'"]');
   if(!b) return;
@@ -1441,25 +1860,29 @@ function onHint(){
   // 1) a wrong number on the board? explain why it can't be there.
   const wrong = board.findIndex((v,i)=> puzzle[i]===0 && v!==0 && v!==solution[i]);
   if(wrong>=0){ explainWrong(wrong); return; }
-  // 2) a specific empty cell is selected? explain THAT one.
+  // 2) a specific empty cell is selected? explain THAT one when it's obvious.
   if(selectedCell>=0 && board[selectedCell]===0){
     const s=findStep(board, selectedCell);
     if(s){ presentStep(s); return; }
-    // not forced here — if an easier forced square exists, steer there first;
-    // otherwise explain this very square with its real eliminations.
     const other=findStep(board);
     if(other){
       showBubble('This square isn\'t certain yet — let\'s do an easier one first! 🔍',6000);
       hintTimers.push(setTimeout(()=>presentStep(other),1600));
-    } else {
-      explainCell(board, selectedCell);
+      return;
     }
+    // no obvious single — try to derive this square through a chain, else the board's
+    const chain=chainAt(board, selectedCell) || chainAt(board, null);
+    if(chain){ walkChain(buildChainViews(chain)); return; }
+    explainCell(board, selectedCell);
     return;
   }
-  // 3) the next forced step anywhere on the board.
+  // 3) an obvious single anywhere on the board.
   const step=findStep(board);
   if(step){ presentStep(step); return; }
-  // 4) no forced step (e.g. an old save needing advanced logic): still explain.
+  // 4) no obvious move — walk the advanced derivation chain (hard puzzles).
+  const chain=chainAt(board, null);
+  if(chain){ walkChain(buildChainViews(chain)); return; }
+  // 5) ultimate fallback (e.g. a legacy save the engine can't finish).
   explainNarrowest(board);
 }
 
