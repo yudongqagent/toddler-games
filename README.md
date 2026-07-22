@@ -21,25 +21,19 @@ A sudoku game for kids ages 3–6 (and up). Two styles:
 - Bold grid lines between boxes make the box rule visible at every size
 - Gentle feedback: clashing answers stay on the board with the conflicting
   cells glowing red so kids can see *why*; tap a red symbol to pop it out
-- 💡 hints run a real deductive engine that walks the logic chain, never the
-  answer key. It finds the next *forced* step and explains it:
-  - naked single — "The glowing square can only be 6 — its row already has
-    1, 4 and its box has 3, 5, so no other number fits!"
-  - hidden single — "A 2 can only go in the glowing square — every other empty
-    spot in this column already has a 2 close by!"
-  It glows the exact proof cells, selects the target, and pulses the right
-  symbol — the child still makes the move. For a wrong number it explains why:
-  a visible duplicate ("there's already an 8 in this row"), or it proves what
-  the square must really be ("take the 3 out — this square is really 8!"). If a
-  square genuinely isn't forced yet, it says so honestly and points to one that
-  is, teaching "don't guess — do the certain squares first"
-- On hard boards where there's no obvious move, the hint **walks the whole
-  derivation chain** step by step with spotlight pencil-marks: it shows each
+- 💡 hints are user-paced guided walkthroughs (Next ▸ / Got it ✓ / ✕ — nothing
+  auto-advances) produced by a real deductive engine, never the answer key.
+  Every step uses one consistent visual language: the row/column/box under
+  discussion is **banded blue**, evidence cells glow **green**, **arrows** show
+  who blocks whom, a **crossed-out digit** means "can't go here", the answer
+  square turns **gold**, and everything else dims so the eye follows the logic
+- On hard boards with no obvious move, the walkthrough steps through each
   advanced elimination (pointing/claiming, naked & hidden pairs/triples,
-  X-Wing, XY-Wing) — focusing the involved digit and crossing out where it's
-  ruled out — until the move is forced. The engine is verified sound (never
-  eliminates a true value) and complete (always finishes) across the puzzles it
-  accepts
+  X-Wing, XY-Wing) until the move is forced. Wrong numbers get the same
+  treatment: a visible duplicate is shown with an arrow ("this row already has
+  a 5"), or the square's true value is derived step by step ("so this square
+  is really 2 — the 9 can't stay"). The engine is verified sound (never
+  eliminates a true value) and complete (solves every puzzle it accepts)
 - 🧽 eraser tool for taking back placed symbols (clues are protected); when
   active, the cells you can rub out light up pink
 - Always-visible ⚙️ settings (sound, plus vibration where the device

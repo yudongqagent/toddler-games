@@ -297,26 +297,60 @@
     100%{transform:translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(1.1); opacity:0}
   }
 
-  /* speech bubble for hint explanations */
+  /* hint walkthrough card (user-paced: Next / Got it / close) */
   #hint-bubble {
     position:fixed; left:50%; top:calc(env(safe-area-inset-top) + 74px);
     transform:translateX(-50%) scale(.8);
     z-index:48;
-    background:#fff; border-radius:18px;
-    padding:10px 18px;
+    background:#fff; border-radius:20px;
+    padding:14px 18px 12px;
     font-weight:800; color:#5b3fd4;
-    font-size:clamp(15px,4.2vw,21px);
-    box-shadow:0 8px 24px rgba(60,40,150,.3);
-    max-width:min(88vw,480px); text-align:center;
+    font-size:clamp(15px,4.2vw,20px);
+    box-shadow:0 10px 28px rgba(60,40,150,.35);
+    width:min(92vw,480px); text-align:center;
     opacity:0; pointer-events:none;
     transition:opacity .25s, transform .25s;
   }
-  #hint-bubble.show { opacity:1; transform:translateX(-50%) scale(1); }
+  #hint-bubble.show { opacity:1; pointer-events:auto; transform:translateX(-50%) scale(1); }
   #hint-bubble::after {
     content:''; position:absolute; left:50%; top:100%;
     transform:translateX(-50%);
     border:10px solid transparent; border-top-color:#fff;
   }
+  #hint-x {
+    position:absolute; top:-10px; right:-10px;
+    width:34px; height:34px; border-radius:50%; border:none; cursor:pointer;
+    background:#f1eeff; color:#5b3fd4; font-size:16px; font-weight:800;
+    box-shadow:0 3px 8px rgba(60,40,150,.3);
+    font-family:inherit;
+  }
+  #hint-x:active { transform:scale(.9); }
+  #hint-text { padding:0 4px; }
+  .hint-foot {
+    display:flex; align-items:center; justify-content:space-between;
+    gap:10px; margin-top:10px;
+  }
+  #hint-dots { display:flex; gap:6px; padding-left:4px; }
+  .hdot { width:9px; height:9px; border-radius:50%; background:#ddd6f8; }
+  .hdot.on { background:#7c5cff; transform:scale(1.25); }
+  #hint-next {
+    border:none; cursor:pointer; font-family:inherit;
+    border-radius:999px; padding:9px 20px;
+    font-size:clamp(14px,3.8vw,17px); font-weight:800;
+    background:linear-gradient(#8de78a,#54c452); color:#0d4d0c;
+    box-shadow:0 4px 0 rgba(0,0,0,.18), inset 0 2px 0 rgba(255,255,255,.5);
+    margin-left:auto;
+  }
+  #hint-next:active { transform:translateY(2px); box-shadow:0 2px 0 rgba(0,0,0,.18); }
+  /* arrows overlay drawn between cells during a hint step */
+  #hint-arrows {
+    position:fixed; inset:0; width:100%; height:100%;
+    z-index:46; pointer-events:none; display:none;
+  }
+  /* hint focus states on cells */
+  .cell.dim { opacity:.35; filter:saturate(.5); }
+  .cell.band { background:#e3f1ff !important; box-shadow:inset 0 0 0 2px #8ec6ff; }
+  .cell.ev { background:#d9f6bd !important; box-shadow:inset 0 0 0 2.5px #6cc24a; }
 
   /* ---------- SETTINGS (always-visible button + panel) ---------- */
   .fab {
@@ -558,7 +592,15 @@
   </div>
 </div>
 
-<div id="hint-bubble"></div>
+<div id="hint-bubble">
+  <button id="hint-x" aria-label="Close hint">✕</button>
+  <div id="hint-text"></div>
+  <div class="hint-foot">
+    <div id="hint-dots"></div>
+    <button id="hint-next">Next ▸</button>
+  </div>
+</div>
+<svg id="hint-arrows" aria-hidden="true"></svg>
 
 <div id="win">
   <div class="sunburst" id="win-rays"></div>
@@ -1242,7 +1284,7 @@ function updateHighlights(){
     const r=Math.floor(i/n), c=i%n;
     const isSel = i===selectedCell;
     el.classList.toggle('sel', isSel);
-    el.classList.toggle('rc', !isSel && selectedCell>=0 &&
+    el.classList.toggle('rc', !isSel && selectedCell>=0 && !hintActive() &&
       (r===selR || c===selC || boxOf(i)===selB));
     el.classList.toggle('match', selectedVal>0 && board[i]===selectedVal);
     el.classList.toggle('erasable', eraserOn && puzzle[i]===0 && board[i]!==0);
@@ -1493,42 +1535,37 @@ function onCellTap(i,el){
   sfx('tap');
 }
 
-/* ---------------- hints with explanations ---------------- */
+/* ============================================================
+   HINTS v3 — guided, user-paced walkthroughs.
+   One deductive engine produces every explanation; the UI walks the
+   derivation step by step with a consistent visual language:
+     blue band     = the row / column / box we are talking about
+     green squares = evidence (the placed numbers doing the blocking)
+     arrows        = who blocks whom
+     crossed digit = "this value cannot go here"
+     gold square   = the answer spot (and the tray pulses the value)
+   Everything not part of the step dims out. The player taps
+   "Next" through the steps — nothing ever auto-advances.
+   ============================================================ */
 
 let hintTimers=[];
+let hintStory=null, hintStep=0;
+function hintActive(){ return !!hintStory; }
+
 function clearHintFx(){
   hintTimers.forEach(clearTimeout);
   hintTimers=[];
+  hintStory=null; hintStep=0;
   $('hint-bubble').classList.remove('show');
-  boardEl.querySelectorAll('.explain').forEach(el=>el.classList.remove('explain'));
-  boardEl.querySelectorAll('.hintwrong').forEach(el=>el.classList.remove('hintwrong'));
+  const svg=$('hint-arrows'); if(svg){ svg.style.display='none'; svg.innerHTML=''; }
+  boardEl.querySelectorAll('.dim,.band,.ev,.explain,.hintwrong').forEach(el=>el.classList.remove('dim','band','ev','explain','hintwrong'));
   boardEl.querySelectorAll('.cands').forEach(el=>el.remove());
   trayEl.querySelectorAll('.hintpulse').forEach(el=>el.classList.remove('hintpulse'));
 }
-function showBubble(html,ms){
-  const b=$('hint-bubble');
-  b.innerHTML=html;
-  b.classList.add('show');
-  // sit just above the board so it never covers the cell it talks about
-  const bt=boardEl.getBoundingClientRect().top;
-  b.style.top=Math.max(8, bt-b.offsetHeight-16)+'px';
-  hintTimers.push(setTimeout(()=>b.classList.remove('show'),ms||3400));
-}
-function highlightCells(cells,ms){
-  cells.forEach(p=>{ const el=boardEl.children[p]; if(el) el.classList.add('explain'); });
-  hintTimers.push(setTimeout(()=>{
-    cells.forEach(p=>{ const el=boardEl.children[p]; if(el) el.classList.remove('explain'); });
-  },ms||2600));
-}
-// mark cells a hint calls out as misplaced (orange ring + wiggle)
-function highlightWrong(cells,ms){
-  cells.forEach(p=>{ const el=boardEl.children[p]; if(el) el.classList.add('hintwrong'); });
-  hintTimers.push(setTimeout(()=>{
-    cells.forEach(p=>{ const el=boardEl.children[p]; if(el) el.classList.remove('hintwrong'); });
-  },ms||2600));
-}
 
-// candidates for cell i on an arbitrary grid g (the hint engine works on copies)
+/* ---------------- board-reading helpers (pure logic) ---------------- */
+
+// candidates for cell i on an arbitrary grid g
 function candList(g,i){
   const n=L.n, r=Math.floor(i/n), c=i%n, out=[];
   for(let v=1;v<=n;v++) if(placeOk(g,r,c,v,L)) out.push(v);
@@ -1540,7 +1577,6 @@ function blockerFor(g,i,u){
     for(const p of cells) if(p!==i && g[p]===u) return {cell:p, kind};
   return null;
 }
-
 // the three units cell i belongs to, as [kindName, cells[]]
 function unitsOf(i){
   const n=L.n, r=Math.floor(i/n), c=i%n;
@@ -1550,20 +1586,14 @@ function unitsOf(i){
   for(let rr=br;rr<br+L.boxH;rr++) for(let cc=bc;cc<bc+L.boxW;cc++) box.push(rr*n+cc);
   return [['row',row],['column',col],['little square',box]];
 }
-
-// A same-valued neighbour that makes v at i a visible duplicate (the clash the
-// child can see): returns {j, kind} of the first row/column/box partner.
+// a same-valued neighbour that makes v at i a visible duplicate
 function conflictPartner(i,v){
   for(const [kind,cells] of unitsOf(i))
-    for(const j of cells) if(j!==i && board[j]===v) return {j, kind};
+    for(const j of cells) if(j!==i && board[j]===v) return {j, kind, cells};
   return null;
 }
 
-/* ---- deductive hint engine: naked & hidden singles with a reason chain ----
-   Every puzzle is generated to be solvable by exactly these two techniques
-   (see logicSolvable), so a forced next step always exists until it is done. */
-
-// naked single: a cell whose only remaining candidate is a single value
+// naked single on the live grid, with the blockers as evidence
 function findNaked(g, only){
   const list = only!=null ? [only] : [...Array(g.length).keys()];
   for(const i of list){
@@ -1577,8 +1607,7 @@ function findNaked(g, only){
   }
   return null;
 }
-
-// hidden single: a value with exactly one possible home inside some unit
+// hidden single on the live grid, with per-cell blockers as evidence
 function findHidden(g, only){
   for(const u of unitList()){
     for(let W=1;W<=L.n;W++){
@@ -1588,23 +1617,62 @@ function findHidden(g, only){
       const i=spots[0];
       if(only!=null && i!==only) continue;
       const blocks=[];
-      for(const p of u.cells){ if(p===i||g[p]!==0) continue; const b=blockerFor(g,p,W); if(b) blocks.push({cell:p, byCell:b.cell, kind:b.kind}); }
+      for(const p of u.cells){ if(p===i||g[p]!==0) continue; const b=blockerFor(g,p,W); if(b) blocks.push({cell:p, byCell:b.cell}); }
       return {tech:'hidden', cell:i, value:W, unitKind:u.kind, unitCells:u.cells, blocks};
     }
   }
   return null;
 }
-
-// the simplest forced step (fewest cells to point at); `only` restricts to one target
+// the simplest obvious step (fewest things to point at)
 function findStep(g, only){
   const nk=findNaked(g, only), hd=findHidden(g, only);
   if(nk && hd) return (nk.blockers.length <= hd.blocks.length) ? nk : hd;
   return nk || hd;
 }
 
-/* ---- turning a step into a kid-friendly explanation ---- */
+// is cell i a naked or hidden single under candidate grid `cand`?
+function singleAt(cand, i, ctx){
+  if(bitcount(cand[i])===1) return {tech:'naked single', cell:i, value:bitsOf(cand[i])[0]};
+  for(const u of ctx.units){
+    if(!u.cells.includes(i)) continue;
+    for(const v of bitsOf(cand[i])){
+      const b=1<<(v-1);
+      let only=true;
+      for(const p of u.cells){ if(p!==i && (cand[p]&b)){ only=false; break; } }
+      if(only) return {tech:'hidden single', cell:i, value:v, unitKind:u.kind, unitCells:u.cells};
+    }
+  }
+  return null;
+}
+
+// The derivation of the next placement (wantCell=null) or of a specific
+// square, as { place, enablers[], cand } — enablers are the advanced
+// eliminations (from the solver trace) that unlock the placement.
+function chainAt(g, wantCell){
+  const r=solve(g,L);
+  const fp=r.trace.findIndex(d=>d.kind==='place');
+  const preElims=(fp<0?r.trace:r.trace.slice(0,fp)).filter(d=>d.kind==='elim');
+  const cand = fp>=0 ? r.trace[fp].candBefore : (r.trace.length ? r.state.cand : computeCands(g,r.ctx));
+  let place;
+  if(wantCell==null){ if(fp<0) return null; place=r.trace[fp]; }
+  else { place=singleAt(cand, wantCell, r.ctx); if(!place) return null; }
+  if(place.tech==='naked single' && !place.unitCells){
+    // give naked singles their units too (for banding)
+    place.unitCells=null;
+  }
+  const enablers=[];
+  for(const d of preElims){
+    const rel = place.tech==='naked single'
+      ? d.elims.some(e=>e.cell===place.cell)
+      : d.elims.some(e=>e.value===place.value && place.unitCells.includes(e.cell));
+    if(rel) enablers.push(d);
+  }
+  return { place, enablers, cand };
+}
+
+/* ---------------- words ---------------- */
+
 function PIECE(){ return isClassic?'number':'friend'; }
-// article + symbol so digits read naturally ("an 8", "a 3")
 function aSym(v){ return (isClassic && v===8 ? 'an ' : 'a ')+symTag(v); }
 function listSyms(vals){ return vals.map(symTag).join(', '); }
 function joinAnd(parts){
@@ -1618,115 +1686,21 @@ function joinOr(parts){
   return parts.slice(0,-1).join(', ')+' or '+parts[parts.length-1];
 }
 function cap(s){ return s ? s.charAt(0).toUpperCase()+s.slice(1) : s; }
-// "its row already has 1, 4; its column has 2; its box has 3, 5"
-function reasonNaked(step){
+function uname(kind){ return kind==='little square' ? 'box' : (kind||'row'); }
+// "its row already has 1 and 4, and its box has 3"
+function takenAround(blockers){
   const by={row:[], column:[], 'little square':[]};
-  step.blockers.forEach(b=> by[b.kind].push(b.value));
+  blockers.forEach(b=> by[b.kind].push(b.value));
   const parts=[];
   if(by.row.length) parts.push('its row already has '+listSyms(by.row));
   if(by.column.length) parts.push('its column has '+listSyms(by.column));
   if(by['little square'].length) parts.push('its box has '+listSyms(by['little square']));
   return joinAnd(parts);
 }
-function reasonHidden(step){
-  return 'every other empty spot in this '+step.unitKind+' already has '+aSym(step.value)+' close by';
-}
 
-// Show a forced step: explain the chain, glow the proof, select the spot, pulse the value.
-function presentStep(step){
-  let msg, proof;
-  if(step.tech==='naked'){
-    msg='The glowing square can only be '+symTag(step.value)+' — '+reasonNaked(step)+
-        ', so no other '+PIECE()+' fits! ✨';
-    proof=step.blockers.map(b=>b.cell);
-  } else {
-    msg=cap(aSym(step.value))+' can only go in the glowing square — '+reasonHidden(step)+'! ✨';
-    proof=step.blocks.map(b=>b.byCell);
-  }
-  showBubble(msg,9000);
-  highlightCells(proof,8000);
-  selectCell(step.cell);
-  pulseTrayBtn(step.value);
-}
+/* ---------------- step visuals ---------------- */
 
-// Explain why a placed number is wrong, walking the real logic.
-function explainWrong(i){
-  const v=board[i], sym=symTag(v);
-  const partner=conflictPartner(i,v);
-  if(partner){
-    showBubble('There\'s already '+aSym(v)+' in this '+partner.kind+' (the glowing one) — a '+
-      partner.kind+' can\'t have two '+sym+'s, so this '+sym+' has to go. Tap it to take it out!',9000);
-    highlightCells([partner.j],9000);
-    highlightWrong([i],9000);
-    return;
-  }
-  // clear away every wrong guess, then prove what this square must really be
-  const g=board.slice();
-  for(let k=0;k<g.length;k++) if(puzzle[k]===0 && g[k]!==0 && g[k]!==solution[k]) g[k]=0;
-  const step=findStep(g, i);
-  if(step){
-    const reason = step.tech==='naked'
-      ? reasonNaked(step)+', so no other '+PIECE()+' fits'
-      : reasonHidden(step);
-    showBubble('Take the '+sym+' out — this square is really '+symTag(step.value)+'! '+cap(reason)+'.',9000);
-    highlightWrong([i],9000);
-    highlightCells(step.tech==='naked'?step.blockers.map(b=>b.cell):step.blocks.map(b=>b.byCell),8000);
-    pulseTrayBtn(step.value);
-    return;
-  }
-  // no obvious single here — can advanced logic prove this square's real value?
-  const chain=chainAt(g, i);
-  if(chain){
-    const views=buildChainViews(chain);
-    const last=views[views.length-1];
-    last.select=null;                 // the square is occupied by the wrong guess
-    last.html='So the '+sym+' is wrong — this square is really '+symTag(chain.place.value)+
-      '. Tap the '+sym+' to take it out, then place '+symTag(chain.place.value)+'!';
-    views.unshift({ html:'Hmm, is '+sym+' right here? Let\'s check the other squares…', spot:[i], marks:[] });
-    highlightWrong([i], 6e5);
-    walkChain(views);
-    return;
-  }
-  // still not certain — don't guess; steer to a solvable spot
-  showBubble('This '+sym+' doesn\'t belong here, and this square isn\'t certain yet. Take it out with the '+
-    ICONS.eraser+' and let\'s do an easier square first! 🔍',9000);
-  highlightWrong([i],9000);
-  const other=findStep(g);
-  if(other) hintTimers.push(setTimeout(()=>presentStep(other),1800));
-}
-
-// Always-sensible explanation for a single cell, even when it isn't fully
-// forced yet (e.g. a puzzle from an old save that needs advanced logic): show
-// the real eliminations that narrow it, then reveal the answer. Never a
-// reasonless "try this square".
-function explainCell(g,i){
-  const cands=candList(g,i), W=solution[i];
-  const blockers=[];
-  for(let u=1;u<=L.n;u++){ if(cands.includes(u)) continue; const b=blockerFor(g,i,u); if(b) blockers.push({value:u, cell:b.cell, kind:b.kind}); }
-  const reason=reasonNaked({blockers});
-  let msg;
-  if(cands.filter(v=>v!==W).length===0){
-    msg='The glowing square can only be '+symTag(W)+(reason?' — '+reason+', so no other '+PIECE()+' fits':'')+'! ✨';
-  } else {
-    msg='The glowing square must be '+joinOr(cands.map(symTag))+(reason?' ('+reason+')':'')+
-        ' — and here it\'s '+symTag(W)+'. Give it a try! ✨';
-  }
-  showBubble(msg,9000);
-  highlightCells(blockers.map(b=>b.cell),8000);
-  selectCell(i);
-  pulseTrayBtn(W);
-}
-// Pick the most-constrained empty square and explain it — the last-resort hint.
-function explainNarrowest(g){
-  let best=-1, bestLen=99;
-  for(let i=0;i<g.length;i++){ if(g[i]!==0) continue; const l=candList(g,i).length; if(l<bestLen){ best=i; bestLen=l; if(l<=1) break; } }
-  if(best>=0) explainCell(g,best);
-}
-
-/* ---- advanced hints: walk the deductive chain with spotlight pencil-marks ---- */
-
-// Show only the value(s) a step is about: big focus digits in the pattern
-// squares, big crossed-out digits in the squares it clears.
+// crossed-out / focused mini-digits inside a cell
 function markHtml(items){
   const spans=items.map(it=>{
     const cls=it.cross?'crossed':(it.focus?'focus':'');
@@ -1739,108 +1713,79 @@ function setMarks(cell, items){
   const old=el.querySelector('.cands'); if(old) old.remove();
   el.insertAdjacentHTML('beforeend', markHtml(items));
 }
-// pencil-marks for one elimination step: focus the involved value(s) in the
-// pattern squares, cross the value(s) removed from the cleared squares.
-function stepMarks(d){
-  const involved=d.values||(d.value?[d.value]:[]);
-  const cross={};
-  for(const e of d.elims){ (cross[e.cell]=cross[e.cell]||[]).push(e.value); }
-  const cells=new Set([...(d.patternCells||[]), ...Object.keys(cross).map(Number)]);
-  const marks=[];
-  for(const c of cells){
-    const xs=cross[c]||[], items=[];
-    for(const v of involved) if(!xs.includes(v)) items.push({v, focus:true});
-    for(const v of xs) items.push({v, cross:true});
-    if(items.length) marks.push({cell:c, items});
-  }
-  return marks;
-}
-// kid-facing wording for each technique
-function elimText(d){
-  const k=d.unitKind, vs=d.values?joinAnd(d.values.map(symTag)):symTag(d.value);
-  switch(d.tech){
-    case 'pointing':      return 'in this box, '+aSym(d.value)+' can only sit in the glowing squares — and they all share the same '+k+'. So '+symTag(d.value)+' can\'t be anywhere else in that '+k+' (crossed out).';
-    case 'claiming':      return 'in this '+k+', '+aSym(d.value)+' can only sit inside one box — so '+symTag(d.value)+' can\'t be anywhere else in that box (crossed out).';
-    case 'naked pair':    return 'these two squares can only be '+vs+' — so those numbers are taken here and can\'t go in the other squares of this '+k+' (crossed out).';
-    case 'naked triple':  return 'these three squares only share '+vs+' between them — so no other square in this '+k+' can be those numbers (crossed out).';
-    case 'hidden pair':   return 'in this '+k+', '+vs+' can only go in these two squares — so those squares can\'t be anything else (crossed out).';
-    case 'hidden triple': return 'in this '+k+', '+vs+' can only go in these three squares — so nothing else can (crossed out).';
-    case 'X-Wing':        return 'an X-Wing! '+symTag(d.value)+' makes a rectangle on these four squares, so it can\'t be anywhere else in those two '+(k==='row'?'columns':'rows')+' (crossed out).';
-    case 'XY-Wing':       return 'an XY-Wing on these three squares forces '+symTag(d.value)+' out of any square that sees both tips (crossed out).';
-  }
-  return 'we can rule out '+symTag(d.value)+' here.';
+function groupElims(elims){
+  const by={};
+  for(const e of elims) (by[e.cell]=by[e.cell]||[]).push(e.value);
+  return Object.keys(by).map(c=>({cell:+c, values:by[c]}));
 }
 
-// Is cell i a naked or hidden single in candidate grid `cand`?
-function singleAt(cand, i, ctx){
-  if(bitcount(cand[i])===1) return {tech:'naked single', cell:i, value:bitsOf(cand[i])[0]};
-  for(const u of ctx.units){
-    if(!u.cells.includes(i)) continue;
-    for(const v of bitsOf(cand[i])){
-      const b=1<<(v-1);
-      let only=true;
-      for(const p of u.cells){ if(p!==i && (cand[p]&b)){ only=false; break; } }
-      if(only) return {tech:'hidden single', cell:i, value:v, unitCells:u.cells};
-    }
+function drawArrows(pairs){
+  const svg=$('hint-arrows'); if(!svg) return;
+  let out='<defs><marker id="ah" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#ff4f8b"/></marker></defs>';
+  for(const [a,b] of pairs){
+    const ea=boardEl.children[a], eb=boardEl.children[b];
+    if(!ea||!eb) continue;
+    const ra=ea.getBoundingClientRect(), rb=eb.getBoundingClientRect();
+    const ax=ra.left+ra.width/2, ay=ra.top+ra.height/2;
+    const bx=rb.left+rb.width/2, by=rb.top+rb.height/2;
+    const dx=bx-ax, dy=by-ay, len=Math.hypot(dx,dy)||1;
+    const off=ra.width*0.45;
+    out+='<line x1="'+(ax+dx/len*off)+'" y1="'+(ay+dy/len*off)+'" x2="'+(bx-dx/len*off)+'" y2="'+(by-dy/len*off)+
+      '" stroke="#ff4f8b" stroke-width="3" stroke-linecap="round" marker-end="url(#ah)" opacity=".9"/>';
   }
-  return null;
+  svg.innerHTML=out; svg.style.display='block';
 }
 
-// The derivation of the next placement (wantCell=null) or of a specific square,
-// using only eliminations valid on the CURRENT board (so marks stay truthful).
-function chainAt(board, wantCell){
-  const r=solve(board,L);
-  const fp=r.trace.findIndex(d=>d.kind==='place');
-  const preElims=(fp<0?r.trace:r.trace.slice(0,fp)).filter(d=>d.kind==='elim');
-  const cand = fp>=0 ? r.trace[fp].candBefore : (r.trace.length ? r.state.cand : computeCands(board,r.ctx));
-  let place;
-  if(wantCell==null){ if(fp<0) return null; place=r.trace[fp]; }
-  else { place=singleAt(cand, wantCell, r.ctx); if(!place) return null; }
-  const enablers=[];
-  for(const d of preElims){
-    const rel = place.tech==='naked single'
-      ? d.elims.some(e=>e.cell===place.cell)
-      : d.elims.some(e=>e.value===place.value && place.unitCells.includes(e.cell));
-    if(rel) enablers.push(d);
-  }
-  return { place, enablers };
+/* A step: { text, band[], ev[], wrongRing[], cross[{cell,values}],
+   focus[{cell,values}], arrows[[from,to]], target, pulse, dim } */
+function applyStepVisuals(st){
+  boardEl.querySelectorAll('.dim,.band,.ev,.hintwrong').forEach(el=>el.classList.remove('dim','band','ev','hintwrong'));
+  boardEl.querySelectorAll('.cands').forEach(el=>el.remove());
+  const svg=$('hint-arrows'); if(svg){ svg.style.display='none'; svg.innerHTML=''; }
+  const touched=new Set([...(st.band||[]), ...(st.ev||[]), ...(st.wrongRing||[])]);
+  if(st.target!=null) touched.add(st.target);
+  (st.cross||[]).forEach(m=>touched.add(m.cell));
+  (st.focus||[]).forEach(m=>touched.add(m.cell));
+  (st.arrows||[]).forEach(pr=>{ touched.add(pr[0]); touched.add(pr[1]); });
+  if(st.dim!==false && touched.size)
+    for(let i=0;i<board.length;i++) if(!touched.has(i)) boardEl.children[i].classList.add('dim');
+  (st.band||[]).forEach(c=>{ const el=boardEl.children[c]; if(el) el.classList.add('band'); });
+  (st.ev||[]).forEach(c=>{ const el=boardEl.children[c]; if(el) el.classList.add('ev'); });
+  (st.wrongRing||[]).forEach(c=>{ const el=boardEl.children[c]; if(el) el.classList.add('hintwrong'); });
+  const items={};
+  (st.focus||[]).forEach(m=>{ (items[m.cell]=items[m.cell]||[]).push(...m.values.map(v=>({v,focus:true}))); });
+  (st.cross||[]).forEach(m=>{ (items[m.cell]=items[m.cell]||[]).push(...m.values.map(v=>({v,cross:true}))); });
+  for(const c in items) setMarks(+c, items[c]);
+  if(st.arrows && st.arrows.length) drawArrows(st.arrows);
+  if(st.target!=null) selectCell(st.target);
+  else if(selectedCell>=0) selectCell(-1);
+  if(st.pulse!=null) pulseTrayBtn(st.pulse);
 }
 
-function buildChainViews(chain){
-  const views=[];
-  for(const d of chain.enablers){
-    const spot=[...new Set([...(d.patternCells||[]), ...d.elims.map(e=>e.cell)])];
-    views.push({ html:cap(elimText(d)), spot, marks:stepMarks(d) });
-  }
-  const p=chain.place, some=chain.enablers.length>0;
-  let html;
-  if(p.tech==='naked single'){
-    html = some ? 'So now the glowing square can only be '+symTag(p.value)+' — tap '+symTag(p.value)+' to place it! ✨'
-                : 'The glowing square can only be '+symTag(p.value)+'! ✨';
-  } else {
-    html = some ? 'So now '+aSym(p.value)+' has only one home left in this '+p.unitKind+' — the glowing square. Tap '+symTag(p.value)+'! ✨'
-                : cap(aSym(p.value))+' can only go in the glowing square! ✨';
-  }
-  views.push({ html, spot:[p.cell], marks:[{cell:p.cell, items:[{v:p.value, focus:true}]}], select:p.cell, pulse:p.value });
-  return views;
+function renderHintStep(){
+  const st=hintStory[hintStep];
+  applyStepVisuals(st);
+  $('hint-text').innerHTML=st.text;
+  const total=hintStory.length;
+  $('hint-dots').innerHTML = total>1
+    ? hintStory.map((_,k)=>'<span class="hdot'+(k===hintStep?' on':'')+'"></span>').join('') : '';
+  $('hint-next').textContent = hintStep<total-1 ? 'Next ▸' : 'Got it! ✓';
+  const b=$('hint-bubble');
+  b.classList.add('show');
+  const bt=boardEl.getBoundingClientRect().top;
+  b.style.top=Math.max(8, bt-b.offsetHeight-14)+'px';
 }
-
-// Present a multi-step derivation, auto-advancing through the chain.
-let walkIdx=0;
-function walkChain(views){
-  walkIdx=0;
-  (function step(){
-    boardEl.querySelectorAll('.explain').forEach(el=>el.classList.remove('explain'));
-    boardEl.querySelectorAll('.cands').forEach(el=>el.remove());
-    const v=views[walkIdx];
-    v.spot.forEach(c=>{ const el=boardEl.children[c]; if(el) el.classList.add('explain'); });
-    (v.marks||[]).forEach(m=> setMarks(m.cell, m.items));
-    const prefix = views.length>1 ? 'Step '+(walkIdx+1)+'/'+views.length+': ' : '';
-    showBubble(prefix+v.html, 6e5);
-    if(v.select!=null) selectCell(v.select);
-    if(v.pulse!=null) pulseTrayBtn(v.pulse);
-    if(walkIdx<views.length-1) hintTimers.push(setTimeout(()=>{ walkIdx++; step(); }, 4200));
-  })();
+function showStory(steps){
+  hintStory=steps.filter(Boolean);
+  if(!hintStory.length){ hintStory=null; return; }
+  hintStep=0;
+  renderHintStep();
+}
+function hintNext(){
+  if(!hintStory){ clearHintFx(); return; }
+  sfx('tap');
+  if(hintStep<hintStory.length-1){ hintStep++; renderHintStep(); }
+  else clearHintFx();
 }
 
 function pulseTrayBtn(v){
@@ -1850,40 +1795,217 @@ function pulseTrayBtn(v){
   hintTimers.push(setTimeout(()=>b.classList.remove('hintpulse'),3300));
 }
 
-// Hints teach instead of solving: walk the logic, glow the proof, select the
-// spot, pulse the right symbol — the player still makes the move.
+/* ---------------- story builders ---------------- */
+
+// hidden single found on the live board: 2 steps
+function storyHidden(fs){
+  const v=fs.value, un=uname(fs.unitKind);
+  const empties=fs.unitCells.filter(p=>board[p]===0 && p!==fs.cell);
+  return [
+    { text:'This '+un+' still needs '+aSym(v)+' — but not in the crossed squares! '+
+           cap(aSym(v))+' already sees each one (follow the arrows).',
+      band:fs.unitCells,
+      cross:empties.map(p=>({cell:p, values:[v]})),
+      ev:fs.blocks.map(b=>b.byCell),
+      arrows:fs.blocks.map(b=>[b.byCell, b.cell]) },
+    { text:'So '+symTag(v)+' has just one home here — the golden square. Tap '+symTag(v)+'! ✨',
+      band:fs.unitCells, target:fs.cell, pulse:v,
+      focus:[{cell:fs.cell, values:[v]}] },
+  ];
+}
+// naked single found on the live board: 2 steps
+function storyNaked(fs){
+  const v=fs.value;
+  return [
+    { text:'Look at the golden square — almost every '+PIECE()+' around it is taken: '+
+           takenAround(fs.blockers)+'!',
+      ev:fs.blockers.map(b=>b.cell),
+      arrows:fs.blockers.map(b=>[b.cell, fs.cell]),
+      target:fs.cell },
+    { text:'Only '+symTag(v)+' is left for this square. Tap '+symTag(v)+'! ✨',
+      target:fs.cell, pulse:v,
+      focus:[{cell:fs.cell, values:[v]}] },
+  ];
+}
+function storySimple(fs){ return fs.tech==='naked' ? storyNaked(fs) : storyHidden(fs); }
+
+// one story step for an advanced elimination from the solver trace
+function elimStep(d){
+  const cross=groupElims(d.elims);
+  const st={ cross };
+  const v=d.value, vs=d.values?joinAnd(d.values.map(symTag)):null;
+  switch(d.tech){
+    case 'pointing':
+      st.text='In this box, '+aSym(v)+' fits only in the bright squares — and they line up! So '+
+        symTag(v)+' can\'t go anywhere else in that '+uname(d.unitKind)+' (crossed out).';
+      st.band=d.lineCells;
+      st.focus=d.patternCells.map(c=>({cell:c, values:[v]}));
+      st.arrows=cross.map(m=>[d.patternCells[0], m.cell]);
+      break;
+    case 'claiming':
+      st.text='In this '+uname(d.unitKind)+', '+aSym(v)+' fits only inside one box — so in that box, '+
+        symTag(v)+' can\'t sit anywhere else (crossed out).';
+      st.band=d.boxCells;
+      st.focus=d.patternCells.map(c=>({cell:c, values:[v]}));
+      st.arrows=cross.map(m=>[d.patternCells[0], m.cell]);
+      break;
+    case 'naked pair': case 'naked triple':
+      st.text='These bright squares are a team — together they lock up '+vs+'! No other square in this '+
+        uname(d.unitKind)+' can take those (crossed out).';
+      st.band=d.unitCells;
+      st.focus=d.patternCells.map(c=>({cell:c, values:d.values}));
+      break;
+    case 'hidden pair': case 'hidden triple':
+      st.text='In this '+uname(d.unitKind)+', '+vs+' fit only in the bright squares — so those squares can\'t be anything else (crossed out).';
+      st.band=d.unitCells;
+      st.focus=d.patternCells.map(c=>({cell:c, values:d.values}));
+      break;
+    case 'X-Wing': {
+      const across = d.unitKind==='row' ? 'columns' : 'rows';
+      st.text='A secret trick — the X-Wing! The only spots for '+symTag(v)+' in two '+
+        (d.unitKind==='row'?'rows':'columns')+' make a rectangle. However it lands, the corners use up '+
+        symTag(v)+' for both '+across+' — so cross it out everywhere else there!';
+      st.focus=d.patternCells.map(c=>({cell:c, values:[v]}));
+      st.arrows=[[d.patternCells[0], d.patternCells[3]],[d.patternCells[1], d.patternCells[2]]];
+      break; }
+    case 'XY-Wing': {
+      const pv=d.patternCells.map(c=>({cell:c, values:bitsOf(d.candBefore[c])}));
+      st.text='Tricky! These three squares hold little pairs. Whichever way the middle one goes, one of its friends becomes '+
+        symTag(v)+' — so the crossed square can never be '+symTag(v)+'!';
+      st.focus=pv;
+      st.arrows=[[d.patternCells[0], d.patternCells[1]],[d.patternCells[0], d.patternCells[2]]];
+      break; }
+    default:
+      st.text='We can cross out '+symTag(v||(d.values&&d.values[0])||'')+' here!';
+  }
+  return st;
+}
+
+// final placement step of a chain: physical blockers become evidence+arrows,
+// chain-eliminated cells keep their crossed digit from earlier steps
+function chainFinalStep(chain){
+  const p=chain.place, v=p.value;
+  if(p.tech==='hidden single'){
+    const un=uname(p.unitKind);
+    const empties=p.unitCells.filter(q=>board[q]===0 && q!==p.cell);
+    const ev=[], arrows=[], cross=[];
+    for(const q of empties){
+      const b=blockerFor(board,q,v);
+      if(b){ ev.push(b.cell); arrows.push([b.cell,q]); }
+      cross.push({cell:q, values:[v]});
+    }
+    return { text:'Now this '+un+' has just ONE home left for '+symTag(v)+' — the golden square. Tap '+symTag(v)+'! ✨',
+      band:p.unitCells, ev, arrows, cross, target:p.cell, pulse:v,
+      focus:[{cell:p.cell, values:[v]}] };
+  }
+  const blockers=[];
+  for(let u=1;u<=L.n;u++){ if(u===v) continue; const b=blockerFor(board,p.cell,u); if(b) blockers.push({value:u, cell:b.cell, kind:b.kind}); }
+  return { text:'After that, only '+symTag(v)+' can fit in the golden square. Tap '+symTag(v)+'! ✨',
+    ev:blockers.map(b=>b.cell), arrows:blockers.map(b=>[b.cell,p.cell]),
+    target:p.cell, pulse:v, focus:[{cell:p.cell, values:[v]}] };
+}
+
+function storyChain(chain){
+  const steps=[];
+  if(chain.enablers.length)
+    steps.push({ text:'No easy square right now… time for a detective trick! 🕵️', dim:false });
+  for(const d of chain.enablers) steps.push(elimStep(d));
+  steps.push(chainFinalStep(chain));
+  return steps;
+}
+
+// why a placed number is wrong
+function storyWrong(i){
+  const v=board[i], sym=symTag(v);
+  const partner=conflictPartner(i,v);
+  if(partner){
+    const un=uname(partner.kind);
+    return [
+      { text:'Uh oh — this '+un+' already has '+aSym(v)+' (the green one)!',
+        band:partner.cells, ev:[partner.j], wrongRing:[i], arrows:[[partner.j,i]] },
+      { text:'Two '+sym+'s can\'t share a '+un+'. Tap the wiggly '+sym+' to pop it out!',
+        band:partner.cells, ev:[partner.j], wrongRing:[i] },
+    ];
+  }
+  // clean all wrong guesses, then try to prove the square's true value
+  const g=board.slice();
+  for(let k=0;k<g.length;k++) if(puzzle[k]===0 && g[k]!==0 && g[k]!==solution[k]) g[k]=0;
+  const simple=findStep(g,i);
+  if(simple){
+    const steps=storySimple(simple);
+    const real=simple.value;
+    steps.unshift({ text:'Hmm, is '+sym+' right here? Let\'s play detective! 🕵️', wrongRing:[i], dim:false });
+    steps[steps.length-1]={ ...steps[steps.length-1], target:null,
+      text:'So this square is really '+symTag(real)+' — the '+sym+' can\'t stay! Tap the '+sym+' to take it out, then place '+symTag(real)+'.',
+      wrongRing:[i] };
+    return steps;
+  }
+  const chain=chainAt(g,i);
+  if(chain){
+    const steps=storyChain(chain);
+    const real=chain.place.value;
+    steps.unshift({ text:'Hmm, is '+sym+' right here? Let\'s play detective! 🕵️', wrongRing:[i], dim:false });
+    steps[steps.length-1]={ ...steps[steps.length-1], target:null,
+      text:'So this square is really '+symTag(real)+' — the '+sym+' can\'t stay! Tap the '+sym+' to take it out, then place '+symTag(real)+'.',
+      wrongRing:[i] };
+    return steps;
+  }
+  return [{ text:'This '+sym+' doesn\'t belong here. Rub it out with the eraser, then ask me again! 🧽',
+    wrongRing:[i], dim:false }];
+}
+
+// last-resort explanation for a square that even the engine can't force
+// (legacy saves): honest choices + the answer
+function storyChoices(g,i){
+  const cands=candList(g,i), W=solution[i];
+  const blockers=[];
+  for(let u=1;u<=L.n;u++){ if(cands.includes(u)) continue; const b=blockerFor(g,i,u); if(b) blockers.push({value:u, cell:b.cell, kind:b.kind}); }
+  const reason=takenAround(blockers);
+  return [
+    { text:'This one is a real puzzler! The golden square can be '+joinOr(cands.map(symTag))+
+        (reason?' — '+reason:'')+'.',
+      ev:blockers.map(b=>b.cell), arrows:blockers.map(b=>[b.cell,i]), target:i },
+    { text:'I\'ll let you in on the secret: here it\'s '+symTag(W)+'. Tap '+symTag(W)+'! ✨',
+      target:i, pulse:W, focus:[{cell:i, values:[W]}] },
+  ];
+}
+function storyChoicesNarrowest(g){
+  let best=-1, bestLen=99;
+  for(let i=0;i<g.length;i++){ if(g[i]!==0) continue; const l=candList(g,i).length; if(l<bestLen){ best=i; bestLen=l; if(l<=1) break; } }
+  return best>=0 ? storyChoices(g,best) : [];
+}
+
+/* ---------------- the hint button ---------------- */
+
 function onHint(){
   if(solvedFlag) return;
   clearHintFx();
   sfx('hint');
   mascotReact('think',1600);
-  // 1) a wrong number on the board? explain why it can't be there.
+  // 1) a wrong number on the board? explain why it can't stay.
   const wrong = board.findIndex((v,i)=> puzzle[i]===0 && v!==0 && v!==solution[i]);
-  if(wrong>=0){ explainWrong(wrong); return; }
-  // 2) a specific empty cell is selected? explain THAT one when it's obvious.
+  if(wrong>=0){ showStory(storyWrong(wrong)); return; }
+  // 2) a selected empty square? explain THAT one if logic can.
   if(selectedCell>=0 && board[selectedCell]===0){
-    const s=findStep(board, selectedCell);
-    if(s){ presentStep(s); return; }
-    const other=findStep(board);
-    if(other){
-      showBubble('This square isn\'t certain yet — let\'s do an easier one first! 🔍',6000);
-      hintTimers.push(setTimeout(()=>presentStep(other),1600));
-      return;
-    }
-    // no obvious single — try to derive this square through a chain, else the board's
-    const chain=chainAt(board, selectedCell) || chainAt(board, null);
-    if(chain){ walkChain(buildChainViews(chain)); return; }
-    explainCell(board, selectedCell);
-    return;
+    const i=selectedCell;
+    const s=findStep(board,i);
+    if(s){ showStory(storySimple(s)); return; }
+    const chain=chainAt(board,i);
+    if(chain){ showStory(storyChain(chain)); return; }
+    const any=findStep(board);
+    if(any){ showStory([{text:'That square isn\'t certain yet — let\'s do an easier one first! 🔍', dim:false}, ...storySimple(any)]); return; }
+    const chain2=chainAt(board,null);
+    if(chain2){ showStory([{text:'That square isn\'t certain yet — let\'s crack an easier one! 🔍', dim:false}, ...storyChain(chain2)]); return; }
+    showStory(storyChoices(board,i)); return;
   }
-  // 3) an obvious single anywhere on the board.
-  const step=findStep(board);
-  if(step){ presentStep(step); return; }
-  // 4) no obvious move — walk the advanced derivation chain (hard puzzles).
-  const chain=chainAt(board, null);
-  if(chain){ walkChain(buildChainViews(chain)); return; }
-  // 5) ultimate fallback (e.g. a legacy save the engine can't finish).
-  explainNarrowest(board);
+  // 3) an obvious single anywhere?
+  const s=findStep(board);
+  if(s){ showStory(storySimple(s)); return; }
+  // 4) no obvious move — walk the advanced derivation chain.
+  const chain=chainAt(board,null);
+  if(chain){ showStory(storyChain(chain)); return; }
+  // 5) ultimate fallback (legacy saves beyond the engine).
+  showStory(storyChoicesNarrowest(board));
 }
 
 /* ---------------- save / resume ---------------- */
@@ -2080,6 +2202,8 @@ $('style-classic').addEventListener('click',()=>setStyle('classic'));
 $('back-btn').addEventListener('click',()=>{ sfx('tap'); goMenu(); });
 $('menu-btn').addEventListener('click',()=>{ sfx('tap'); goMenu(); });
 $('hint-btn').addEventListener('click',onHint);
+$('hint-next').addEventListener('click',hintNext);
+$('hint-x').addEventListener('click',()=>{ sfx('tap'); clearHintFx(); });
 $('again-btn').addEventListener('click',()=>{ sfx('tap'); playAgain(); });
 $('secret-btn').addEventListener('click',()=>{ sfx('tap'); goLevel('classic',4); });
 
@@ -2119,7 +2243,11 @@ $('resume-new').innerHTML=ICONS.again+' New game';
 $('pstar').innerHTML=ICONS.star;
 $('mascot').innerHTML=mascotSvg('happy');
 
-window.addEventListener('resize',()=>{ if(!$('game').classList.contains('hidden')) { renderBoard(); } });
+window.addEventListener('resize',()=>{
+  if($('game').classList.contains('hidden')) return;
+  renderBoard();
+  if(hintActive()) renderHintStep();   // keep the walkthrough alive across rotation
+});
 window.addEventListener('hashchange', applyRoute);
 // block pinch zoom on iOS (double-tap zoom is disabled via touch-action:manipulation)
 document.addEventListener('gesturestart',e=>e.preventDefault());
