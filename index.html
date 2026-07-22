@@ -96,6 +96,19 @@
   .level-btn .stars { font-size:clamp(12px,3vw,16px); min-height:1.2em; letter-spacing:1px; }
   .l1{background:linear-gradient(#ffe98a,#ffd34d);} .l2{background:linear-gradient(#a8f0a2,#6fdd66);}
   .l3{background:linear-gradient(#a2d8f0,#66badd);} .l4{background:linear-gradient(#f0b5e6,#e07ad0);}
+  /* Legend: a special full-width golden banner, unlocked by beating Champion */
+  .legend-btn {
+    grid-column:1 / -1;
+    background:linear-gradient(120deg,#6a4bd4,#8b5cf6 55%,#b57bff);
+    animation:legendglow 2.4s ease-in-out infinite;
+  }
+  @keyframes legendglow {
+    0%,100%{ box-shadow:0 6px 0 rgba(0,0,0,.22), inset 0 2px 0 rgba(255,255,255,.3), 0 0 12px 1px #ffd34d55; }
+    50%{ box-shadow:0 6px 0 rgba(0,0,0,.22), inset 0 2px 0 rgba(255,255,255,.3), 0 0 24px 6px #ffd34daa; }
+  }
+  .legend-btn .name { color:#fff; text-shadow:0 2px 0 rgba(60,40,120,.5); }
+  .legend-btn .desc { color:#ffe6a8; }
+  .legend-btn .emoji { filter:drop-shadow(0 3px 4px rgba(0,0,0,.4)); }
 
   /* ---------- GAME ---------- */
   #game { justify-content:space-between; }
@@ -547,6 +560,9 @@
     <button class="level-btn l4" data-level="3">
       <span class="emoji" id="emoji3"></span><span class="name" id="name3"></span><span class="desc" id="desc3"></span><span class="stars" id="stars3"></span>
     </button>
+    <button class="level-btn legend-btn" id="level-legend" data-level="4" style="display:none">
+      <span class="emoji" id="emoji4"></span><span class="name" id="name4"></span><span class="desc" id="desc4"></span><span class="stars" id="stars4"></span>
+    </button>
   </div>
 </div>
 
@@ -653,7 +669,7 @@ const LEVELS = {
     { name:'Master',   emoji:'📘', desc:'9×9 · hard',       n:9, boxW:3, boxH:3, blanks:35 },
     { name:'Champion', emoji:'🏆', desc:'9×9 · expert',     n:9, boxW:3, boxH:3, blanks:48 },
     // hidden level — only reachable from the Champion win screen
-    { name:'Legend',   emoji:'👑', desc:'9×9 · secret',     n:9, boxW:3, boxH:3, blanks:58, hard:true },
+    { name:'Legend',   emoji:'👑', desc:'9×9 · legendary',  n:9, boxW:3, boxH:3, blanks:58, hard:true },
   ],
 };
 const SUBTITLES = {
@@ -1156,6 +1172,10 @@ function addStar(){
   return s[styleKey][levelIdx];
 }
 
+// Legend is hidden until the player beats Champion (or has already played it).
+function legendUnlocked(){ return localStorage.getItem('sudoku-legend')==='1' || (stars().classic[4]||0)>0; }
+function unlockLegend(){ localStorage.setItem('sudoku-legend','1'); }
+
 /* ---------------- rendering ---------------- */
 
 function renderMenu(){
@@ -1168,8 +1188,10 @@ function renderMenu(){
     $('emoji'+i).textContent = lv.emoji;
     $('name'+i).textContent=lv.name;
     $('desc'+i).textContent=lv.desc;
-    $('stars'+i).innerHTML=ICONS.star.repeat(s[styleKey][i]);
+    $('stars'+i).innerHTML=ICONS.star.repeat(s[styleKey][i]||0);
   });
+  // Legend shows only on the Numbers tab, and only once it's unlocked
+  $('level-legend').style.display = (styleKey==='classic' && legendUnlocked()) ? '' : 'none';
 }
 
 function layoutSizes(){
@@ -2191,8 +2213,10 @@ function onWin(){
     }, t*1000);
   }
   $('win-sub').textContent=earned>=5?'All 5 stars! You are a champion!':(L.name+' stars: '+earned+' of 5');
-  // beating Champion reveals the hidden Legend level
-  $('secret-btn').style.display=(styleKey==='classic' && levelIdx===3)?'':'none';
+  // beating Champion unlocks Legend — offered here and now on the menu
+  const beatChampion = styleKey==='classic' && levelIdx===3;
+  if(beatChampion) unlockLegend();
+  $('secret-btn').style.display = beatChampion ? '' : 'none';
   setTimeout(()=>$('win').classList.add('show'),700);
 }
 
