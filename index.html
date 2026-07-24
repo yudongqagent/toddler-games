@@ -369,6 +369,26 @@
   .cell.dim { opacity:.35; filter:saturate(.5); }
   .cell.band { background:#e3f1ff !important; box-shadow:inset 0 0 0 2px #8ec6ff; }
   .cell.ev { background:#d9f6bd !important; box-shadow:inset 0 0 0 2.5px #6cc24a; }
+  /* faint gold destination ring: "this is where the whole chain is heading" */
+  .cell.goal { box-shadow:inset 0 0 0 2px #ffcf4d; }
+  .cell.goal.dim { opacity:.6; }
+  /* compact census in the hint bubble: what the golden square still could be */
+  .leftstrip { display:flex; flex-wrap:wrap; gap:5px; justify-content:center; margin:11px 0 2px; }
+  .leftstrip .ls {
+    width:1.75em; height:1.75em; border-radius:8px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:.82em; font-weight:800; position:relative;
+  }
+  .leftstrip .ls.gone { color:#a79fce; background:#efecfa; }
+  .leftstrip .ls.chain { color:#ff5b6b; background:#ffe7ea; }
+  .leftstrip .ls.gone::after, .leftstrip .ls.chain::after {
+    content:''; position:absolute; left:14%; right:14%; top:50%; height:2.5px;
+    background:currentColor; transform:rotate(-13deg); border-radius:2px; opacity:.85;
+  }
+  .leftstrip .ls.keep {
+    color:#0d4d0c; background:linear-gradient(#ffe063,#ffce2c);
+    box-shadow:0 0 0 2px #ffc21d; transform:scale(1.12);
+  }
 
   /* ---------- SETTINGS (always-visible button + panel) ---------- */
   .fab {
@@ -1585,7 +1605,7 @@ function clearHintFx(){
   hintStory=null; hintStep=0;
   $('hint-bubble').classList.remove('show');
   const svg=$('hint-arrows'); if(svg){ svg.style.display='none'; svg.innerHTML=''; }
-  boardEl.querySelectorAll('.dim,.band,.ev,.explain,.hintwrong').forEach(el=>el.classList.remove('dim','band','ev','explain','hintwrong'));
+  boardEl.querySelectorAll('.dim,.band,.ev,.goal,.explain,.hintwrong').forEach(el=>el.classList.remove('dim','band','ev','goal','explain','hintwrong'));
   boardEl.querySelectorAll('.cands').forEach(el=>el.remove());
   trayEl.querySelectorAll('.hintpulse').forEach(el=>el.classList.remove('hintpulse'));
 }
@@ -1764,13 +1784,16 @@ function drawArrows(pairs){
 }
 
 /* A step: { text, band[], ev[], wrongRing[], cross[{cell,values}],
-   focus[{cell,values}], arrows[[from,to]], target, pulse, dim } */
+   focus[{cell,values}], arrows[[from,to]], target, goal, pulse, dim }
+   goal = the destination square of the whole chain, shown as a faint gold
+   ring on every intermediate beat so the through-line is always visible. */
 function applyStepVisuals(st){
-  boardEl.querySelectorAll('.dim,.band,.ev,.hintwrong').forEach(el=>el.classList.remove('dim','band','ev','hintwrong'));
+  boardEl.querySelectorAll('.dim,.band,.ev,.goal,.hintwrong').forEach(el=>el.classList.remove('dim','band','ev','goal','hintwrong'));
   boardEl.querySelectorAll('.cands').forEach(el=>el.remove());
   const svg=$('hint-arrows'); if(svg){ svg.style.display='none'; svg.innerHTML=''; }
   const touched=new Set([...(st.band||[]), ...(st.ev||[]), ...(st.wrongRing||[])]);
   if(st.target!=null) touched.add(st.target);
+  if(st.goal!=null) touched.add(st.goal);
   (st.cross||[]).forEach(m=>touched.add(m.cell));
   (st.focus||[]).forEach(m=>touched.add(m.cell));
   (st.arrows||[]).forEach(pr=>{ touched.add(pr[0]); touched.add(pr[1]); });
@@ -1778,6 +1801,7 @@ function applyStepVisuals(st){
     for(let i=0;i<board.length;i++) if(!touched.has(i)) boardEl.children[i].classList.add('dim');
   (st.band||[]).forEach(c=>{ const el=boardEl.children[c]; if(el) el.classList.add('band'); });
   (st.ev||[]).forEach(c=>{ const el=boardEl.children[c]; if(el) el.classList.add('ev'); });
+  if(st.goal!=null){ const el=boardEl.children[st.goal]; if(el) el.classList.add('goal'); }
   (st.wrongRing||[]).forEach(c=>{ const el=boardEl.children[c]; if(el) el.classList.add('hintwrong'); });
   const items={};
   (st.focus||[]).forEach(m=>{ (items[m.cell]=items[m.cell]||[]).push(...m.values.map(v=>({v,focus:true}))); });
@@ -1792,6 +1816,7 @@ function applyStepVisuals(st){
 function collectStepCells(st){
   const s=new Set([...(st.band||[]), ...(st.ev||[]), ...(st.wrongRing||[])]);
   if(st.target!=null) s.add(st.target);
+  if(st.goal!=null) s.add(st.goal);
   (st.cross||[]).forEach(m=>s.add(m.cell));
   (st.focus||[]).forEach(m=>s.add(m.cell));
   (st.arrows||[]).forEach(pr=>{ s.add(pr[0]); s.add(pr[1]); });
@@ -1875,61 +1900,126 @@ function singleStepFor(fs, gd, opts){
 }
 function storySimple(fs){ return [singleStepFor(fs, board)]; }
 
-// one story step for an advanced elimination from the solver trace
-function elimStep(d){
-  const cross=groupElims(d.elims);
-  const st={ cross };
-  const v=d.value, vs=d.values?joinAnd(d.values.map(symTag)):null;
+// bare symbol (no colour tag) for the compact "what's left" strip
+function symPlain(v){ return symbols[v-1]; }
+// emphasise a word inside the (purple) hint bubble
+function emph(s){ return '<b style="color:#e6512e">'+s+'</b>'; }
+// a row of digit chips: crossed-by-us (red), blocked-around (grey), survivor (gold)
+function leftStrip(keep, chainVals, goneVals){
+  const cs=new Set(chainVals), gs=new Set(goneVals);
+  let chips='';
+  for(let u=1;u<=L.n;u++){
+    const cls = u===keep ? 'keep' : cs.has(u) ? 'chain' : gs.has(u) ? 'gone' : 'gone';
+    chips+='<span class="ls '+cls+'">'+symPlain(u)+'</span>';
+  }
+  return '<div class="leftstrip">'+chips+'</div>';
+}
+const rowCellsOf=r=>[...Array(L.n).keys()].map(c=>r*L.n+c);
+const colCellsOf=c=>[...Array(L.n).keys()].map(r=>r*L.n+c);
+
+/* Every advanced elimination becomes ONE OR MORE beats. Mild tricks
+   (pointing / claiming) stay a single beat; pairs get two; the wings get a
+   walked case-split so no single sentence has to carry the whole deduction. */
+function elimBeats(d){
   switch(d.tech){
-    case 'pointing':
-      st.text='In this box, '+aSym(v)+' fits only in the bright squares — and they line up! So '+
-        symTag(v)+' can\'t go anywhere else in that '+uname(d.unitKind)+' (crossed out).';
-      st.band=d.lineCells;
-      st.focus=d.patternCells.map(c=>({cell:c, values:[v]}));
-      st.arrows=cross.map(m=>[d.patternCells[0], m.cell]);
-      break;
-    case 'claiming':
-      st.text='In this '+uname(d.unitKind)+', '+aSym(v)+' fits only inside one box — so in that box, '+
-        symTag(v)+' can\'t sit anywhere else (crossed out).';
-      st.band=d.boxCells;
-      st.focus=d.patternCells.map(c=>({cell:c, values:[v]}));
-      st.arrows=cross.map(m=>[d.patternCells[0], m.cell]);
-      break;
-    case 'naked pair': case 'naked triple':
-      st.text='These bright squares are a team — together they lock up '+vs+'! No other square in this '+
-        uname(d.unitKind)+' can take those (crossed out).';
-      st.band=d.unitCells;
-      st.focus=d.patternCells.map(c=>({cell:c, values:d.values}));
-      break;
-    case 'hidden pair': case 'hidden triple':
-      st.text='In this '+uname(d.unitKind)+', '+vs+' fit only in the bright squares — so those squares can\'t be anything else (crossed out).';
-      st.band=d.unitCells;
-      st.focus=d.patternCells.map(c=>({cell:c, values:d.values}));
-      break;
-    case 'X-Wing': {
-      const across = d.unitKind==='row' ? 'columns' : 'rows';
-      st.text='A secret trick — the X-Wing! The only spots for '+symTag(v)+' in two '+
-        (d.unitKind==='row'?'rows':'columns')+' make a rectangle. However it lands, the corners use up '+
-        symTag(v)+' for both '+across+' — so cross it out everywhere else there!';
-      st.focus=d.patternCells.map(c=>({cell:c, values:[v]}));
-      st.arrows=[[d.patternCells[0], d.patternCells[3]],[d.patternCells[1], d.patternCells[2]]];
-      break; }
-    case 'XY-Wing': {
-      const pv=d.patternCells.map(c=>({cell:c, values:bitsOf(d.candBefore[c])}));
-      st.text='Tricky! These three squares hold little pairs. Whichever way the middle one goes, one of its friends becomes '+
-        symTag(v)+' — so the crossed square can never be '+symTag(v)+'!';
-      st.focus=pv;
-      st.arrows=[[d.patternCells[0], d.patternCells[1]],[d.patternCells[0], d.patternCells[2]]];
-      break; }
-    default:
-      st.text='We can cross out '+symTag(v||(d.values&&d.values[0])||'')+' here!';
+    case 'XY-Wing':  return xyWingBeats(d);
+    case 'X-Wing':   return xWingBeats(d);
+    case 'naked pair': case 'naked triple':  return pairBeats(d, false);
+    case 'hidden pair': case 'hidden triple': return pairBeats(d, true);
+    default:         return [pointClaimStep(d)];
+  }
+}
+
+// pointing / claiming — a single, candidate-showing beat
+function pointClaimStep(d){
+  const cross=groupElims(d.elims);
+  const v=d.value;
+  const st={ cross, focus:d.patternCells.map(c=>({cell:c, values:[v]})),
+    arrows:cross.map(m=>[d.patternCells[0], m.cell]) };
+  if(d.tech==='claiming'){
+    st.text='In this '+uname(d.unitKind)+', '+aSym(v)+' can only go inside one box — so in that box, '+
+      symTag(v)+' can\'t sit anywhere else (crossed out).';
+    st.band=d.boxCells;
+  } else { // pointing (and any fallback)
+    st.text='In this box, '+aSym(v)+' can only go in the bright squares — and they line up! So '+
+      symTag(v)+' is used up for that '+uname(d.unitKind)+' (crossed out).';
+    st.band=d.lineCells;
   }
   return st;
 }
 
-// Final placement step of a chain. Accounts for EVERY excluded value so the
-// conclusion connects to the steps before it: values the chain crossed out
-// are named and shown crossed in place; the rest get evidence arrows.
+// naked / hidden pair (or triple) — split into premise + conclusion
+function pairBeats(d, hidden){
+  const vsAnd=joinAnd(d.values.map(symTag));
+  const vsOr=joinOr(d.values.map(symTag));
+  const un=uname(d.unitKind);
+  const focus=d.patternCells.map(c=>({cell:c, values:d.values}));
+  const cross=groupElims(d.elims);
+  const those=d.values.length>2?'those three':'those two';
+  if(hidden){
+    return [
+      { text:'In this '+un+', '+vsAnd+' can only go in the bright squares — nowhere else fits them.',
+        band:d.unitCells, focus },
+      { text:'So '+those+' squares must each be '+vsOr+' — every other number is crossed off them.',
+        band:d.unitCells, focus, cross }
+    ];
+  }
+  return [
+    { text:'Each bright square can only be '+vsOr+' — no other number fits either one.',
+      band:d.unitCells, focus },
+    { text:'Between them they use up '+vsAnd+', so nothing else in this '+un+' can be '+vsOr+' (crossed out).',
+      band:d.unitCells, focus, cross }
+  ];
+}
+
+// X-Wing — rectangle, then the either/or, then the sweep
+function xWingBeats(d){
+  const v=d.value, pc=d.patternCells;
+  const rowMode=d.unitKind==='row';
+  const rset=[...new Set(pc.map(c=>Math.floor(c/L.n)))].sort((a,b)=>a-b);
+  const cset=[...new Set(pc.map(c=>c%L.n))].sort((a,b)=>a-b);
+  const baseIdx=rowMode?rset:cset, crossIdx=rowMode?cset:rset;
+  const baseName=rowMode?'rows':'columns', crossName=rowMode?'columns':'rows';
+  const baseCells=baseIdx.flatMap(i=>rowMode?rowCellsOf(i):colCellsOf(i));
+  const crossCells=crossIdx.flatMap(i=>rowMode?colCellsOf(i):rowCellsOf(i));
+  const baseNums=joinAnd(baseIdx.map(i=>String(i+1)));
+  const crossNums=joinAnd(crossIdx.map(i=>String(i+1)));
+  const focus=pc.map(c=>({cell:c, values:[v]}));
+  const diag=[[pc[0],pc[3]],[pc[1],pc[2]]];
+  const cross=groupElims(d.elims);
+  return [
+    { text:'A rectangle trick! In '+baseName+' '+baseNums+', '+symTag(v)+' fits in only two spots each — and they line up into these four corners.',
+      band:baseCells, focus, arrows:diag },
+    { text:symTag(v)+' has to take one pair of opposite corners or the other. '+emph('Either way')+', it lands once in each of '+crossName+' '+crossNums+'.',
+      focus, arrows:diag },
+    { text:'So '+crossName+' '+crossNums+' have used up their '+symTag(v)+' here — cross '+symTag(v)+' out of every other square in them.',
+      band:crossCells, focus, cross }
+  ];
+}
+
+// XY-Wing — meet the cast, walk each case, then conclude
+function xyWingBeats(d){
+  const [piv,w1,w2]=d.patternCells, Z=d.value;
+  const pm=d.candBefore[piv], m1=d.candBefore[w1], m2=d.candBefore[w2];
+  const s1=bitsOf(m1&pm)[0], s2=bitsOf(m2&pm)[0];   // value each wing shares with the hinge
+  const cross=groupElims(d.elims);
+  return [
+    { text:'Three special squares, each with just two choices. Watch the '+emph('hinge')+' — where the arrows begin: it is '+symTag(s1)+' or '+symTag(s2)+'.',
+      focus:[{cell:piv,values:bitsOf(pm)},{cell:w1,values:bitsOf(m1)},{cell:w2,values:bitsOf(m2)}],
+      arrows:[[piv,w1],[piv,w2]] },
+    { text:'Say the hinge is '+symTag(s1)+'. Then its partner here can\'t be '+symTag(s1)+' too — so that partner must be '+symTag(Z)+'.',
+      focus:[{cell:piv,values:[s1]},{cell:w1,values:[Z]}], arrows:[[piv,w1]] },
+    { text:'But if the hinge is '+symTag(s2)+' instead, then this other partner must be '+symTag(Z)+'.',
+      focus:[{cell:piv,values:[s2]},{cell:w2,values:[Z]}], arrows:[[piv,w2]] },
+    { text:emph('Either way')+', one partner ends up '+symTag(Z)+'! So any square that sees '+emph('both')+' partners can never be '+symTag(Z)+' (crossed out).',
+      focus:[{cell:w1,values:[Z]},{cell:w2,values:[Z]}], cross,
+      arrows:cross.flatMap(m=>[[w1,m.cell],[w2,m.cell]]) }
+  ];
+}
+
+// Final placement step of a chain. For a naked single the census is shown as a
+// compact "what's left" strip (red = we crossed it out, grey = already around
+// it, gold = the survivor) instead of one long run-on sentence.
 function chainFinalStep(chain, gd, opts){
   gd=gd||board; opts=opts||{};
   const p=chain.place, v=p.value;
@@ -1953,22 +2043,29 @@ function chainFinalStep(chain, gd, opts){
       band:p.unitCells, ev, arrows, cross };
   } else {
     const elimVals=[...new Set(chain.enablers.flatMap(d=>d.elims.filter(e=>e.cell===p.cell).map(e=>e.value)))];
-    const blockers=[];
-    for(let u=1;u<=L.n;u++){ if(u===v||elimVals.includes(u)) continue; const b=blockerFor(gd,p.cell,u); if(b) blockers.push({value:u, cell:b.cell, kind:b.kind}); }
-    const parts=[];
-    if(elimVals.length) parts.push('we just crossed out '+joinAnd(elimVals.map(symTag)));
-    if(blockers.length) parts.push(takenAround(blockers));
-    st={ text:'Look at '+spot+' now: '+joinAnd(parts)+' — only '+symTag(v)+' is left!'+ending,
-      ev:blockers.map(b=>b.cell), arrows:blockers.map(b=>[b.cell,p.cell]) };
-    if(!opts.ring && elimVals.length) st.cross=[{cell:p.cell, values:elimVals}];
+    const goneVals=[], blockCells=[];
+    for(let u=1;u<=L.n;u++){ if(u===v||elimVals.includes(u)) continue; const b=blockerFor(gd,p.cell,u); if(b){ goneVals.push(u); blockCells.push(b.cell); } }
+    const lead = elimVals.length
+      ? 'Every other number is spoken for — the ones we crossed out ('+emph('red')+') and the ones already around it (grey).'
+      : 'Every other number is already taken around it.';
+    st={ text:'Look at '+spot+' now. '+lead+' Only '+symTag(v)+' is left!'+leftStrip(v, elimVals, goneVals)+ending,
+      ev:blockCells, arrows:blockCells.map(c=>[c,p.cell]) };
+    // the strip already lists the crossed-out values, so keep the answer square
+    // clean — just the surviving number, no cramped in-cell strikethroughs
   }
   if(opts.ring) st.wrongRing=[p.cell];
   else { st.target=p.cell; st.pulse=v; st.focus=[{cell:p.cell, values:[v]}]; }
   return st;
 }
 
+// Flatten enabler beats + the final placement. Every non-placement beat carries
+// a faint gold "goal" ring on the destination square, so the player always sees
+// where the whole chain is heading (the through-line).
 function storyChain(chain, gd, finalOpts){
-  return [...chain.enablers.map(elimStep), chainFinalStep(chain, gd, finalOpts)];
+  const steps=[...chain.enablers.flatMap(elimBeats), chainFinalStep(chain, gd, finalOpts)];
+  const wantGoal=!(finalOpts&&finalOpts.ring);
+  if(wantGoal) for(const s of steps){ if(s.target==null && s.goal==null) s.goal=chain.place.cell; }
+  return steps;
 }
 
 // why a placed number is wrong
