@@ -996,7 +996,7 @@ function tPointing(s,ctx){
       if(!lineCells) continue;
       const boxSet=new Set(box), elims=[];
       for(const p of lineCells) if(!boxSet.has(p) && s.grid[p]===0 && (s.cand[p]&b)) elims.push({cell:p,value:v});
-      if(elims.length) return {tier:2,kind:'elim',tech:'pointing',value:v,elims,patternCells:cells,unitKind:lineKind,lineCells};
+      if(elims.length) return {tier:2,kind:'elim',tech:'pointing',value:v,elims,patternCells:cells,unitKind:lineKind,lineCells,boxCells:box};
     }
   }
   return null;
@@ -1012,7 +1012,7 @@ function tClaiming(s,ctx){
       if(bs.size!==1) continue;
       const box=ctx.boxes[[...bs][0]], lineSet=new Set(line.cells), elims=[];
       for(const p of box) if(!lineSet.has(p) && s.grid[p]===0 && (s.cand[p]&b)) elims.push({cell:p,value:v});
-      if(elims.length) return {tier:2,kind:'elim',tech:'claiming',value:v,elims,patternCells:cells,unitKind:line.kind,boxCells:box};
+      if(elims.length) return {tier:2,kind:'elim',tech:'claiming',value:v,elims,patternCells:cells,unitKind:line.kind,boxCells:box,lineCells:line.cells};
     }
   }
   return null;
@@ -1926,26 +1926,56 @@ function elimBeats(d){
     case 'X-Wing':   return xWingBeats(d);
     case 'naked pair': case 'naked triple':  return pairBeats(d, false);
     case 'hidden pair': case 'hidden triple': return pairBeats(d, true);
-    default:         return [pointClaimStep(d)];
+    default:         return pointClaimBeats(d);
   }
 }
 
-// pointing / claiming — a single, candidate-showing beat
-function pointClaimStep(d){
-  const cross=groupElims(d.elims);
-  const v=d.value;
-  const st={ cross, focus:d.patternCells.map(c=>({cell:c, values:[v]})),
-    arrows:cross.map(m=>[d.patternCells[0], m.cell]) };
-  if(d.tech==='claiming'){
-    st.text='In this '+uname(d.unitKind)+', '+aSym(v)+' can only go inside one box — so in that box, '+
-      symTag(v)+' can\'t sit anywhere else (crossed out).';
-    st.band=d.boxCells;
-  } else { // pointing (and any fallback)
-    st.text='In this box, '+aSym(v)+' can only go in the bright squares — and they line up! So '+
-      symTag(v)+' is used up for that '+uname(d.unitKind)+' (crossed out).';
-    st.band=d.lineCells;
+const NUMWORD=['','one','two','three','four','five','six','seven','eight','nine'];
+function countWord(k){ return NUMWORD[k]||String(k); }
+
+/* pointing / claiming — two beats, because it is a two-part deduction and
+   cramming it into one made the picture lie: the old step banded the *swept*
+   unit only, so the unit the sentence called "this box" was never drawn and
+   its other empty squares stayed dim and unexplained ("why not there?").
+
+   Both techniques are the same shape with the roles swapped:
+     pointing — the digit is trapped inside a BOX,  so a LINE gets swept
+     claiming — the digit is trapped inside a LINE, so a BOX gets swept
+   Beat 1 shows the home unit and proves the digit is trapped there (every
+   other empty square of it gets a crossed digit, with an arrow to the filled
+   peer that rules it out). Beat 2 shows the swept unit and hands out the
+   eliminations. No unit is ever drawn without the reason it is drawn. */
+function pointClaimBeats(d){
+  const v=d.value, gd=board, pointing=d.tech!=='claiming';
+  const homeCells=pointing?d.boxCells:d.lineCells;      // where v is trapped
+  const homeName =pointing?'box':uname(d.unitKind);
+  const swept    =pointing?d.lineCells:d.boxCells;      // where v gets crossed out
+  const sweptName=pointing?uname(d.unitKind):'box';
+  const focus=d.patternCells.map(c=>({cell:c, values:[v]}));
+  const spots=countWord(d.patternCells.length);
+
+  // Beat 1 — the digit has nowhere else to go inside its home unit.
+  const pat=new Set(d.patternCells);
+  const ev=[], arrows=[], cross=[]; let phys=0, chained=0;
+  for(const q of homeCells){
+    if(gd[q]!==0 || pat.has(q)) continue;
+    const b=blockerFor(gd,q,v);
+    if(b){ ev.push(b.cell); arrows.push([b.cell,q]); phys++; } else chained++;
+    cross.push({cell:q, values:[v]});
   }
-  return st;
+  const why = !cross.length ? ''
+    : chained&&phys ? ' — the other empty squares can\'t take it: some already see '+aSym(v)+' (arrows), the rest we ruled out'
+    : chained ? ' — every other empty square here is already ruled out for '+symTag(v)
+    : ' — every other empty square here already sees '+aSym(v)+' (arrows)';
+  const beat1={ text:'In this '+homeName+', '+aSym(v)+' can only go in the '+spots+' bright squares'+why+'.',
+    band:homeCells, focus, cross, ev, arrows };
+
+  // Beat 2 — they all share one line (or one box), so that unit is spoken for.
+  const all=d.patternCells.length===2 ? 'Both' : 'All '+spots;
+  const beat2={ text:all+' bright squares sit in the same '+sweptName+'! So this '+sweptName+'’s '+
+      symTag(v)+' has to be one of them — every other square in it can’t be '+symTag(v)+' (crossed out).',
+    band:swept, focus, cross:groupElims(d.elims) };
+  return [beat1, beat2];
 }
 
 // naked / hidden pair (or triple) — split into premise + conclusion
