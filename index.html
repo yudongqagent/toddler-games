@@ -1692,29 +1692,108 @@ function singleAt(cand, i, ctx){
   return null;
 }
 
+/* Which candidates a deduction's premise assumes are ALREADY gone — as
+   {cell,value} pairs. A technique only works because certain squares can no
+   longer take certain numbers; if one of those was ruled out by an earlier
+   trick rather than by a number the player can see on the board, that earlier
+   trick has to be told too, or the hint asserts something out of thin air
+   ("every other empty square here is already ruled out for 7" — says who?). */
+const CHAIN_MAX=6;   // keep even a Legend walkthrough finite
+function premiseNeeds(d, g){
+  const out=[], n=L.n;
+  const add=(cell,value)=>{ if(g[cell]===0) out.push({cell,value}); };
+  const pat=new Set(d.patternCells||[]);
+  switch(d.tech){
+    // v fits nowhere else in the home unit
+    case 'pointing':
+      for(const p of d.boxCells) if(!pat.has(p)) add(p, d.value);
+      break;
+    case 'claiming':
+      for(const p of d.lineCells) if(!pat.has(p)) add(p, d.value);
+      break;
+    // each pattern cell holds ONLY the pair's/triple's values
+    case 'naked pair': case 'naked triple':
+      for(const p of d.patternCells)
+        for(let v=1;v<=n;v++) if(!d.values.includes(v)) add(p, v);
+      break;
+    // the pair's/triple's values appear nowhere else in the unit
+    case 'hidden pair': case 'hidden triple':
+      for(const p of d.unitCells) if(!pat.has(p)) for(const v of d.values) add(p, v);
+      break;
+    // in each base line, v sits in only the two pattern spots
+    case 'X-Wing': {
+      const rowMode=d.unitKind==='row';
+      const base=[...new Set(d.patternCells.map(c=>rowMode?Math.floor(c/n):c%n))];
+      for(const i of base)
+        for(const p of (rowMode?rowCellsOf(i):colCellsOf(i))) if(!pat.has(p)) add(p, d.value);
+      break;
+    }
+    // each of the three cells is down to exactly two choices
+    case 'XY-Wing':
+      for(const p of d.patternCells){
+        const m=d.candBefore[p];
+        for(let v=1;v<=n;v++) if(!(m&(1<<(v-1)))) add(p, v);
+      }
+      break;
+  }
+  return out;
+}
+
 // The derivation of the next placement (wantCell=null) or of a specific
 // square, as { place, enablers[], cand } — enablers are the advanced
-// eliminations (from the solver trace) that unlock the placement.
+// eliminations (from the solver trace) that unlock the placement, closed
+// transitively so every crossed-out number in the story has a reason on
+// screen: either a number the player can see, or an earlier beat.
 function chainAt(g, wantCell){
   const r=solve(g,L);
   const fp=r.trace.findIndex(d=>d.kind==='place');
   const preElims=(fp<0?r.trace:r.trace.slice(0,fp)).filter(d=>d.kind==='elim');
   const cand = fp>=0 ? r.trace[fp].candBefore : (r.trace.length ? r.state.cand : computeCands(g,r.ctx));
-  let place;
-  if(wantCell==null){ if(fp<0) return null; place=r.trace[fp]; }
-  else { place=singleAt(cand, wantCell, r.ctx); if(!place) return null; }
-  if(place.tech==='naked single' && !place.unitCells){
-    // give naked singles their units too (for banding)
-    place.unitCells=null;
+  const build=place=>{
+    if(place.tech==='naked single' && !place.unitCells){
+      // give naked singles their units too (for banding)
+      place.unitCells=null;
+    }
+    const enablers=[], have=new Set();
+    const push=d=>{ if(!have.has(d)){ have.add(d); enablers.push(d); } };
+    for(const d of preElims){
+      const rel = place.tech==='naked single'
+        ? d.elims.some(e=>e.cell===place.cell)
+        : d.elims.some(e=>e.value===place.value && place.unitCells.includes(e.cell));
+      if(rel) push(d);
+    }
+    // Pull in whatever justifies each enabler's premise (and then theirs, ...).
+    // A premise candidate blocked by a visible number needs no beat — the hint
+    // draws an arrow to it. Anything else must come from an earlier elimination.
+    for(let i=0;i<enablers.length && enablers.length<CHAIN_MAX;i++){
+      for(const need of premiseNeeds(enablers[i], g)){
+        if(blockerFor(g, need.cell, need.value)) continue;
+        const src=preElims.find(e=>e.elims.some(x=>x.cell===need.cell && x.value===need.value));
+        if(src) push(src);
+      }
+    }
+    enablers.sort((a,b)=>preElims.indexOf(a)-preElims.indexOf(b));
+    return { place, enablers, cand };
+  };
+  if(wantCell!=null){
+    const place=singleAt(cand, wantCell, r.ctx);
+    return place ? build(place) : null;
   }
-  const enablers=[];
-  for(const d of preElims){
-    const rel = place.tech==='naked single'
-      ? d.elims.some(e=>e.cell===place.cell)
-      : d.elims.some(e=>e.value===place.value && place.unitCells.includes(e.cell));
-    if(rel) enablers.push(d);
+  if(fp<0) return null;
+  // Once the eliminations are in, several squares are usually crackable — and
+  // now that a chain carries its own justifications it can get long. Walk the
+  // one with the shortest honest derivation, so the child taps Next as few
+  // times as possible for the same amount of truth.
+  let best=null;
+  for(let i=0;i<g.length;i++){
+    if(g[i]!==0) continue;
+    const p=singleAt(cand, i, r.ctx);
+    if(!p) continue;
+    const c=build(p);
+    if(!best || c.enablers.length<best.enablers.length) best=c;
+    if(best.enablers.length<=1) break;
   }
-  return { place, enablers, cand };
+  return best || build(r.trace[fp]);
 }
 
 /* ---------------- words ---------------- */
@@ -1964,8 +2043,8 @@ function pointClaimBeats(d){
     cross.push({cell:q, values:[v]});
   }
   const why = !cross.length ? ''
-    : chained&&phys ? ' — the other empty squares can\'t take it: some already see '+aSym(v)+' (arrows), the rest we ruled out'
-    : chained ? ' — every other empty square here is already ruled out for '+symTag(v)
+    : chained&&phys ? ' — the rest already see '+aSym(v)+' (arrows) or we crossed '+symTag(v)+' out of them just before'
+    : chained ? ' — we crossed '+symTag(v)+' out of the others just before'
     : ' — every other empty square here already sees '+aSym(v)+' (arrows)';
   const beat1={ text:'In this '+homeName+', '+aSym(v)+' can only go in the '+spots+' bright squares'+why+'.',
     band:homeCells, focus, cross, ev, arrows };
