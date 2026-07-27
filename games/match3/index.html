@@ -71,6 +71,7 @@
   .level-btn .stars { font-size:clamp(12px,3vw,16px); min-height:1.3em; letter-spacing:1px; }
   .l1{background:linear-gradient(#ffd9a8,#ffb35c);} .l2{background:linear-gradient(#fff0a0,#ffd93d);}
   .l3{background:linear-gradient(#b8f0b0,#72dd68);} .l4{background:linear-gradient(#c9c2ff,#9d8bff);}
+  .l5{background:linear-gradient(#a8ead8,#45c5a4);} .l6{background:linear-gradient(#ffc6da,#ff8bb0);}
   .free-btn {
     grid-column:1 / -1;
     background:linear-gradient(100deg,#ff7a8a,#ffb347 35%,#7ddf8a 70%,#6bb8ff);
@@ -177,28 +178,36 @@
     position:relative; width:100%; height:100%;
     transition:transform .15s ease;
   }
+  /* One glossy sweet for every fruit. There used to be a different geometric
+     backdrop per kind as a colour-blind fallback, but the fruit emoji is
+     already a distinct silhouette — the polygons were a redundant third
+     channel that made the board look busy. Gloss and depth instead. */
   .tile .shape {
     position:absolute; inset:0;
-    box-shadow:inset 0 calc(var(--cell)*-.06) 0 rgba(0,0,0,.16), inset 0 calc(var(--cell)*.05) 0 rgba(255,255,255,.5);
+    border-radius:30%;
+    box-shadow:
+      inset 0 calc(var(--cell)*.07) 0 rgba(255,255,255,.28),
+      inset 0 calc(var(--cell)*-.09) 0 rgba(0,0,0,.22),
+      inset 0 0 0 calc(var(--cell)*.022) rgba(255,255,255,.38),
+      0 calc(var(--cell)*.045) calc(var(--cell)*.08) rgba(90,40,80,.26);
+  }
+  /* the specular blob that sells it as something shiny you'd want to eat */
+  .tile .shape::after {
+    content:''; position:absolute; left:13%; top:7%; width:46%; height:31%;
+    border-radius:50%;
+    background:linear-gradient(165deg, rgba(255,255,255,.82), rgba(255,255,255,0) 72%);
+    pointer-events:none;
   }
   .tile .face {
     position:absolute; inset:0; display:grid; place-items:center;
-    font-size:calc(var(--cell) * .46);
-    filter:drop-shadow(0 2px 2px rgba(0,0,0,.22));
+    font-size:calc(var(--cell) * .56);
+    filter:drop-shadow(0 calc(var(--cell)*.022) calc(var(--cell)*.028) rgba(60,20,50,.38));
     pointer-events:none;
   }
   .tile .crown {
     position:absolute; inset:0; display:none; place-items:center;
     pointer-events:none;
   }
-
-  /* shape coding — meaning never rides on colour alone */
-  .sh-circle  { border-radius:50%; }
-  .sh-square  { border-radius:28%; }
-  .sh-hex     { clip-path:polygon(50% 1%, 94% 26%, 94% 74%, 50% 99%, 6% 74%, 6% 26%); }
-  .sh-diamond { clip-path:polygon(50% 1%, 99% 50%, 50% 99%, 1% 50%); }
-  .sh-petal   { border-radius:52% 14% 52% 14%; }
-  .sh-star    { clip-path:polygon(50% 0%, 62% 34%, 98% 35%, 69% 57%, 80% 92%, 50% 71%, 20% 92%, 31% 57%, 2% 35%, 38% 34%); }
 
   .tile.sel .inner { transform:scale(1.12); animation:wiggle .5s ease-in-out infinite; }
   @keyframes wiggle { 0%,100%{rotate:-4deg} 50%{rotate:4deg} }
@@ -217,17 +226,141 @@
   .tile.born .inner { animation:born .3s cubic-bezier(.3,1.5,.5,1); }
   @keyframes born { 0%{transform:scale(.4); opacity:.4} 100%{transform:scale(1); opacity:1} }
 
-  /* boosters */
-  .tile.sp1 .crown { display:grid; font-size:calc(var(--cell)*.34); animation:spin 3s linear infinite; }
+  /* ---------------- boosters ----------------
+     A booster has to answer three questions at a glance: what am I, what will
+     I clear, and how do I go off. The star wears four arrows pointing at the
+     four directions it blasts (they pump outward, so the intent reads even
+     without words) and keeps its fruit visible in the middle so it can still
+     be matched normally. */
   @keyframes spin { to{rotate:360deg} }
-  .tile.sp1 .shape { box-shadow:inset 0 0 0 calc(var(--cell)*.05) #fff8c4, inset 0 calc(var(--cell)*-.06) 0 rgba(0,0,0,.16), 0 0 calc(var(--cell)*.14) #ffd94daa; }
-  .tile.sp1 .face { font-size:calc(var(--cell)*.32); opacity:.85; transform:translateY(calc(var(--cell)*.16)); }
+
+  .tile.sp1 .crown { display:block; }
+  .tile.sp1 .crown i {
+    position:absolute; width:24%; height:24%;
+    background:#fff;
+    clip-path:polygon(50% 0%, 100% 100%, 0% 100%);
+    filter:drop-shadow(0 0 calc(var(--cell)*.05) #ffb703);
+    animation:arrowPump 1.15s ease-in-out infinite;
+  }
+  .tile.sp1 .crown i:nth-child(1){ top:1%;  left:38%; --ax:0px; --ay:calc(var(--cell)*-.07); }
+  .tile.sp1 .crown i:nth-child(2){ bottom:1%; left:38%; rotate:180deg; --ax:0px; --ay:calc(var(--cell)*.07); }
+  .tile.sp1 .crown i:nth-child(3){ left:1%;  top:38%; rotate:-90deg; --ax:calc(var(--cell)*-.07); --ay:0px; }
+  .tile.sp1 .crown i:nth-child(4){ right:1%; top:38%; rotate:90deg;  --ax:calc(var(--cell)*.07);  --ay:0px; }
+  @keyframes arrowPump {
+    0%,100% { translate:0 0; opacity:.9; }
+    50%     { translate:var(--ax) var(--ay); opacity:1; }
+  }
+  .tile.sp1 .shape {
+    box-shadow:inset 0 0 0 calc(var(--cell)*.05) #fff8c4,
+               inset 0 calc(var(--cell)*-.06) 0 rgba(0,0,0,.16),
+               0 0 calc(var(--cell)*.16) #ffd94d;
+    animation:starGlow 1.15s ease-in-out infinite;
+  }
+  @keyframes starGlow {
+    0%,100% { filter:brightness(1); }
+    50%     { filter:brightness(1.18); }
+  }
+  .tile.sp1 .face { font-size:calc(var(--cell)*.33); }
+
   .tile.sp2 .shape {
-    background:conic-gradient(#ff6b6b,#ffd93d,#6bd97a,#4ab4ff,#a56bff,#ff6b6b) !important;
-    border-radius:50%; clip-path:none;
+    background:conic-gradient(#ff3b5c,#ffcc00,#28d76a,#00a8ff,#8b4ae8,#ff3b5c) !important;
+    border-radius:50%;
     animation:spin 4s linear infinite;
+    box-shadow:inset 0 0 0 calc(var(--cell)*.035) rgba(255,255,255,.9),
+               inset 0 calc(var(--cell)*-.07) calc(var(--cell)*.1) rgba(0,0,0,.25),
+               0 0 calc(var(--cell)*.13) rgba(255,255,255,.75);
+  }
+  /* keep the orb saturated — the full-size gloss blob washed it grey */
+  .tile.sp2 .shape::after {
+    left:17%; top:11%; width:34%; height:22%;
+    background:linear-gradient(165deg, rgba(255,255,255,.7), rgba(255,255,255,0) 70%);
+  }
+  .tile.sp2 .crown {
+    display:block; border-radius:50%;
+    box-shadow:0 0 0 calc(var(--cell)*.04) #ffffffcc;
+    animation:rainRing 1.2s ease-out infinite;
+  }
+  @keyframes rainRing {
+    0%   { transform:scale(.82); opacity:.9; }
+    100% { transform:scale(1.15); opacity:0; }
   }
   .tile.sp2 .face { font-size:calc(var(--cell)*.44); }
+
+  /* "tap again and THIS is what goes" — shown while a booster is selected */
+  .tile.aim .inner { animation:aimPulse .75s ease-in-out infinite; }
+  @keyframes aimPulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.11)} }
+  .tile.aim .shape {
+    box-shadow:0 0 0 calc(var(--cell)*.045) #fff, 0 0 calc(var(--cell)*.18) rgba(255,255,255,.95);
+    filter:brightness(1.22);
+  }
+
+  /* the blast itself: a bar of light sweeping the row and column it takes out */
+  .beam {
+    position:absolute; z-index:6; pointer-events:none; border-radius:999px;
+    background:linear-gradient(var(--dir), transparent, #fff 18%, #ffe98a 50%, #fff 82%, transparent);
+    animation:beamGo .4s cubic-bezier(.2,.85,.3,1) forwards;
+  }
+  @keyframes beamGo {
+    0%   { transform:scale(var(--sx0), var(--sy0)); opacity:1; }
+    55%  { opacity:.95; }
+    100% { transform:scale(1,1); opacity:0; }
+  }
+  /* rainbow's blast: a ring washing outward over the whole board */
+  .shock {
+    position:absolute; z-index:6; pointer-events:none; border-radius:50%;
+    border:calc(var(--cell)*.09) solid #fff;
+    animation:shockGo .55s cubic-bezier(.2,.8,.3,1) forwards;
+  }
+  @keyframes shockGo {
+    0%   { transform:translate(-50%,-50%) scale(.05); opacity:1; }
+    100% { transform:translate(-50%,-50%) scale(1); opacity:0; }
+  }
+
+  /* ---- leaf covers: they belong to CELLS, not tiles, so they sit in their
+     own layer above the fruit and stay put while fruit falls past them ---- */
+  #covers { position:absolute; inset:0; z-index:4; pointer-events:none; }
+  .cover {
+    position:absolute; left:0; top:0;
+    width:var(--cell); height:var(--cell);
+    padding:calc(var(--cell)*.045);
+    transform:translate3d(calc(var(--cc) * var(--cell)), calc(var(--cr) * var(--cell)), 0);
+  }
+  /* Translucent on purpose: you have to be able to read the fruit underneath
+     to aim a match at it. A solid leaf made the patch unplayable. */
+  .cover b {
+    position:relative; display:block; width:100%; height:100%;
+    border-radius:26%;
+    background:rgba(150,220,100,.24);
+    box-shadow:inset 0 0 0 calc(var(--cell)*.055) rgba(104,190,60,.95),
+               inset 0 0 0 calc(var(--cell)*.085) rgba(255,255,255,.65);
+  }
+  .cover b::after {
+    content:'🍃'; position:absolute; right:4%; top:2%;
+    font-size:calc(var(--cell)*.28);
+    filter:drop-shadow(0 1px 1px rgba(0,0,0,.35));
+  }
+  .cover.gone b { animation:coverGone .42s cubic-bezier(.3,1.4,.5,1) forwards; }
+  @keyframes coverGone {
+    0%   { transform:scale(1) rotate(0); opacity:1; }
+    35%  { transform:scale(1.2) rotate(-12deg); opacity:1; }
+    100% { transform:scale(.2) rotate(40deg) translateY(40%); opacity:0; }
+  }
+
+  /* the nudge/tutorial finger — shows WHICH two tiles to trade, not just that
+     something is possible */
+  .hand {
+    position:absolute; z-index:22; pointer-events:none;
+    width:var(--cell); height:var(--cell);
+    display:grid; place-items:center;
+    font-size:calc(var(--cell)*.62);
+    filter:drop-shadow(0 3px 4px rgba(0,0,0,.4));
+    animation:handGo 1.9s ease-in-out infinite;
+  }
+  @keyframes handGo {
+    0%,12%  { transform:translate3d(var(--hx0), var(--hy0), 0) scale(1); }
+    45%,55% { transform:translate3d(var(--hx1), var(--hy1), 0) scale(.9); }
+    88%,100%{ transform:translate3d(var(--hx0), var(--hy0), 0) scale(1); }
+  }
 
   /* particles + score pops */
   .pt { position:fixed; z-index:60; border-radius:50%; pointer-events:none;
@@ -349,8 +482,11 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .bub, .win-mascot, #menu h1, .tile.sel .inner, .tile.sp1 .crown, .tile.sp2 .shape,
+    .bub, .win-mascot, #menu h1, .tile.sel .inner, .tile.sp1 .crown i, .tile.sp1 .shape,
+    .tile.sp2 .shape, .tile.sp2 .crown, .tile.aim .inner, .hand,
     .moves.low, .cann-p { animation:none !important; }
+    /* the aim ring still has to read without the pulse */
+    .tile.aim .shape { box-shadow:0 0 0 calc(var(--cell)*.05) #fff; }
   }
 </style>
 </head>
@@ -383,7 +519,7 @@
     </div>
     <div class="goals" id="goals"></div>
   </div>
-  <div id="board-wrap"><div id="board"></div></div>
+  <div id="board-wrap"><div id="board"><div id="covers"></div></div></div>
   <p class="footnote" id="foot">Tap a fruit, then tap the one next to it.</p>
 </div>
 
@@ -455,32 +591,42 @@ for (let i = 0; i < 8; i++) {
 }
 
 /* ---------------- fruit ----------------
-   Every kind carries THREE independent cues: a colour, a silhouette and an
-   emoji. Colour-blind players read the shape; everyone reads the fruit.      */
+   The fruit emoji is the identity: it is a distinct silhouette as well as a
+   distinct colour, so nothing here depends on colour vision alone.
+   Each fruit also owns a note of the pentatonic scale, so clearing a colour
+   always sounds like that colour — the board becomes a little instrument.    */
 const KINDS = [
-  { emoji:'🍓', name:'strawberry', shape:'circle',  from:'#ff7d8c', to:'#e83a52' },
-  { emoji:'🍌', name:'banana',     shape:'square',  from:'#ffe066', to:'#f2b705' },
-  { emoji:'🍇', name:'grapes',     shape:'hex',     from:'#c39bff', to:'#8b4ae8' },
-  { emoji:'🍏', name:'green apple',shape:'diamond', from:'#8ee88f', to:'#39b04a' },
-  { emoji:'🍊', name:'orange',     shape:'petal',   from:'#ffc078', to:'#f97316' },
-  { emoji:'🫐', name:'blueberry',  shape:'star',    from:'#7cc9ff', to:'#2b7fd4' },
+  { emoji:'🍓', name:'strawberry',  from:'#ff8494', to:'#e01235', note:0 },
+  { emoji:'🍌', name:'banana',      from:'#ffdd4d', to:'#eea100', note:1 },
+  { emoji:'🍇', name:'grapes',      from:'#bb8cff', to:'#6d22dd', note:2 },
+  { emoji:'🍏', name:'green apple', from:'#89ea8a', to:'#1f9e30', note:3 },
+  { emoji:'🍊', name:'orange',      from:'#ffb85e', to:'#ef6606', note:4 },
+  { emoji:'🫐', name:'blueberry',   from:'#6dc2ff', to:'#0d68cf', note:5 },
 ];
 const SP_NONE = 0, SP_STAR = 1, SP_RAIN = 2;
 
 /* ---------------- levels ----------------
    The curve: board grows, fruit variety grows (so matches get rarer), and the
    goal asks for more kinds at once. Move budgets are deliberately loose — a
-   toddler should finish every level; the stars are what reward efficiency.   */
+   toddler should finish every level; the stars are what reward efficiency.
+   Levels 3 and 5 introduce and then combine the leaf covers, so the curve adds
+   a NEW IDEA rather than just more of the same board.                        */
 const LEVELS = [
   { name:'Berry Patch',   emoji:'🍓', rows:5, cols:5, kinds:4, moves:18, goals:[[0,10]] },
   { name:'Fruit Basket',  emoji:'🍌', rows:6, cols:6, kinds:4, moves:22, goals:[[1,12],[2,12]] },
+  { name:'Leafy Hollow',  emoji:'🍃', rows:6, cols:6, kinds:4, moves:20, goals:[], covers:10 },
   { name:'Orchard',       emoji:'🍏', rows:6, cols:6, kinds:5, moves:24, goals:[[3,14],[4,14]] },
-  { name:'Rainbow Grove', emoji:'🌈', rows:7, cols:7, kinds:6, moves:30, goals:[[0,14],[2,14],[5,14]] },
+  { name:'Hidden Grove',  emoji:'🌿', rows:7, cols:7, kinds:5, moves:26, goals:[[0,12]], covers:16 },
+  { name:'Rainbow Grove', emoji:'🌈', rows:7, cols:7, kinds:6, moves:30, goals:[[0,16],[2,16],[5,16]] },
 ];
 const FREE = { name:'Free Play', emoji:'🎈', rows:6, cols:6, kinds:5, moves:0, goals:[] };
 // 3 stars if you finish inside par, 2 inside the stretch, 1 for finishing at all.
-const par3 = L => Math.round(L.moves * 0.75);
-const par2 = L => Math.round(L.moves * 0.92);
+// Tuned against measured play: budgets stay generous enough that every level is
+// finishable by a child swapping more or less at random, but at 0.75 that same
+// random play also three-starred the late levels, which made the stars
+// meaningless. The budget is the safety net; par is the actual challenge.
+const par3 = L => Math.round(L.moves * 0.62);
+const par2 = L => Math.round(L.moves * 0.85);
 
 /* ---------------- storage (all keys namespaced match3-) ---------------- */
 function stars() {
@@ -499,6 +645,7 @@ function saveGame() {
     localStorage.setItem('match3-save', JSON.stringify({
       lv: levelIdx, score, movesLeft, used: movesUsed, helped: usedHelp,
       got: goalGot,
+      cov: covers.map(row => row.slice()),
       grid: grid.map(row => row.map(t => t ? [t.k, t.sp] : null)),
     }));
   } catch (e) {}
@@ -512,11 +659,17 @@ function clearSave() { localStorage.removeItem('match3-save'); }
 // and the goal isn't already finished.
 function validSave(sv, i) {
   const lv = LEVELS[i];
-  return !!sv && sv.lv === i
-    && Array.isArray(sv.grid) && sv.grid.length === lv.rows
-    && sv.grid.every(row => Array.isArray(row) && row.length === lv.cols)
-    && Array.isArray(sv.got) && sv.got.length === lv.goals.length
-    && !lv.goals.every((g, k) => (sv.got[k] || 0) >= g[1]);
+  if (!sv || sv.lv !== i) return false;
+  if (!Array.isArray(sv.grid) || sv.grid.length !== lv.rows) return false;
+  if (!sv.grid.every(row => Array.isArray(row) && row.length === lv.cols)) return false;
+  if (!Array.isArray(sv.got) || sv.got.length !== lv.goals.length) return false;
+  // Don't offer to resume something already finished. Note a covers level can
+  // have no fruit goals at all, so "every goal met" alone isn't the test.
+  const fruitDone = lv.goals.every((g, k) => (sv.got[k] || 0) >= g[1]);
+  const covLeft = lv.covers
+    ? (Array.isArray(sv.cov) ? sv.cov.reduce((a, row) => a + (row || []).filter(Boolean).length, 0) : lv.covers)
+    : 0;
+  return !(fruitDone && covLeft === 0);
 }
 
 /* ---------------- sound (WebAudio, no assets) ---------------- */
@@ -549,20 +702,28 @@ function noise(t0, dur, vol = .1, hz = 1400) {
 }
 // Major pentatonic — every cascade step lands on a consonant note.
 const PENTA = [1, 9/8, 5/4, 3/2, 5/3, 2, 9/4, 5/2, 3];
-function sfx(name, n = 0) {
+function sfx(name, n = 0, notes) {
   if (!soundOn) return;
   try {
     if (name === 'tap')   tone(560, 0, .07, 'triangle', .1);
     if (name === 'swap')  { tone(430, 0, .07, 'sine', .1); tone(560, .05, .09, 'sine', .1); }
     if (name === 'nope')  { tone(250, 0, .1, 'sine', .09); tone(205, .08, .13, 'sine', .09); }
     if (name === 'pop') {
-      const base = 523 * PENTA[Math.min(n, PENTA.length - 1)];
-      tone(base, 0, .1, 'triangle', .15);
-      tone(base * 1.5, .05, .13, 'triangle', .1);
+      // The cascade sets the octave; the fruit sets the note. Clearing three
+      // bananas always sounds like bananas, one octave up per chain step.
+      const oct = Math.pow(2, Math.min(n, 3) / 2);
+      const uniq = [...new Set(notes || [])].slice(0, 4);
+      if (uniq.length) {
+        uniq.forEach((note, i) => tone(523 * PENTA[note] * oct, i * .035, .16, 'triangle', .13));
+      } else {
+        tone(523 * oct, 0, .1, 'triangle', .15);
+      }
       noise(0, .07, .05, 2200);
     }
     if (name === 'land')  noise(0, .05, .035, 700);
+    if (name === 'leaf')  { noise(0, .16, .07, 3200); tone(300, 0, .1, 'sine', .05); }
     if (name === 'make')  [784, 988, 1319, 1568].forEach((f, i) => tone(f, i * .06, .18, 'triangle', .13));
+    if (name === 'lucky') [523, 784, 1047, 1319, 1568].forEach((f, i) => tone(f, i * .05, .22, 'triangle', .14));
     if (name === 'blast') { noise(0, .3, .1, 900); [660, 520, 400].forEach((f, i) => tone(f, i * .05, .2, 'sawtooth', .07)); }
     if (name === 'goal')  { tone(880, 0, .09, 'sine', .12); tone(1319, .07, .14, 'sine', .1); }
     if (name === 'mix')   { for (let i = 0; i < 6; i++) tone(400 + i * 90, i * .04, .1, 'sine', .07); }
@@ -578,8 +739,21 @@ let R = 0, C = 0, KN = 4;
 let grid = [];               // grid[r][c] = tile | null
 let score = 0, movesLeft = 0, movesUsed = 0, usedHelp = false;
 let goalGot = [];            // parallel to L.goals
+let covers = [], coversLeft = 0;
 let busy = false, sel = null, over = false;
-let idleTimer = null, nudged = [];
+let idleTimer = null, nudged = [], handEl = null;
+// Moves since the last booster. Boosters are the best part of the game, and a
+// 4-in-a-row is rare on a big board — measured at 1.7 per 30 moves on the 7x7,
+// which means most children would never see one. After PITY boosterless moves
+// the next match, however small, becomes a star. See scratchpad sim numbers.
+let sinceBooster = 0;
+// Both knobs scale with how sparse the board is. A 5x5 with four fruit is
+// already dense enough to throw off boosters on its own (measured 9 per 30
+// moves with no help at all) — pushing it further turned early levels into a
+// firework show that ended in four moves. The 7x7 with six fruit is the board
+// that actually needs rescuing.
+const PITY = () => (KN <= 4 ? 8 : 5);
+const REFILL_BIAS = () => (KN <= 4 ? 0.15 : 0.25);
 
 const board = $('board');
 
@@ -591,7 +765,7 @@ function makeTile(k, r, c, sp = SP_NONE) {
   const shape = document.createElement('div'); shape.className = 'shape';
   const face  = document.createElement('div'); face.className  = 'face';
   const crown = document.createElement('div'); crown.className = 'crown';
-  crown.textContent = '⭐';
+  crown.innerHTML = '<i></i><i></i><i></i><i></i>';   // the star's four blast arrows
   inner.append(shape, face, crown);
   el.appendChild(inner);
   const t = { k, sp, r, c, el, shape, face };
@@ -613,7 +787,7 @@ function paint(t) {
     el.setAttribute('aria-label', 'rainbow');
   } else {
     const K = KINDS[t.k];
-    t.shape.className = 'shape sh-' + K.shape;
+    t.shape.className = 'shape';
     t.shape.style.background = 'linear-gradient(160deg,' + K.from + ',' + K.to + ')';
     t.face.textContent = K.emoji;
     if (t.sp === SP_STAR) { el.classList.add('sp1'); el.setAttribute('aria-label', K.name + ' star'); }
@@ -645,6 +819,26 @@ window.addEventListener('orientationchange', () => setTimeout(layout, 120));
 
 /* ---------------- board generation ---------------- */
 const rnd = n => Math.floor(Math.random() * n);
+// Fruit accelerates as it falls rather than easing in and out — floaty tiles
+// were the single biggest thing making the board feel unphysical.
+const FALL_EASE = 'cubic-bezier(.38,0,.72,.36)';
+
+// Refilled fruit sometimes copies a neighbour. That seeds the near-misses that
+// turn into cascades and 4-in-a-rows, which is what makes the board feel alive
+// instead of random. 0.25 measured best: plenty of chains without the board
+// resolving itself for ten seconds.
+function refillKind(r, c) {
+  if (Math.random() < REFILL_BIAS()) {
+    const nb = [];
+    for (const [dr, dc] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
+      const rr = r + dr, cc = c + dc;
+      if (rr >= 0 && rr < R && cc >= 0 && cc < C && grid[rr] && grid[rr][cc] && grid[rr][cc].k >= 0)
+        nb.push(grid[rr][cc].k);
+    }
+    if (nb.length) return nb[rnd(nb.length)];
+  }
+  return rnd(KN);
+}
 
 function runsOn(g) {
   // Every horizontal/vertical run of 3+ of the same kind. Rainbows (k<0) never match.
@@ -717,8 +911,62 @@ function anyMove() {
   return null;
 }
 
+// Only the fruit are torn down — the covers live in their own layer.
+function clearTiles() {
+  board.querySelectorAll('.tile').forEach(el => el.remove());
+}
+
+/* ---------------- leaf covers ----------------
+   A cover sits on a CELL. Clear the fruit standing on it and the leaf is swept
+   away; fruit falling through afterwards passes underneath, so a cover can
+   only ever be removed by a match made right on top of it. */
+function makeCovers(n) {
+  covers = [];
+  coversLeft = 0;
+  for (let r = 0; r < R; r++) { covers[r] = []; for (let c = 0; c < C; c++) covers[r][c] = 0; }
+  if (!n) { paintCovers(); return; }
+  // Take the n cells nearest the middle, so the patch always reads as a
+  // deliberate shape (a diamond) rather than scattered noise.
+  const mid = [(R - 1) / 2, (C - 1) / 2];
+  const cells = [];
+  for (let r = 0; r < R; r++) for (let c = 0; c < C; c++)
+    cells.push([Math.abs(r - mid[0]) + Math.abs(c - mid[1]), r, c]);
+  cells.sort((a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2]);
+  cells.slice(0, Math.min(n, R * C)).forEach(([, r, c]) => { covers[r][c] = 1; coversLeft++; });
+  paintCovers();
+}
+function paintCovers() {
+  const host = $('covers');
+  host.innerHTML = '';
+  for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) {
+    if (!covers[r] || !covers[r][c]) continue;
+    const d = document.createElement('div');
+    d.className = 'cover';
+    d.style.setProperty('--cr', r);
+    d.style.setProperty('--cc', c);
+    d.dataset.rc = r + ',' + c;
+    d.innerHTML = '<b>🍃</b>';
+    host.appendChild(d);
+  }
+}
+function restoreCovers(cov) {
+  if (!L.covers) { makeCovers(0); return; }
+  const ok = Array.isArray(cov) && cov.length === R && cov.every(row => Array.isArray(row) && row.length === C);
+  if (!ok) { makeCovers(L.covers); return; }
+  covers = cov.map(row => row.slice());
+  coversLeft = covers.reduce((a, row) => a + row.reduce((x, v) => x + (v ? 1 : 0), 0), 0);
+  paintCovers();
+}
+function sweepCover(r, c) {
+  if (!covers[r] || !covers[r][c]) return false;
+  covers[r][c] = 0; coversLeft--;
+  const d = $('covers').querySelector('.cover[data-rc="' + r + ',' + c + '"]');
+  if (d) { d.classList.add('gone'); setTimeout(() => d.remove(), 460); }
+  return true;
+}
+
 function buildBoard() {
-  board.innerHTML = '';
+  clearTiles();
   grid = [];
   for (let r = 0; r < R; r++) { grid[r] = []; for (let c = 0; c < C; c++) grid[r][c] = null; }
   // Deal a board with no free matches — the first pop should be the player's.
@@ -733,7 +981,7 @@ function buildBoard() {
 }
 
 function restoreBoard(saved) {
-  board.innerHTML = '';
+  clearTiles();
   grid = [];
   for (let r = 0; r < R; r++) {
     grid[r] = [];
@@ -767,6 +1015,29 @@ function particles(r, c, kind) {
     s.style.animationDelay = (Math.random() * .06) + 's';
     document.body.appendChild(s);
     setTimeout(() => s.remove(), 700);
+  }
+}
+// Particles that fly INWARD — the visual grammar of something being created
+// rather than destroyed.
+function converge(r, c, kind) {
+  if (REDUCED) return;
+  const p = cellCentre(r, c);
+  const col = kind == null ? '#fff' : KINDS[kind].from;
+  for (let i = 0; i < 10; i++) {
+    const s = document.createElement('span');
+    s.className = 'pt';
+    const size = 5 + Math.random() * 7;
+    s.style.width = s.style.height = size + 'px';
+    s.style.background = i % 3 === 0 ? '#fff' : col;
+    const a = Math.random() * Math.PI * 2, d = 40 + Math.random() * 48;
+    // start out at the rim, then animate back to the middle
+    s.style.left = (p.x + Math.cos(a) * d) + 'px';
+    s.style.top = (p.y + Math.sin(a) * d) + 'px';
+    s.style.setProperty('--dx', (-Math.cos(a) * d) + 'px');
+    s.style.setProperty('--dy', (-Math.sin(a) * d) + 'px');
+    s.style.animationDelay = (Math.random() * .08) + 's';
+    document.body.appendChild(s);
+    setTimeout(() => s.remove(), 750);
   }
 }
 function scorePop(r, c, n) {
@@ -809,6 +1080,42 @@ function flyToGoal(r, c, gi) {
   setTimeout(() => el.remove(), 620);
 }
 
+// A bar of light down the row and the column the star is about to take out.
+function starBeams(r, c) {
+  if (REDUCED) return;
+  const cell = board.clientWidth / C;
+  for (const dir of ['h', 'v']) {
+    const b = document.createElement('div');
+    b.className = 'beam';
+    if (dir === 'h') {
+      b.style.cssText = 'left:0;width:100%;height:' + (cell * .5) + 'px;top:' + ((r + .5) * cell - cell * .25) + 'px';
+      b.style.setProperty('--dir', '90deg');
+      b.style.setProperty('--sx0', '0'); b.style.setProperty('--sy0', '1');
+      b.style.transformOrigin = ((c + .5) * cell) + 'px center';
+    } else {
+      b.style.cssText = 'top:0;height:100%;width:' + (cell * .5) + 'px;left:' + ((c + .5) * cell - cell * .25) + 'px';
+      b.style.setProperty('--dir', '180deg');
+      b.style.setProperty('--sx0', '1'); b.style.setProperty('--sy0', '0');
+      b.style.transformOrigin = 'center ' + ((r + .5) * cell) + 'px';
+    }
+    board.appendChild(b);
+    setTimeout(() => b.remove(), 450);
+  }
+}
+// The rainbow's reach is the whole board, so its tell is a ring washing over it.
+function shockwave(r, c) {
+  if (REDUCED) return;
+  const cell = board.clientWidth / C;
+  const size = Math.max(R, C) * cell * 2.2;
+  const s = document.createElement('div');
+  s.className = 'shock';
+  s.style.width = s.style.height = size + 'px';
+  s.style.left = ((c + .5) * cell) + 'px';
+  s.style.top = ((r + .5) * cell) + 'px';
+  board.appendChild(s);
+  setTimeout(() => s.remove(), 600);
+}
+
 /* ---------------- the resolve loop ---------------- */
 function blastCells(r, c, sp, k, out) {
   if (sp === SP_STAR) {
@@ -822,12 +1129,16 @@ function blastCells(r, c, sp, k, out) {
 // A booster caught in a clear fires, and whatever it hits can fire too.
 function expand(set) {
   const queue = [...set];
-  let fired = false;
+  let fired = null;
   while (queue.length) {
     const key = queue.pop();
     const t = grid[Math.floor(key / C)][key % C];
     if (!t || t.sp === SP_NONE || t.fired) continue;
-    t.fired = true; fired = true;
+    t.fired = true;
+    // Show every booster going off, including ones set off by other boosters —
+    // otherwise a chain reaction just looks like the board erasing itself.
+    if (t.sp === SP_STAR) starBeams(t.r, t.c); else shockwave(t.r, t.c);
+    if (!fired) fired = [t.r, t.c];
     const add = new Set();
     blastCells(t.r, t.c, t.sp, t.sp === SP_RAIN ? -1 : t.k, add);
     add.forEach(x => { if (!set.has(x)) { set.add(x); queue.push(x); } });
@@ -835,10 +1146,13 @@ function expand(set) {
   return fired;
 }
 
-async function clearCells(keys, cascade) {
+// `from` is the cell a blast radiated out of, if any. Popping outward from it
+// in waves is what makes a booster legible: you can see the blast travel, so
+// you can see which fruit it took.
+async function clearCells(keys, cascade, from) {
   const gained = keys.size * 60 * Math.min(cascade, 5);
   score += gained;
-  let goalHits = 0;
+  let goalHits = 0, coverHits = 0, notes = [];
   const flyBudget = { n: 0 };
 
   keys.forEach(key => {
@@ -853,20 +1167,30 @@ async function clearCells(keys, cascade) {
         if (flyBudget.n++ < 6) flyToGoal(r, c, gi);
       }
     }
-    particles(r, c, t.sp === SP_RAIN ? null : t.k);
-    t.el.classList.add('pop');
+    if (sweepCover(r, c)) coverHits++;
+    if (t.k >= 0) notes.push(KINDS[t.k].note);
+    const delay = from ? Math.min(260, (Math.abs(r - from[0]) + Math.abs(c - from[1])) * 42) : 0;
     const el = t.el;
-    setTimeout(() => el.remove(), 320);
+    if (delay) {
+      el.style.transitionDelay = delay + 'ms';
+      setTimeout(() => { particles(r, c, t.sp === SP_RAIN ? null : t.k); el.classList.add('pop'); }, delay);
+    } else {
+      particles(r, c, t.sp === SP_RAIN ? null : t.k);
+      el.classList.add('pop');
+    }
+    setTimeout(() => el.remove(), 340 + delay);
     grid[r][c] = null;
   });
 
-  sfx('pop', cascade - 1);
+  sfx('pop', cascade - 1, notes);
   buzz(cascade > 1 ? 22 : 14);
+  if (coverHits) { sfx('leaf'); paintGoals(true); }
   if (goalHits) { paintGoals(true); sfx('goal'); }
   const mid = [...keys][Math.floor(keys.size / 2)];
   scorePop(Math.floor(mid / C), mid % C, gained);
   paintHud();
-  await sleep(REDUCED ? 60 : 260);
+  // A blast needs long enough for its last wave to actually be seen.
+  await sleep(REDUCED ? 60 : (from ? 420 : 260));
 }
 
 async function gravity() {
@@ -881,7 +1205,7 @@ async function gravity() {
         const dist = write - r;
         maxDrop = Math.max(maxDrop, dist);
         t.el.style.transitionDuration = Math.min(430, 130 + dist * 55) + 'ms';
-        t.el.style.transitionTimingFunction = 'cubic-bezier(.45,.05,.55,1)';
+        t.el.style.transitionTimingFunction = FALL_EASE;
         place(t, write, c);
         landed.push(t);
       }
@@ -893,7 +1217,7 @@ async function gravity() {
       // Born above the ceiling, then walked down to its slot in the same tick —
       // makeTile has already flushed layout, so the transition still animates,
       // and the model never sees a tile parked at a negative row.
-      const t = makeTile(rnd(KN), -above, c);
+      const t = makeTile(refillKind(r, c), -above, c);
       grid[r][c] = t;
       const dist = r + above;
       maxDrop = Math.max(maxDrop, dist);
@@ -917,11 +1241,13 @@ async function gravity() {
   await sleep(REDUCED ? 10 : 60);
 }
 
-const CHEERS = ['Nice!', 'Wow!', 'Amazing!', 'Incredible!', 'Fruit-tastic!'];
+// Toddlers can't read these, so each one carries an emoji that says the same
+// thing — the word is for the grown-up reading over their shoulder.
+const CHEERS = [['Nice!', '✨'], ['Wow!', '🌟'], ['Amazing!', '🎉'], ['Incredible!', '🏆'], ['Fruit-tastic!', '🤩']];
 
 // Runs matches → boosters → clears → gravity, over and over until it settles.
 async function resolve(origins) {
-  let cascade = 0;
+  let cascade = 0, madeBooster = false, lucky = false;
   for (;;) {
     const gs = groups();
     if (!gs.length) break;
@@ -935,6 +1261,9 @@ async function resolve(origins) {
       let sp = SP_NONE;
       if (g.maxRun >= 5) sp = SP_RAIN;
       else if (g.lines >= 2 || g.cells.length >= 4) sp = SP_STAR;
+      // Gone too long without one? Quietly turn this match into a star. The
+      // child only ever sees a gift arriving, never a rule being bent.
+      else if (cascade === 1 && sinceBooster >= PITY()) { sp = SP_STAR; lucky = true; }
 
       let spawnKey = null;
       if (sp) {
@@ -948,13 +1277,17 @@ async function resolve(origins) {
     }
     origins = null;
 
-    if (expand(keys)) { sfx('blast'); shake(); }
+    const blastFrom = expand(keys);
+    if (blastFrom) { sfx('blast'); shake(); }
     spawns.forEach(([key]) => keys.delete(key));
 
-    if (cascade >= 2 && !REDUCED) toast(CHEERS[Math.min(cascade - 2, CHEERS.length - 1)]);
+    if (cascade >= 2 && !REDUCED) {
+      const [word, icon] = CHEERS[Math.min(cascade - 2, CHEERS.length - 1)];
+      toast(icon + ' ' + word);
+    }
     if (cascade >= 3) shake();
 
-    await clearCells(keys, cascade);
+    await clearCells(keys, cascade, blastFrom);
 
     // promote the spawn tiles into boosters
     for (const [key, sp, k] of spawns) {
@@ -964,13 +1297,22 @@ async function resolve(origins) {
       t.sp = sp; if (sp === SP_RAIN) t.k = -1; else t.k = k;
       t.fired = false;
       paint(t);
+      // Sparks rushing IN, so a booster looks assembled out of the fruit that
+      // just vanished rather than teleported in from nowhere.
+      converge(r, c, sp === SP_RAIN ? null : k);
       t.el.classList.add('born');
       setTimeout(() => t.el.classList.remove('born'), 320);
     }
-    if (spawns.length) { sfx('make'); buzz(30); }
+    if (spawns.length) {
+      madeBooster = true;
+      sfx(lucky ? 'lucky' : 'make'); buzz(30);
+      if (lucky) toast('⭐ Lucky!');
+      await sleep(REDUCED ? 20 : 260);   // let the new booster be seen
+    }
 
     await gravity();
   }
+  if (madeBooster) sinceBooster = 0; else if (cascade) sinceBooster++;
   return cascade;
 }
 
@@ -1000,32 +1342,57 @@ async function reshuffle() {
 /* ---------------- interaction ---------------- */
 function adjacent(a, b) { return Math.abs(a.r - b.r) + Math.abs(a.c - b.c) === 1; }
 
+// Whichever fruit the rainbow would take if you set it off where it stands.
+// activate() and the preview must agree, so they share this.
+function commonKind() {
+  const count = new Array(KINDS.length).fill(0);
+  for (let r = 0; r < R; r++) for (let c = 0; c < C; c++)
+    if (grid[r][c] && grid[r][c].k >= 0) count[grid[r][c].k]++;
+  let best = 0; count.forEach((n, i) => { if (n > count[best]) best = i; });
+  return best;
+}
+function clearAim() { board.querySelectorAll('.tile.aim').forEach(el => el.classList.remove('aim')); }
+// Selecting a booster lights up exactly the fruit it would clear. This is the
+// whole answer to "what does this thing do" — you see it before you commit,
+// and nothing is spent finding out.
+function showAim(t) {
+  clearAim();
+  if (!t || t.sp === SP_NONE) return;
+  const keys = new Set();
+  blastCells(t.r, t.c, t.sp, t.sp === SP_RAIN ? commonKind() : t.k, keys);
+  keys.forEach(key => {
+    const x = grid[Math.floor(key / C)][key % C];
+    if (x && x !== t) x.el.classList.add('aim');
+  });
+}
 function select(t) {
   clearNudge();
   if (sel) sel.el.classList.remove('sel');
   sel = t;
   if (t) { t.el.classList.add('sel'); sfx('tap'); }
+  showAim(t);
+  setFoot(t && t.sp !== SP_NONE ? 'Tap it again to set it off! 💥' : null);
 }
 
 async function activate(t) {
   // Tapping an already-selected booster sets it off. Costs a move.
   if (busy || over) return;
-  busy = true; select(null);
+  busy = true;
+  const at = [t.r, t.c];
+  select(null);
   spendMove();
   const keys = new Set([t.r * C + t.c]);
   if (t.sp === SP_RAIN) {
-    // clear whichever fruit there is most of — biggest, happiest bang
-    const count = new Array(KINDS.length).fill(0);
-    for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) if (grid[r][c].k >= 0) count[grid[r][c].k]++;
-    let best = 0; count.forEach((n, i) => { if (n > count[best]) best = i; });
-    blastCells(t.r, t.c, SP_RAIN, best, keys);
+    blastCells(t.r, t.c, SP_RAIN, commonKind(), keys);
+    shockwave(at[0], at[1]);
   } else {
     blastCells(t.r, t.c, SP_STAR, t.k, keys);
+    starBeams(at[0], at[1]);
   }
   t.fired = true;
   expand(keys);
   sfx('blast'); shake(); buzz(40);
-  await clearCells(keys, 2);
+  await clearCells(keys, 2, at);
   await gravity();
   await resolve(null);
   await settle();
@@ -1047,18 +1414,21 @@ async function trySwap(a, b) {
   const rainbow = isRain(a) || isRain(b);
   if (rainbow) {
     spendMove();
+    const rb = isRain(a) ? a : b;
+    const at = [rb.r, rb.c];
     const keys = new Set([a.r * C + a.c, b.r * C + b.c]);
     if (isRain(a) && isRain(b)) {
       for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) keys.add(r * C + c);
-      toast('BOOM! 💥');
+      toast('💥 BOOM!');
     } else {
       const other = isRain(a) ? b : a;
       blastCells(other.r, other.c, SP_RAIN, other.k, keys);
     }
+    shockwave(at[0], at[1]);
     a.fired = b.fired = true;
     expand(keys);
     sfx('blast'); shake(); buzz(45);
-    await clearCells(keys, 2);
+    await clearCells(keys, 2, at);
     await gravity();
     await resolve(null);
     return settle();
@@ -1127,9 +1497,27 @@ function tileFromEl(el) {
 function clearNudge() {
   nudged.forEach(t => t.el.classList.remove('nudge'));
   nudged = [];
+  if (handEl) { handEl.remove(); handEl = null; }
   if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
 }
-function armIdle() {
+// A finger that actually travels from one tile to the other. Pulsing two tiles
+// said "look here"; this says "trade these two", which is the thing a child who
+// can't read the footnote needs to be told.
+function showHand(a, b) {
+  if (REDUCED) return;
+  const cell = board.clientWidth / C;
+  handEl = document.createElement('div');
+  handEl.className = 'hand';
+  handEl.textContent = '👆';
+  handEl.style.setProperty('--hx0', (a[1] * cell) + 'px');
+  handEl.style.setProperty('--hy0', (a[0] * cell) + 'px');
+  handEl.style.setProperty('--hx1', (b[1] * cell) + 'px');
+  handEl.style.setProperty('--hy1', (b[0] * cell) + 'px');
+  board.appendChild(handEl);
+}
+// `fast` is the first-run tutorial: on a brand-new save the hand shows up in a
+// couple of seconds instead of six, so nobody has to be told how to play.
+function armIdle(fast) {
   clearNudge();
   idleTimer = setTimeout(() => {
     if (busy || over || sel) { armIdle(); return; }
@@ -1137,8 +1525,9 @@ function armIdle() {
     if (!mv) return;
     nudged = mv.map(([r, c]) => grid[r][c]).filter(Boolean);
     nudged.forEach(t => t.el.classList.add('nudge'));
-    idleTimer = setTimeout(() => { clearNudge(); armIdle(); }, 4200);
-  }, 6000);
+    showHand(mv[0], mv[1]);
+    idleTimer = setTimeout(() => { clearNudge(); armIdle(); }, 5200);
+  }, fast ? 2200 : 6000);
 }
 
 /* ---------------- HUD ---------------- */
@@ -1149,6 +1538,8 @@ function spendMove() {
   box.classList.remove('bump'); void box.offsetWidth; box.classList.add('bump');
   paintHud();
 }
+let footBase = '';
+function setFoot(msg) { $('foot').textContent = msg || footBase; }
 function paintHud() {
   $('score').textContent = score.toLocaleString() + ' points';
   $('moves-n').textContent = freePlay ? '∞' : Math.max(0, movesLeft);
@@ -1156,28 +1547,48 @@ function paintHud() {
 }
 function miniTile(k) {
   const K = KINDS[k];
-  return '<span class="mini"><span class="shape sh-' + K.shape + '" style="background:linear-gradient(160deg,'
+  return '<span class="mini"><span class="shape" style="border-radius:30%;background:linear-gradient(160deg,'
        + K.from + ',' + K.to + ')"></span><span class="face">' + K.emoji + '</span></span>';
 }
+let goalSig = '';
 function paintGoals(animate) {
   const host = $('goals');
-  if (!L.goals.length) { host.innerHTML = ''; return; }
-  if (host.children.length !== L.goals.length) {
-    host.innerHTML = L.goals.map((g, i) =>
+  const n = L.goals.length + (L.covers ? 1 : 0);
+  // Rebuild on the actual goal set, not the chip count — two levels can want
+  // the same NUMBER of chips but different ones, which used to leave the
+  // previous level's chip sitting there showing this level's numbers.
+  const sig = L.name + '|' + L.goals.map(g => g.join(':')).join(',') + '|' + (L.covers || 0);
+  if (!n) { host.innerHTML = ''; goalSig = sig; return; }
+  if (sig !== goalSig) {
+    goalSig = sig;
+    let html = L.goals.map((g, i) =>
       '<div class="goal" data-i="' + i + '" aria-label="collect ' + g[1] + ' ' + KINDS[g[0]].name + '">'
       + miniTile(g[0]) + '<span class="num"></span></div>').join('');
+    if (L.covers) {
+      html += '<div class="goal" data-i="cov" aria-label="sweep away all the leaves">'
+        + '<span class="mini"><span class="shape" style="border-radius:26%;background:linear-gradient(160deg,#d6f5b0,#7cc94e)"></span>'
+        + '<span class="face">🍃</span></span><span class="num"></span></div>';
+    }
+    host.innerHTML = html;
   }
   L.goals.forEach((g, i) => {
     const chip = host.children[i];
     const done = goalGot[i] >= g[1];
     chip.querySelector('.num').textContent = done ? '✓' : (goalGot[i] + '/' + g[1]);
     chip.classList.toggle('done', done);
-    if (animate) {
-      chip.classList.remove('pulse'); void chip.offsetWidth; chip.classList.add('pulse');
-    }
+    if (animate) { chip.classList.remove('pulse'); void chip.offsetWidth; chip.classList.add('pulse'); }
   });
+  if (L.covers) {
+    const chip = host.children[L.goals.length];
+    const done = coversLeft <= 0;
+    chip.querySelector('.num').textContent = done ? '✓' : ((L.covers - coversLeft) + '/' + L.covers);
+    chip.classList.toggle('done', done);
+    if (animate) { chip.classList.remove('pulse'); void chip.offsetWidth; chip.classList.add('pulse'); }
+  }
 }
-function goalMet() { return L.goals.every((g, i) => goalGot[i] >= g[1]); }
+function goalMet() {
+  return L.goals.every((g, i) => goalGot[i] >= g[1]) && (!L.covers || coversLeft <= 0);
+}
 
 /* ---------------- win ---------------- */
 function checkWin() {
@@ -1252,7 +1663,9 @@ function paintMenu() {
   const s = stars();
   $('levels').innerHTML = LEVELS.map((lv, i) => {
     const n = s[i] || 0;
-    const goalTxt = lv.goals.map(g => g[1] + KINDS[g[0]].emoji).join(' ');
+    const bits = lv.goals.map(g => g[1] + KINDS[g[0]].emoji);
+    if (lv.covers) bits.push(lv.covers + '🍃');
+    const goalTxt = bits.join(' ');
     return '<button class="level-btn l' + (i + 1) + '" data-i="' + i + '">'
       + '<span class="emoji">' + lv.emoji + '</span>'
       + '<span class="name">' + lv.name + '</span>'
@@ -1289,6 +1702,7 @@ function start(idx, resume) {
   R = L.rows; C = L.cols; KN = L.kinds;
   score = 0; movesLeft = L.moves; movesUsed = 0; usedHelp = false; over = false; busy = false; sel = null;
   goalGot = L.goals.map(() => 0);
+  sinceBooster = 0;
 
   if (resume) {
     score = resume.score; movesLeft = resume.movesLeft; movesUsed = resume.used;
@@ -1301,22 +1715,28 @@ function start(idx, resume) {
   $('more').classList.remove('show');
   $('resume').classList.remove('show');
   $('lv-name').textContent = L.name;
-  $('foot').textContent = freePlay
-    ? 'Pop as much as you like. 🎈'
+  footBase = freePlay ? 'Pop as much as you like. 🎈'
+    : L.covers ? 'Pop the fruit sitting on the leaves 🍃'
     : 'Tap a fruit, then the one next to it.';
+  setFoot(null);
 
   layout();
   if (resume) {
     restoreBoard(resume.grid);
+    restoreCovers(resume.cov);
     // Saves are only ever written from a settled board, so a run here means a
     // stale or hand-edited save — deal a fresh board rather than gift a match.
-    if (runsOn(grid).length) buildBoard();
-  } else buildBoard();
+    if (runsOn(grid).length) { buildBoard(); makeCovers(L.covers || 0); }
+  } else {
+    buildBoard();
+    makeCovers(L.covers || 0);
+  }
   paintGoals(false);
   paintHud();
   // If a restored board happens to be dead, mix it before the child touches it.
   if (!anyMove()) reshuffle();
-  armIdle();
+  // First ever game? Bring the pointing hand in early — that's the tutorial.
+  armIdle(!freePlay && levelIdx === 0 && !Object.keys(stars()).length);
 }
 
 function applyRoute() {
