@@ -736,10 +736,20 @@ const LEVELS = {
   classic: [
     { name:'Starter',  emoji:'✏️', desc:'4×4 · easy',       n:4, boxW:2, boxH:2, blanks:8  },
     { name:'Junior',   emoji:'📗', desc:'6×6 · medium',     n:6, boxW:3, boxH:2, blanks:16 },
+    // Master stays the gentle 9×9: singles only, and enough clues that one is
+    // always sitting in front of you. Measured effort ~35-62.
     { name:'Master',   emoji:'📘', desc:'9×9 · hard',       n:9, boxW:3, boxH:3, blanks:35 },
-    { name:'Champion', emoji:'🏆', desc:'9×9 · expert',     n:9, boxW:3, boxH:3, blanks:48 },
-    // hidden level — only reachable from the Champion win screen
-    { name:'Legend',   emoji:'👑', desc:'9×9 · legendary',  n:9, boxW:3, boxH:3, blanks:58, hard:true },
+    // Champion is the middle rung and the only one that teaches a technique:
+    // it always needs an intersection (pointing/claiming) and never a pair, so
+    // it's a real step up without being Legend. Measured effort ~260-570.
+    { name:'Champion', emoji:'🏆', desc:'9×9 · expert',     n:9, boxW:3, boxH:3, blanks:48,
+      tune:{ clues:33, tierMin:2, tierMax:2, climb:false, ceil:800,
+             slice:70, budget:900, seeds:10, ruin:8 } },
+    // hidden level — only reachable from the Champion win screen.
+    // Legend climbs for as much difficulty as the search can find in its slice,
+    // so its ceiling is open-ended. Measured effort ~810-1370.
+    { name:'Legend',   emoji:'👑', desc:'9×9 · legendary',  n:9, boxW:3, boxH:3, blanks:59,
+      tune:{ clues:22, tierMin:3, tierMax:4, climb:true, floor:850, slice:340, budget:1200, seeds:3, ruin:12 } },
   ],
 };
 const SUBTITLES = {
@@ -889,7 +899,7 @@ function logicSolvable(grid,L){
 // only while it stays logicSolvable also guarantees a unique solution.
 function makePuzzle(L){
   const n=L.n;
-  if(L.hard) return makeHardPuzzle(L);
+  if(L.tune) return makeTunedPuzzle(L);
   const solution=new Array(n*n).fill(0);
   fillGrid(solution,L);
   const puzzle=solution.slice();
@@ -940,79 +950,116 @@ function digUnique(solution,L){
   return puzzle;
 }
 /* ---- how hard is this puzzle, really? ----------------------------------
-   The solver always reaches for the cheapest technique that works, so its
-   trace is the least-effort human path — and what that path costs IS the
-   difficulty. Singles are free (you spot them without thinking); everything
-   above them is priced by how hard it is to see. `stalls` counts the separate
-   moments where the singles dry up and you have to go hunting, which is what
-   actually makes a grid feel hard rather than merely long.
+   Replay the solve step by step and price every move by what it costs a
+   person: how hard the technique is to know, times how hard the move is to
+   FIND. The solver always reaches for the cheapest technique that works, so
+   its trace is the least-effort human path.
 
-   Rating a Legend by its single toughest technique (the old measure) said a
-   puzzle needing one pair and fifty naked singles was as hard as one needing
-   six wings — which is how 7% of Legends came out solvable by singles alone. */
-function difficultyOf(pz,L){
-  const r=solve(pz,L);
-  if(!r.solved) return -1;                 // beyond the engine: unusable
-  let t2=0,t3=0,t4=0,stalls=0,prevAdv=false;
-  for(const d of r.trace){
-    if(d.tier===2) t2++; else if(d.tier===3) t3++; else if(d.tier===4) t4++;
-    if(d.tier>=2){ if(!prevAdv) stalls++; prevAdv=true; } else prevAdv=false;
+   The scan term is what makes this work across the whole ladder. Rating a
+   board only by its techniques says Master and Champion are both zero — they
+   are singles-only by construction, so there is no technique to price. But
+   with 46 clues a single is always sitting in front of you, and with 33 you
+   have to hunt for it: scan width (empty squares per available move) is 1.2
+   on Master and 2.3 on Champion, and that is the real difference.
+
+   `stalls` counts the separate moments where the singles dry up completely —
+   what makes a grid feel hard rather than merely long. */
+function effortOf(pz,L){
+  const ctx=solverCtx(L), n=L.n;
+  const state={grid:pz.slice(), cand:computeCands(pz,ctx)};
+  let e=0,t2=0,t3=0,t4=0,stalls=0,prevAdv=false,guard=0;
+  while(state.grid.some(v=>v===0)){
+    if(++guard>n*n*2) return null;
+    let moves=0, empty=0;
+    for(let i=0;i<n*n;i++){
+      if(state.grid[i]!==0) continue;
+      empty++;
+      if(singleAt(state.cand,i,ctx)) moves++;
+    }
+    const scan = moves>0 ? empty/moves : empty;   // squares examined per move found
+    let d=null;
+    for(const t of TECHS){ d=t(state,ctx); if(d) break; }
+    if(!d) return null;                            // beyond the engine: unusable
+    if(d.tier===1) e += (d.tech==='naked single' ? scan : 1.6*scan);
+    else if(d.tier===2){ t2++; e+=14; }
+    else if(d.tier===3){ t3++; e+=34; }
+    else { t4++; e+=80; }
+    if(d.tier>=2){ if(!prevAdv){ stalls++; e+=10; } prevAdv=true; } else prevAdv=false;
+    applyDeduction(state,d,ctx);
   }
-  return 3*t2 + 9*t3 + 22*t4 + 4*stalls;
+  return { effort:Math.round(e), tier:(t4?4:t3?3:t2?2:1), stalls };
 }
 
-const LEGEND_TARGET=70;   // comfortably legendary — stop searching once here
-const LEGEND_FLOOR=28;    // keep spending seeds until at least this hard
-const LEGEND_MIN_TIER=3;  // ...and until a pair-or-harder is genuinely required
-const LEGEND_SLICE=130;   // ms of search per starting grid
-const LEGEND_BUDGET=260;  // ms after which the floor is all we still chase
-const LEGEND_SEEDS=4;     // hard cap on starting grids, so the wait is bounded
-const LEGEND_RUIN=12;     // clues handed back per ruin-and-recreate pass
+/* Tuned puzzle by ruin-and-recreate search, aimed at the level's `tune` spec.
 
-/* Hard puzzle by ruin-and-recreate search.
+   Digging at random lands on a singles-only grid ~70% of the time, so sampling
+   whole puzzles and picking the best is weak AND slow. But a full dig costs
+   ~20ms (uniqueness counting) while a logic solve costs ~0.04ms, so *searching*
+   the clue set is 500x cheaper than resampling it: dig once for a valid seed,
+   then repeatedly hand a few clues back and greedily re-dig, keeping whatever
+   fits the spec better.
 
-   Digging at random lands on a singles-only grid ~70% of the time, so the old
-   best-of-7 sampling was doing all the work and doing it weakly. But a full
-   dig costs ~20ms (uniqueness counting) while a logic solve costs ~0.04ms, so
-   *searching* the clue set is 500x cheaper than resampling it: dig once for a
-   valid seed, then repeatedly hand a few clues back and greedily re-dig,
-   keeping whatever scores higher.
+   The clue count is the difficulty dial and the technique window is the gate.
+   Holding clues fixed is what makes a MIDDLE level possible at all — left to
+   dig as deep as logic allows, every board bottoms out around 24 clues and
+   comes out Legend-shaped.
 
-   Every removal here is gated on the logic engine still solving the grid. A
+   `climb:false` stops the moment the board fits the window (Champion — land in
+   the middle and go). `climb:true` keeps pushing effort for the whole slice, so
+   the ceiling is open-ended (Legend).
+
+   Every removal is gated on the logic engine still solving the grid. A
    deductive solve proves the answer is forced, so that single test keeps the
    solution unique AND keeps every step explainable by the hint engine. */
-function makeHardPuzzle(L){
-  const n=L.n, all=[...Array(n*n).keys()];
+function makeTunedPuzzle(L){
+  const n=L.n, all=[...Array(n*n).keys()], T=L.tune;
+  const seedL=Object.assign({},L,{blanks:n*n-T.clues});
+  // Champion's ceiling and Legend's floor are what keep the two levels from
+  // ever meeting: 800 < 850, so the bands cannot overlap by construction.
+  const lo=T.floor||0, hi=T.ceil||Infinity;
+  const fits=r=>!!r && r.tier>=T.tierMin && r.tier<=T.tierMax && r.effort>=lo && r.effort<=hi;
+  const fit=r=>{
+    if(!r) return -1e9;
+    let f=0;
+    if(r.tier<T.tierMin) f-=1e4*(T.tierMin-r.tier);
+    if(r.tier>T.tierMax) f-=1e4*(r.tier-T.tierMax);
+    // Climbing levels chase effort; banded ones steer back into the band, with
+    // a faint upward pull so the search still has a gradient to follow once
+    // it's inside (a perfectly flat band leaves it wandering at random).
+    return f + (T.climb ? r.effort
+                        : -(Math.max(0,lo-r.effort)+Math.max(0,r.effort-hi))
+                          + r.effort/1000);
+  };
   const start=performance.now();
-  let best=null, bestSol=null, bestSc=-1, bestTier=0, seeds=0;
-  const keep=(pz,sol,sc)=>{ best=pz.slice(); bestSol=sol.slice(); bestSc=sc; bestTier=solve(pz,L).hardestTier; };
+  let best=null, bestSol=null, bestR=null, bestF=-1e9, seeds=0;
+  const keep=(pz,sol,r,f)=>{ best=pz.slice(); bestSol=sol.slice(); bestR=r; bestF=f; };
   do {
     seeds++;
-    const seedEnd=performance.now()+LEGEND_SLICE;
+    const seedEnd=performance.now()+T.slice;
     const solution=new Array(n*n).fill(0);
     fillGrid(solution,L);
-    let cur=digUnique(solution,L), curSc=difficultyOf(cur,L);
-    if(curSc>bestSc) keep(cur,solution,curSc);
-    while(bestSc<LEGEND_TARGET && performance.now()<seedEnd){
+    let cur=digUnique(solution,seedL), curR=effortOf(cur,L), curF=fit(curR);
+    if(curF>bestF) keep(cur,solution,curR,curF);
+    while(performance.now()<seedEnd && (T.climb || !fits(bestR))){
       const cand=cur.slice();
       // ruin: hand a handful of clues back, opening up new ways to dig
-      for(const h of shuffle(all.filter(i=>cand[i]===0)).slice(0,LEGEND_RUIN))
+      for(const h of shuffle(all.filter(i=>cand[i]===0)).slice(0,T.ruin))
         cand[h]=solution[h];
-      // recreate: pull clues out again, in a fresh order, as deep as logic allows
+      // recreate: pull clues out again in a fresh order, down to the target count
+      let clues=cand.reduce((c,v)=>c+(v!==0),0);
       for(const i of shuffle(all.slice())){
-        if(cand[i]===0) continue;
+        if(cand[i]===0 || clues<=T.clues) continue;
         const saved=cand[i]; cand[i]=0;
-        if(!solve(cand,L).solved) cand[i]=saved;
+        if(!solve(cand,L).solved) cand[i]=saved; else clues--;
       }
-      const sc=difficultyOf(cand,L);
-      if(sc>=curSc){ cur=cand; curSc=sc; }        // sideways moves keep it exploring
-      if(sc>bestSc) keep(cand,solution,sc);
+      const r=effortOf(cand,L), f=fit(r);
+      if(f>=curF){ cur=cand; curR=r; curF=f; }    // sideways moves keep it exploring
+      if(f>bestF) keep(cand,solution,r,f);
     }
-    // Out of slice. Take another starting grid if this one still falls short of
-    // what Legend promises, or if the budget has room left to chase the target.
-  } while(bestSc<LEGEND_TARGET && seeds<LEGEND_SEEDS &&
-          (bestSc<LEGEND_FLOOR || bestTier<LEGEND_MIN_TIER ||
-           performance.now()-start<LEGEND_BUDGET));
+    // Out of slice. Take another starting grid if this one never met the spec —
+    // `budget` has to leave room for a whole extra slice or the retry can never
+    // fire and the level quietly ships a board that misses its own promise.
+  } while(!fits(bestR) && seeds<T.seeds && performance.now()-start<T.budget);
   return { puzzle:best, solution:bestSol };
 }
 
