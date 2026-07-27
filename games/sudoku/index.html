@@ -2480,7 +2480,9 @@ function enterLevel(key, idx, forceFresh){
   $('level-label').textContent=L.name+' '+L.emoji;
   $('mascot').innerHTML=mascotSvg('happy');
   renderBoard(); renderTray();
-  saveGame();
+  // Deliberately no saveGame() here: opening a level must not overwrite the
+  // one save slot. Placing or erasing a symbol saves, so merely browsing the
+  // menu can't throw away a half-finished puzzle.
   $('menu').classList.add('hidden');
   $('win').classList.remove('show');
   $('game').classList.remove('hidden');
@@ -2680,18 +2682,10 @@ window.addEventListener('hashchange', applyRoute);
 document.addEventListener('gesturestart',e=>e.preventDefault());
 
 renderMenu();
-// Boot: honor a deep-link, else resume a saved game, else show the menu.
-(function boot(){
-  if(!parseHash()){
-    const sv=loadSave();
-    if(sv && LEVELS[sv.styleKey] && sv.levelIdx>=0 && sv.levelIdx<LEVELS[sv.styleKey].length){
-      styleKey=sv.styleKey;
-      location.hash='#'+sv.styleKey+'-'+sv.levelIdx;   // fires hashchange -> resume
-      return;
-    }
-  }
-  applyRoute();
-})();
+// Boot: honor a deep-link, else show the menu. Opening the game never drops
+// you straight back into the last puzzle — picking that level again does, and
+// enterLevel asks before keeping the progress.
+applyRoute();
 </script>
 </body>
 </html>

@@ -412,6 +412,16 @@
   </div>
 </div>
 
+<div class="overlay" id="resume">
+  <div class="panel">
+    <div class="win-mascot">👋</div>
+    <h2>Welcome back!</h2>
+    <p>Keep going, or start this level fresh?</p>
+    <button class="big-btn" id="resume-yes">▸ Keep going</button>
+    <button class="big-btn alt" id="resume-new">↺ New game</button>
+  </div>
+</div>
+
 <div class="overlay" id="settings">
   <div class="panel">
     <h2>⚙️ Settings</h2>
@@ -482,7 +492,9 @@ function setStar(idx, n) {
   if ((s[idx] || 0) < n) { s[idx] = n; localStorage.setItem('match3-stars', JSON.stringify(s)); }
 }
 function saveGame() {
-  if (!L || freePlay) return;
+  // Nothing worth restoring until a move has been made — and writing anyway
+  // would let a level you merely opened overwrite a half-played one.
+  if (!L || freePlay || over || !movesUsed) return;
   try {
     localStorage.setItem('match3-save', JSON.stringify({
       lv: levelIdx, score, movesLeft, used: movesUsed, helped: usedHelp,
@@ -496,6 +508,16 @@ function loadSave() {
   catch (e) { return null; }
 }
 function clearSave() { localStorage.removeItem('match3-save'); }
+// A save is only usable for this level if its board matches the level's shape
+// and the goal isn't already finished.
+function validSave(sv, i) {
+  const lv = LEVELS[i];
+  return !!sv && sv.lv === i
+    && Array.isArray(sv.grid) && sv.grid.length === lv.rows
+    && sv.grid.every(row => Array.isArray(row) && row.length === lv.cols)
+    && Array.isArray(sv.got) && sv.got.length === lv.goals.length
+    && !lv.goals.every((g, k) => (sv.got[k] || 0) >= g[1]);
+}
 
 /* ---------------- sound (WebAudio, no assets) ---------------- */
 let soundOn = localStorage.getItem('match3-sound') !== 'off';
@@ -1256,6 +1278,7 @@ function showMenu() {
   $('game').classList.add('hidden');
   $('win').classList.remove('show');
   $('more').classList.remove('show');
+  $('resume').classList.remove('show');
   paintMenu();
 }
 
@@ -1276,6 +1299,7 @@ function start(idx, resume) {
   $('game').classList.remove('hidden');
   $('win').classList.remove('show');
   $('more').classList.remove('show');
+  $('resume').classList.remove('show');
   $('lv-name').textContent = L.name;
   $('foot').textContent = freePlay
     ? 'Pop as much as you like. 🎈'
@@ -1303,7 +1327,11 @@ function applyRoute() {
     const i = Number(m[1]) - 1;
     if (i >= 0 && i < LEVELS.length) {
       const sv = loadSave();
-      start(i, sv && sv.lv === i && !(sv.got || []).every((g, k) => g >= LEVELS[i].goals[k][1]) ? sv : null);
+      const ok = validSave(sv, i);
+      start(i, ok ? sv : null);
+      // Only ask when there's progress worth keeping — a level opened and left
+      // untouched has nothing to decide about.
+      if (ok && sv.used > 0) { clearNudge(); $('resume').classList.add('show'); }
       return;
     }
   }
@@ -1324,6 +1352,11 @@ $('more-btn').onclick  = () => {
   sfx('make');
 };
 $('more-quit').onclick = () => { $('more').classList.remove('show'); location.hash = ''; };
+$('resume-yes').onclick = () => { sfx('tap'); $('resume').classList.remove('show'); armIdle(); };
+$('resume-new').onclick = () => {
+  sfx('tap'); $('resume').classList.remove('show');
+  clearSave(); start(levelIdx);
+};
 
 $('set-btn').onclick   = () => $('settings').classList.add('show');
 $('set-close').onclick = () => $('settings').classList.remove('show');
