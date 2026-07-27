@@ -15,12 +15,26 @@ fruit wobble and hop back. Sit still for six seconds and a pointing finger
 travels between the two tiles worth trading; on a brand-new save it appears
 after two seconds instead, which is the entire tutorial.
 
-**Boosters explain themselves.** A booster has to answer three questions at a
-glance — what am I, what will I clear, and how do I go off:
+**Boosters explain themselves.** The shape of the match becomes the shape of
+the blast, so what a booster does is guessable rather than memorised:
+
+| You match | You get | It clears |
+|---|---|---|
+| four in a line | ⭐ **star** | its whole row and column |
+| a corner or T | 💣 **bomb** | everything around it |
+| five in a line | 🌈 **rainbow** | every fruit of one colour |
+
+Swap two boosters together and they combine — a bomb pair makes one much
+bigger blast, star + bomb makes a three-wide cross, and a rainbow turns every
+fruit of a colour into the other booster and sets them all off at once.
+
+Each one has to answer three questions at a glance — what am I, what will I
+clear, and how do I go off:
 
 - The **⭐ star** wears four arrows that pump outward, so "this blasts in four
-  directions" reads without words. Its fruit stays visible in the middle,
-  because it can still be matched normally.
+  directions" reads without words. The **💣 bomb** simply draws the circle it
+  is going to take out. Their fruit stays visible, because they can still be
+  matched normally.
 - **Selecting one lights up every tile it would take** — the star's whole row
   and column, the rainbow's whole colour. You find out what it does *before*
   spending it, and the footnote switches to "Tap it again to set it off!".
@@ -31,10 +45,6 @@ glance — what am I, what will I clear, and how do I go off:
   reaction instead of the board erasing itself.
 - Creating one pulls sparks *inward* to the new tile, so it looks assembled out
   of the fruit that just vanished.
-
-Four in a row (or an L/T corner) leaves a star. A straight five leaves a
-🌈 rainbow that removes every fruit of whatever it's swapped onto — two
-rainbows together clear the board.
 
 **Boosters you'll actually see.** Measured over 300 simulated games, a 7×7 with
 six fruit threw off **1.7 boosters per 30 moves** — most children would never
@@ -48,32 +58,46 @@ have met one. Two changes fixed that, both scaled to how sparse the board is
 
 Measured in the real game afterwards: **8.0 boosters per 30 moves**, 4.7× more.
 
-**Leaf covers.** Levels 3 and 5 grow a diamond of leaves over the middle of the
+**Leaf covers.** From level 3 a patch of leaves grows over the middle of the
 board. Pop the fruit standing on a leaf and the leaf is swept away; fruit
 falling past afterwards passes underneath, so a cover can only be cleared by a
 match made right on top of it. The leaves are deliberately translucent — you
 have to be able to read the fruit underneath to aim at it.
 
-**The curve.** Board and fruit variety grow together, and the covers arrive as a
-genuinely new idea rather than more of the same board:
+They're kept few and central for a reason. Leaves come off at under half the
+rate fruit does, and scattered ones stranded on cold edge cells produced a
+miserable tail where the last leaf took longer than the whole rest of the
+level. The idle hint now prefers a swap that sweeps a leaf, which is what
+actually steers you to the last stubborn one.
 
-| Level | Board | Fruit | Goal | Moves |
+**Levels never run out.** One board size everywhere — the big 7×7, because
+that's the one with room for chains and boosters to do something. Levels are
+generated from their number rather than authored, so there's always another
+one, and Level 34 is the same board every time you replay it. Beating a level
+unlocks the next; the menu keeps every level you've reached, with its stars,
+and a **total score that never resets**.
+
+The curve, all on the same board:
+
+| Level | Fruit kinds | Goals | Leaves | Moves |
 |---|---|---|---|---|
-| Berry Patch | 5×5 | 4 | 10 🍓 | 18 |
-| Fruit Basket | 6×6 | 4 | 12 🍌 + 12 🍇 | 22 |
-| Leafy Hollow | 6×6 | 4 | sweep 10 🍃 | 20 |
-| Orchard | 6×6 | 5 | 14 🍏 + 14 🍊 | 24 |
-| Hidden Grove | 7×7 | 5 | 12 🍓 + sweep 16 🍃 | 26 |
-| Rainbow Grove | 7×7 | 6 | 16 🍓 + 16 🍇 + 16 🫐 | 30 |
+| 1 | 4 | 9 of one fruit | — | 12 |
+| 5 | 5 | 13 of two fruit | 4 | 17 |
+| 10 | 6 | 17 of three fruit | 6 | 29 |
+| 14+ | 6 | 20 of three fruit | 6 | 34 |
+
+Both the goal size and the leaf count plateau around level 14 — a toddler game
+should not get harder forever. Past that the variety comes from which fruit is
+asked for and which shape the leaves make.
 
 Plus **Free Play** — no goal, no move count, endless.
 
-The move budget is a safety net, not the challenge: every level is finishable
-by a child swapping more or less at random (measured — Berry Patch takes about
-9 of its 18 moves, Fruit Basket about 9 of 22). **Par** is the challenge, and it
-sits at 62% of the budget for three stars and 85% for two, because at a looser
-75% that same random play three-starred the late levels and the stars stopped
-meaning anything.
+The move budget is a safety net, not the challenge: it's 1.75× the measured
+number of moves the objective actually takes, so every level is finishable
+without playing well. **Par** is the challenge — 62% of the budget for three
+stars, 85% for two. Measured on the hardest (plateau) level: a bot that just
+follows the pointing finger wins in 22 of 34 moves, which is two stars. Three
+stars needs real play.
 
 **Graphics.** Every fruit is one glossy sweet with a specular highlight and real
 depth. There used to be a different geometric backdrop per fruit — circle,
@@ -95,9 +119,11 @@ absolutely-positioned divs moved with CSS transforms, so falls and swaps are
 GPU-composited transitions rather than a repainting canvas. Covers live in their
 own layer keyed to cells, not tiles, because tiles fall and cells don't.
 
-State lives under `match3-` localStorage keys: `match3-stars`, `match3-sound`,
-`match3-vibe`, and `match3-save` for mid-level resume. Levels are deep-linkable
-(`#lvl-2`, `#free`). `prefers-reduced-motion` disables the decorative animation
+State lives under `match3-` localStorage keys: `match3-stars` (per level),
+`match3-total` (points, kept forever), `match3-max` (highest level unlocked),
+`match3-sound`, `match3-vibe`, and `match3-save` for mid-level resume. Levels
+are deep-linkable (`#lvl-2`, `#free`) but you can't skip past what you've
+unlocked. `prefers-reduced-motion` disables the decorative animation
 while keeping the booster aim ring readable.
 
 Run locally: open `index.html`, or `python3 -m http.server` from the repo root.

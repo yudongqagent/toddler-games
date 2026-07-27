@@ -79,6 +79,48 @@
   .free-btn .name { color:#fff; text-shadow:0 2px 0 rgba(120,40,70,.45); }
   .free-btn .desc { color:#fff2; color:#ffffffdd; }
 
+  /* totals that never reset — the number that always goes up */
+  .totals { display:flex; gap:10px; }
+  .tot {
+    background:rgba(255,255,255,.92); border-radius:999px;
+    padding:6px 16px; font-weight:800; color:#c2410c;
+    font-size:clamp(14px,3.8vw,18px);
+    box-shadow:0 3px 0 rgba(0,0,0,.13);
+  }
+  .play-btn {
+    border:none; cursor:pointer; font-family:inherit; font-weight:800; color:#fff;
+    background:linear-gradient(#ff9a62,#ff6f91);
+    border-radius:26px; padding:min(2.2vh,16px) 34px;
+    font-size:clamp(20px,5.6vw,28px);
+    box-shadow:0 6px 0 rgba(0,0,0,.2), inset 0 2px 0 rgba(255,255,255,.35);
+    text-shadow:0 2px 0 rgba(150,40,70,.35);
+  }
+  .play-btn:active { transform:translateY(4px); box-shadow:0 2px 0 rgba(0,0,0,.2), inset 0 2px 0 rgba(255,255,255,.35); }
+
+  /* every level you've unlocked, forever */
+  .lvl-grid {
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(clamp(52px,13vw,64px), 1fr));
+    gap:min(2vw,9px); width:min(92vw,500px);
+    max-height:32vh; overflow-y:auto;
+    padding:4px; border-radius:18px;
+    background:rgba(255,255,255,.16);
+  }
+  .lvl-chip {
+    border:none; cursor:pointer; font-family:inherit;
+    border-radius:16px; padding:7px 2px 5px;
+    background:linear-gradient(#fff,#ffe4cf);
+    box-shadow:0 3px 0 rgba(0,0,0,.16);
+    display:flex; flex-direction:column; align-items:center; gap:1px;
+  }
+  .lvl-chip:active { transform:translateY(3px); box-shadow:none; }
+  .lvl-chip .n { font-size:clamp(15px,4vw,19px); font-weight:800; color:#c2410c; line-height:1.1; }
+  .lvl-chip .s { font-size:9px; letter-spacing:-2px; min-height:1.1em; }
+  .lvl-chip.cur {
+    background:linear-gradient(#ffd08a,#ff9f43);
+    box-shadow:0 3px 0 rgba(0,0,0,.16), 0 0 0 3px #fff;
+  }
+  .lvl-chip.cur .n { color:#7a3300; }
+
   .menu-links { display:flex; gap:10px; }
   .chip-link {
     border:none; cursor:pointer; font-family:inherit; font-weight:800;
@@ -285,6 +327,28 @@
     100% { transform:scale(1.15); opacity:0; }
   }
   .tile.sp2 .face { font-size:calc(var(--cell)*.44); }
+
+  /* BOMB: literally draws the circle it will take out, which is about as
+     self-explanatory as a booster can get. */
+  .tile.sp3 .crown {
+    display:block; border-radius:50%;
+    border:calc(var(--cell)*.055) dashed #fff;
+    margin:calc(var(--cell)*.03);
+    inset:0;
+    filter:drop-shadow(0 0 calc(var(--cell)*.05) rgba(255,140,0,.9));
+    animation:bombRing 1.1s ease-in-out infinite;
+  }
+  @keyframes bombRing {
+    0%,100% { transform:scale(.86); opacity:.85; }
+    50%     { transform:scale(1.02); opacity:1; }
+  }
+  .tile.sp3 .shape {
+    box-shadow:inset 0 0 0 calc(var(--cell)*.05) #ffd9a0,
+               inset 0 calc(var(--cell)*-.085) 0 rgba(0,0,0,.22),
+               0 0 calc(var(--cell)*.16) #ff9f43;
+    animation:starGlow 1.1s ease-in-out infinite;
+  }
+  .tile.sp3 .face { font-size:calc(var(--cell)*.34); }
 
   /* "tap again and THIS is what goes" — shown while a booster is selected */
   .tile.aim .inner { animation:aimPulse .75s ease-in-out infinite; }
@@ -495,8 +559,13 @@
 <!-- ---------------- MENU ---------------- -->
 <div class="screen" id="menu">
   <h1>🍓 Fruit Pop</h1>
-  <p class="subtitle">Match three to make them pop!</p>
-  <div class="levels" id="levels"></div>
+  <div class="totals" id="totals"></div>
+  <button class="play-btn" id="play-btn"></button>
+  <div class="lvl-grid" id="levels"></div>
+  <button class="level-btn free-btn" id="free-btn">
+    <span class="emoji">🎈</span><span class="name">Free Play</span>
+    <span class="desc">No goals, no counting — just pop!</span>
+  </button>
   <div class="menu-links">
     <button class="chip-link" id="home-btn">🏠 All games</button>
     <button class="chip-link" id="set-btn">⚙️ Settings</button>
@@ -603,23 +672,66 @@ const KINDS = [
   { emoji:'🍊', name:'orange',      from:'#ffb85e', to:'#ef6606', note:4 },
   { emoji:'🫐', name:'blueberry',   from:'#6dc2ff', to:'#0d68cf', note:5 },
 ];
-const SP_NONE = 0, SP_STAR = 1, SP_RAIN = 2;
+const SP_NONE = 0, SP_STAR = 1, SP_RAIN = 2, SP_BOMB = 3;
 
 /* ---------------- levels ----------------
-   The curve: board grows, fruit variety grows (so matches get rarer), and the
-   goal asks for more kinds at once. Move budgets are deliberately loose — a
-   toddler should finish every level; the stars are what reward efficiency.
-   Levels 3 and 5 introduce and then combine the leaf covers, so the curve adds
-   a NEW IDEA rather than just more of the same board.                        */
-const LEVELS = [
-  { name:'Berry Patch',   emoji:'🍓', rows:5, cols:5, kinds:4, moves:18, goals:[[0,10]] },
-  { name:'Fruit Basket',  emoji:'🍌', rows:6, cols:6, kinds:4, moves:22, goals:[[1,12],[2,12]] },
-  { name:'Leafy Hollow',  emoji:'🍃', rows:6, cols:6, kinds:4, moves:20, goals:[], covers:10 },
-  { name:'Orchard',       emoji:'🍏', rows:6, cols:6, kinds:5, moves:24, goals:[[3,14],[4,14]] },
-  { name:'Hidden Grove',  emoji:'🌿', rows:7, cols:7, kinds:5, moves:26, goals:[[0,12]], covers:16 },
-  { name:'Rainbow Grove', emoji:'🌈', rows:7, cols:7, kinds:6, moves:30, goals:[[0,16],[2,16],[5,16]] },
-];
-const FREE = { name:'Free Play', emoji:'🎈', rows:6, cols:6, kinds:5, moves:0, goals:[] };
+   One board size everywhere — the big one. A 7x7 gives room for chains and
+   boosters to actually do something, and a single size means the game never
+   feels like it shrank.
+
+   Levels are generated, not authored, so they never run out. Everything is a
+   pure function of the level number, so Level 34 is the same board every time
+   you replay it.
+
+   The move budget comes from measured throughput rather than taste: naive play
+   clears ~6.2 tiles per move on this board, so a goal of `per` fruit of one
+   kind out of `kinds` takes about per*kinds/6.2 moves, and leaves come off at
+   about one per move. Budget is 1.6x the binding constraint — a safety net wide
+   enough that a child swapping at random still finishes.                      */
+const ROWS = 7, COLS = 7;
+const TILES_PER_MOVE = 6.2;    // measured, naive play
+const COVERS_PER_MOVE = 0.45;  // measured — leaves come off far slower than fruit
+const LEVEL_EMOJI = ['🍓','🍌','🍇','🍏','🍊','🫐','🍃','🌿','🌈','⭐','💣','🎀'];
+// Centre-weighted only. Ring and scatter patterns looked nicer but stranded
+// leaves on cold edge cells that almost never get matched, so the last two
+// took longer than the whole rest of the level — a miserable tail for a child.
+const COVER_PATTERNS = ['diamond', 'block'];
+
+function levelFor(n) {
+  const kinds     = n < 4 ? 4 : n < 8 ? 5 : 6;
+  const goalCount = n < 3 ? 1 : n < 7 ? 2 : 3;
+  // Both plateau, around level 20. Past that the challenge holds steady and the
+  // variety comes from which fruit and which leaf pattern — a toddler game
+  // should not get harder forever.
+  // Caps keep the longest level around 32 moves. Left uncapped this reached 43,
+  // which is a long sit for a three-year-old.
+  const per    = Math.min(20, 8 + Math.round(n * 0.9));
+  // Leaves grow slowly and cap low. Measured, they come off at under half a
+  // leaf per move — far slower than fruit — so a big patch quietly becomes the
+  // binding constraint and blows the budget. Eight keeps them a real objective
+  // without turning the level into a hunt for the last stubborn one.
+  const covers = n < 3 ? 0 : Math.min(6, 2 + (n - 3));
+
+  const goals = [];
+  // n % kinds, not (n*3) % kinds — the latter only ever lands on two values for
+  // six fruit, so every other level asked for exactly the same three.
+  const start = n % kinds;
+  for (let i = 0; i < goalCount; i++) goals.push([(start + i) % kinds, per]);
+
+  const fruitMoves = per * kinds / TILES_PER_MOVE;
+  const coverMoves = covers / COVERS_PER_MOVE;
+  // 1.75x the binding constraint. Measured: a bot following the hint finishes
+  // the plateau level in 32 moves, so 1.6x (31) left it one short.
+  const moves = Math.max(12, Math.ceil(Math.max(fruitMoves, coverMoves) * 1.75));
+
+  return {
+    n, name: 'Level ' + n,
+    emoji: LEVEL_EMOJI[(n - 1) % LEVEL_EMOJI.length],
+    rows: ROWS, cols: COLS, kinds, moves, goals, covers,
+    pattern: COVER_PATTERNS[(n - 1) % COVER_PATTERNS.length],
+  };
+}
+const FREE = { name:'Free Play', emoji:'🎈', rows:ROWS, cols:COLS, kinds:5, moves:0, goals:[], covers:0 };
 // 3 stars if you finish inside par, 2 inside the stretch, 1 for finishing at all.
 // Tuned against measured play: budgets stay generous enough that every level is
 // finishable by a child swapping more or less at random, but at 0.75 that same
@@ -633,17 +745,25 @@ function stars() {
   try { return JSON.parse(localStorage.getItem('match3-stars') || '{}') || {}; }
   catch (e) { return {}; }
 }
-function setStar(idx, n) {
+function setStar(lvl, n) {
   const s = stars();
-  if ((s[idx] || 0) < n) { s[idx] = n; localStorage.setItem('match3-stars', JSON.stringify(s)); }
+  if ((s[lvl] || 0) < n) { s[lvl] = n; localStorage.setItem('match3-stars', JSON.stringify(s)); }
 }
+// Points are kept forever across every level, so there's always a number going
+// up even on a level you've already three-starred.
+function totalScore() { const v = +(localStorage.getItem('match3-total') || 0); return isFinite(v) ? v : 0; }
+function addTotal(n) { try { localStorage.setItem('match3-total', String(totalScore() + n)); } catch (e) {} }
+function totalStars() { return Object.values(stars()).reduce((a, b) => a + (b || 0), 0); }
+// Highest level opened up. Beating level n unlocks n+1, forever.
+function maxLevel() { const v = +(localStorage.getItem('match3-max') || 1); return isFinite(v) && v >= 1 ? Math.floor(v) : 1; }
+function unlockLevel(n) { if (n > maxLevel()) { try { localStorage.setItem('match3-max', String(n)); } catch (e) {} } }
 function saveGame() {
   // Nothing worth restoring until a move has been made — and writing anyway
   // would let a level you merely opened overwrite a half-played one.
   if (!L || freePlay || over || !movesUsed) return;
   try {
     localStorage.setItem('match3-save', JSON.stringify({
-      lv: levelIdx, score, movesLeft, used: movesUsed, helped: usedHelp,
+      lv: levelNo, score, movesLeft, used: movesUsed, helped: usedHelp,
       got: goalGot,
       cov: covers.map(row => row.slice()),
       grid: grid.map(row => row.map(t => t ? [t.k, t.sp] : null)),
@@ -658,7 +778,7 @@ function clearSave() { localStorage.removeItem('match3-save'); }
 // A save is only usable for this level if its board matches the level's shape
 // and the goal isn't already finished.
 function validSave(sv, i) {
-  const lv = LEVELS[i];
+  const lv = levelFor(i);
   if (!sv || sv.lv !== i) return false;
   if (!Array.isArray(sv.grid) || sv.grid.length !== lv.rows) return false;
   if (!sv.grid.every(row => Array.isArray(row) && row.length === lv.cols)) return false;
@@ -734,7 +854,7 @@ function sfx(name, n = 0, notes) {
 function buzz(ms) { if (vibeOn && navigator.vibrate) try { navigator.vibrate(ms); } catch (e) {} }
 
 /* ---------------- game state ---------------- */
-let L = null, levelIdx = 0, freePlay = false;
+let L = null, levelNo = 0, freePlay = false;
 let R = 0, C = 0, KN = 4;
 let grid = [];               // grid[r][c] = tile | null
 let score = 0, movesLeft = 0, movesUsed = 0, usedHelp = false;
@@ -778,7 +898,7 @@ function makeTile(k, r, c, sp = SP_NONE) {
 }
 function paint(t) {
   const el = t.el;
-  el.classList.remove('sp1', 'sp2');
+  el.classList.remove('sp1', 'sp2', 'sp3');
   if (t.sp === SP_RAIN) {
     t.shape.className = 'shape';
     t.shape.style.background = '';
@@ -790,7 +910,8 @@ function paint(t) {
     t.shape.className = 'shape';
     t.shape.style.background = 'linear-gradient(160deg,' + K.from + ',' + K.to + ')';
     t.face.textContent = K.emoji;
-    if (t.sp === SP_STAR) { el.classList.add('sp1'); el.setAttribute('aria-label', K.name + ' star'); }
+    if (t.sp === SP_STAR)      { el.classList.add('sp1'); el.setAttribute('aria-label', K.name + ' star'); }
+    else if (t.sp === SP_BOMB) { el.classList.add('sp3'); el.setAttribute('aria-label', K.name + ' bomb'); }
     else el.setAttribute('aria-label', K.name);
   }
 }
@@ -894,6 +1015,39 @@ function groups() {
   return [...byRoot.values()].map(g => ({ k: g.k, lines: g.lines, maxRun: g.maxRun, cells: [...g.cells.values()] }));
 }
 
+// The move the hint should point at. Same search as anyMove, but a swap that
+// clears a leaf wins — otherwise the last stubborn leaf can outlast the whole
+// budget, since nothing else on the board steers you towards it.
+function hintMove() {
+  let fallback = null;
+  for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) {
+    for (const [dr, dc] of [[0, 1], [1, 0]]) {
+      const r2 = r + dr, c2 = c + dc;
+      if (r2 >= R || c2 >= C) continue;
+      const a = grid[r][c], b = grid[r2][c2];
+      if (!a || !b) continue;
+      // Only a rainbow (or two boosters together) goes off regardless. A star
+      // or bomb swapped against a plain fruit still has to make a match, so it
+      // must be tested like any other swap — pointing the finger at one that
+      // doesn't match teaches a child that the hint lies.
+      if (isRain(a) || isRain(b) || (a.sp !== SP_NONE && b.sp !== SP_NONE)) {
+        fallback = fallback || [[r, c], [r2, c2]];
+        continue;
+      }
+      grid[r][c] = b; grid[r2][c2] = a;
+      const gs = groups();
+      let sweeps = false;
+      for (const g of gs) for (const [gr, gc] of g.cells) if (covers[gr] && covers[gr][gc]) { sweeps = true; break; }
+      grid[r][c] = a; grid[r2][c2] = b;
+      if (gs.length) {
+        if (sweeps) return [[r, c], [r2, c2]];
+        fallback = fallback || [[r, c], [r2, c2]];
+      }
+    }
+  }
+  return fallback;
+}
+
 function anyMove() {
   for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) {
     if (isRain(grid[r][c])) return [[r, c], [r, c + 1 < C ? c + 1 : c - 1]];
@@ -920,17 +1074,25 @@ function clearTiles() {
    A cover sits on a CELL. Clear the fruit standing on it and the leaf is swept
    away; fruit falling through afterwards passes underneath, so a cover can
    only ever be removed by a match made right on top of it. */
-function makeCovers(n) {
+function makeCovers(n, pattern) {
   covers = [];
   coversLeft = 0;
   for (let r = 0; r < R; r++) { covers[r] = []; for (let c = 0; c < C; c++) covers[r][c] = 0; }
   if (!n) { paintCovers(); return; }
-  // Take the n cells nearest the middle, so the patch always reads as a
-  // deliberate shape (a diamond) rather than scattered noise.
+  // Rank every cell, take the best n. Each pattern is a different ranking, so
+  // the patch always reads as a deliberate shape rather than scattered noise —
+  // and later levels get a different silhouette instead of the same blob.
   const mid = [(R - 1) / 2, (C - 1) / 2];
+  const rank = (r, c) => {
+    const man = Math.abs(r - mid[0]) + Math.abs(c - mid[1]);
+    const che = Math.max(Math.abs(r - mid[0]), Math.abs(c - mid[1]));
+    if (pattern === 'ring')    return Math.abs(man - Math.round(R / 2));
+    if (pattern === 'block')   return che;
+    if (pattern === 'scatter') return (r * 7 + c * 13) % 11;
+    return man;                                     // diamond
+  };
   const cells = [];
-  for (let r = 0; r < R; r++) for (let c = 0; c < C; c++)
-    cells.push([Math.abs(r - mid[0]) + Math.abs(c - mid[1]), r, c]);
+  for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) cells.push([rank(r, c), r, c]);
   cells.sort((a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2]);
   cells.slice(0, Math.min(n, R * C)).forEach(([, r, c]) => { covers[r][c] = 1; coversLeft++; });
   paintCovers();
@@ -952,7 +1114,7 @@ function paintCovers() {
 function restoreCovers(cov) {
   if (!L.covers) { makeCovers(0); return; }
   const ok = Array.isArray(cov) && cov.length === R && cov.every(row => Array.isArray(row) && row.length === C);
-  if (!ok) { makeCovers(L.covers); return; }
+  if (!ok) { makeCovers(L.covers, L.pattern); return; }
   covers = cov.map(row => row.slice());
   coversLeft = covers.reduce((a, row) => a + row.reduce((x, v) => x + (v ? 1 : 0), 0), 0);
   paintCovers();
@@ -1102,11 +1264,13 @@ function starBeams(r, c) {
     setTimeout(() => b.remove(), 450);
   }
 }
-// The rainbow's reach is the whole board, so its tell is a ring washing over it.
-function shockwave(r, c) {
+// A ring washing outward. `span` is how many cells across it should reach, so
+// a bomb's ring stops at its blast radius and the rainbow's covers the board —
+// the size of the ring is itself information.
+function shockwave(r, c, span) {
   if (REDUCED) return;
   const cell = board.clientWidth / C;
-  const size = Math.max(R, C) * cell * 2.2;
+  const size = (span || Math.max(R, C) * 2.2) * cell;
   const s = document.createElement('div');
   s.className = 'shock';
   s.style.width = s.style.height = size + 'px';
@@ -1117,10 +1281,17 @@ function shockwave(r, c) {
 }
 
 /* ---------------- the resolve loop ---------------- */
-function blastCells(r, c, sp, k, out) {
+// The shape of the match becomes the shape of the blast — a line match blasts
+// lines, a corner match blasts a blob, a long match takes a whole colour. That
+// mapping is the thing that makes boosters guessable instead of memorised.
+function blastCells(r, c, sp, k, out, radius) {
   if (sp === SP_STAR) {
     for (let i = 0; i < C; i++) out.add(r * C + i);
     for (let i = 0; i < R; i++) out.add(i * C + c);
+  } else if (sp === SP_BOMB) {
+    const rad = radius || 1;
+    for (let rr = r - rad; rr <= r + rad; rr++) for (let cc = c - rad; cc <= c + rad; cc++)
+      if (rr >= 0 && rr < R && cc >= 0 && cc < C) out.add(rr * C + cc);
   } else if (sp === SP_RAIN) {
     for (let rr = 0; rr < R; rr++) for (let cc = 0; cc < C; cc++)
       if (grid[rr][cc] && grid[rr][cc].k === k) out.add(rr * C + cc);
@@ -1137,10 +1308,12 @@ function expand(set) {
     t.fired = true;
     // Show every booster going off, including ones set off by other boosters —
     // otherwise a chain reaction just looks like the board erasing itself.
-    if (t.sp === SP_STAR) starBeams(t.r, t.c); else shockwave(t.r, t.c);
+    if (t.sp === SP_STAR) starBeams(t.r, t.c);
+    else if (t.sp === SP_BOMB) shockwave(t.r, t.c, 2 * (t.radius || 1) + 1);
+    else shockwave(t.r, t.c);
     if (!fired) fired = [t.r, t.c];
     const add = new Set();
-    blastCells(t.r, t.c, t.sp, t.sp === SP_RAIN ? -1 : t.k, add);
+    blastCells(t.r, t.c, t.sp, t.sp === SP_RAIN ? -1 : t.k, add, t.radius);
     add.forEach(x => { if (!set.has(x)) { set.add(x); queue.push(x); } });
   }
   return fired;
@@ -1260,7 +1433,8 @@ async function resolve(origins) {
       // which are easy to make by accident — give the (still lovely) star.
       let sp = SP_NONE;
       if (g.maxRun >= 5) sp = SP_RAIN;
-      else if (g.lines >= 2 || g.cells.length >= 4) sp = SP_STAR;
+      else if (g.lines >= 2) sp = SP_BOMB;     // a corner or T — blasts a blob
+      else if (g.cells.length >= 4) sp = SP_STAR;
       // Gone too long without one? Quietly turn this match into a star. The
       // child only ever sees a gift arriving, never a rule being bent.
       else if (cascade === 1 && sinceBooster >= PITY()) { sp = SP_STAR; lucky = true; }
@@ -1359,7 +1533,7 @@ function showAim(t) {
   clearAim();
   if (!t || t.sp === SP_NONE) return;
   const keys = new Set();
-  blastCells(t.r, t.c, t.sp, t.sp === SP_RAIN ? commonKind() : t.k, keys);
+  blastCells(t.r, t.c, t.sp, t.sp === SP_RAIN ? commonKind() : t.k, keys, t.radius);
   keys.forEach(key => {
     const x = grid[Math.floor(key / C)][key % C];
     if (x && x !== t) x.el.classList.add('aim');
@@ -1385,6 +1559,9 @@ async function activate(t) {
   if (t.sp === SP_RAIN) {
     blastCells(t.r, t.c, SP_RAIN, commonKind(), keys);
     shockwave(at[0], at[1]);
+  } else if (t.sp === SP_BOMB) {
+    blastCells(t.r, t.c, SP_BOMB, t.k, keys, t.radius);
+    shockwave(at[0], at[1], 2 * (t.radius || 1) + 1);
   } else {
     blastCells(t.r, t.c, SP_STAR, t.k, keys);
     starBeams(at[0], at[1]);
@@ -1411,19 +1588,69 @@ async function trySwap(a, b) {
   grid[br][bc] = a; grid[ar][ac2] = b;
   await sleep(REDUCED ? 20 : 190);
 
+  // Two boosters swapped together combine into something bigger than either.
+  // This is the biggest reward in the game, so it gets a name and a toast.
+  if (a.sp !== SP_NONE && b.sp !== SP_NONE) {
+    spendMove();
+    const at = [b.r, b.c];
+    const keys = new Set([a.r * C + a.c, b.r * C + b.c]);
+    const pair = [a.sp, b.sp].sort().join('');
+
+    if (pair === String(SP_RAIN) + String(SP_RAIN)) {
+      for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) keys.add(r * C + c);
+      toast('🌈 EVERYTHING!');
+      shockwave(at[0], at[1]);
+    } else if (a.sp === SP_RAIN || b.sp === SP_RAIN) {
+      // Rainbow + booster: every fruit of that colour BECOMES that booster and
+      // goes off. The showiest thing in the game.
+      const other = isRain(a) ? b : a;
+      const rb = isRain(a) ? a : b;
+      let n = 0;
+      for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) {
+        const t = grid[r][c];
+        if (t && t.k === other.k && t.sp === SP_NONE) { t.sp = other.sp; t.radius = other.radius; t.fired = false; paint(t); n++; }
+      }
+      rb.fired = true;
+      keys.add(rb.r * C + rb.c);
+      toast(other.sp === SP_BOMB ? '💣 x' + n + '!' : '⭐ x' + n + '!');
+      shockwave(at[0], at[1]);
+      await sleep(REDUCED ? 20 : 320);       // let the transformation land first
+    } else if (pair === String(SP_BOMB) + String(SP_BOMB)) {
+      a.radius = 2; a.fired = false;         // one big 5x5 instead of two 3x3s
+      b.sp = SP_NONE;
+      keys.add(a.r * C + a.c);
+      toast('💣 BIG BOOM!');
+    } else if (pair === String(SP_STAR) + String(SP_BOMB)) {
+      // A fat cross: three rows and three columns.
+      const bomb = a.sp === SP_BOMB ? a : b, star = a.sp === SP_BOMB ? b : a;
+      for (let d = -1; d <= 1; d++) {
+        const rr = star.r + d, cc = star.c + d;
+        if (rr >= 0 && rr < R) for (let i = 0; i < C; i++) keys.add(rr * C + i);
+        if (cc >= 0 && cc < C) for (let i = 0; i < R; i++) keys.add(i * C + cc);
+      }
+      bomb.fired = star.fired = true;
+      toast('⭐ MEGA CROSS!');
+      starBeams(star.r, star.c);
+    } else {
+      toast('⭐ DOUBLE!');                    // star + star: both crosses fire
+    }
+
+    expand(keys);
+    sfx('blast'); shake(); buzz(60);
+    await clearCells(keys, 3, at);
+    await gravity();
+    await resolve(null);
+    return settle();
+  }
+
   const rainbow = isRain(a) || isRain(b);
   if (rainbow) {
     spendMove();
     const rb = isRain(a) ? a : b;
     const at = [rb.r, rb.c];
     const keys = new Set([a.r * C + a.c, b.r * C + b.c]);
-    if (isRain(a) && isRain(b)) {
-      for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) keys.add(r * C + c);
-      toast('💥 BOOM!');
-    } else {
-      const other = isRain(a) ? b : a;
-      blastCells(other.r, other.c, SP_RAIN, other.k, keys);
-    }
+    const other = isRain(a) ? b : a;
+    blastCells(other.r, other.c, SP_RAIN, other.k, keys);
     shockwave(at[0], at[1]);
     a.fired = b.fired = true;
     expand(keys);
@@ -1521,7 +1748,7 @@ function armIdle(fast) {
   clearNudge();
   idleTimer = setTimeout(() => {
     if (busy || over || sel) { armIdle(); return; }
-    const mv = anyMove();
+    const mv = hintMove();
     if (!mv) return;
     nudged = mv.map(([r, c]) => grid[r][c]).filter(Boolean);
     nudged.forEach(t => t.el.classList.add('nudge'));
@@ -1600,17 +1827,19 @@ function checkWin() {
   if (usedHelp) n = 1;
   else if (movesUsed > par2(L)) n = 1;
   else if (movesUsed > par3(L)) n = 2;
-  setStar(levelIdx, n);
+  setStar(levelNo, n);
+  addTotal(score);              // points are kept forever
+  unlockLevel(levelNo + 1);     // there is always a next level
   paintMenu();
   sfx('win'); buzz([80, 60, 80, 60, 160]);
   confettiBurst(); cannon('left'); cannon('right');
   setTimeout(() => { if ($('win').classList.contains('show')) { cannon('left'); cannon('right'); } }, 850);
   $('win-title').textContent = n === 3 ? 'Perfect!' : n === 2 ? 'Great job!' : 'You did it!';
-  $('win-sub').textContent = score.toLocaleString() + ' points · ' + movesUsed + ' moves';
+  $('win-sub').textContent = score.toLocaleString() + ' points · 🏆 ' + totalScore().toLocaleString() + ' total';
   $('win-mascot').textContent = ['🐻', '🐰', '🦊', '🐸', '🐨'][rnd(5)];
   const row = $('starrow').children;
   for (let i = 0; i < 3; i++) row[i].classList.remove('on');
-  $('next-btn').style.display = levelIdx < LEVELS.length - 1 ? '' : 'none';
+  $('next-btn').textContent = 'Level ' + (levelNo + 1) + ' ▸';
   setTimeout(() => $('win').classList.add('show'), 260);
   for (let i = 0; i < n; i++) setTimeout(() => { row[i].classList.add('on'); sfx('star', i); }, 700 + i * 340);
   return true;
@@ -1661,28 +1890,43 @@ function cannon(side) {
 /* ---------------- screens & routing ---------------- */
 function paintMenu() {
   const s = stars();
-  $('levels').innerHTML = LEVELS.map((lv, i) => {
-    const n = s[i] || 0;
-    const bits = lv.goals.map(g => g[1] + KINDS[g[0]].emoji);
-    if (lv.covers) bits.push(lv.covers + '🍃');
-    const goalTxt = bits.join(' ');
-    return '<button class="level-btn l' + (i + 1) + '" data-i="' + i + '">'
-      + '<span class="emoji">' + lv.emoji + '</span>'
-      + '<span class="name">' + lv.name + '</span>'
-      + '<span class="desc">' + goalTxt + ' · ' + lv.moves + ' moves</span>'
-      + '<span class="stars">' + (n ? '⭐'.repeat(n) : '') + '</span></button>';
-  }).join('')
-  + '<button class="level-btn free-btn" data-i="free">'
-  + '<span class="emoji">🎈</span><span class="name">Free Play</span>'
-  + '<span class="desc">No goals, no counting — just pop!</span>'
-  + '<span class="stars"></span></button>';
+  const mx = maxLevel();
+  $('totals').innerHTML =
+      '<span class="tot" aria-label="stars earned">⭐ ' + totalStars() + '</span>'
+    + '<span class="tot" aria-label="total points">🏆 ' + totalScore().toLocaleString() + '</span>';
+
+  // Continue on the first level not yet beaten, else the newest one unlocked.
+  let next = mx;
+  for (let i = 1; i <= mx; i++) if (!s[i]) { next = i; break; }
+  const play = $('play-btn');
+  play.textContent = '▶ Level ' + next;
+  play.dataset.n = next;
+
+  let html = '';
+  for (let i = 1; i <= mx; i++) {
+    const st = s[i] || 0;
+    html += '<button class="lvl-chip' + (i === next ? ' cur' : '') + '" data-n="' + i + '"'
+      + ' aria-label="Level ' + i + (st ? ', ' + st + ' stars' : '') + '">'
+      + '<span class="n">' + i + '</span>'
+      + '<span class="s">' + (st ? '⭐'.repeat(st) : '') + '</span></button>';
+  }
+  // A grid holding one chip just looks broken — there's nothing to pick yet.
+  $('levels').style.display = mx > 1 ? '' : 'none';
+  $('levels').innerHTML = html;
+  const cur = $('levels').querySelector('.cur');
+  if (cur) cur.scrollIntoView({ block: 'nearest' });
 }
 $('levels').addEventListener('click', ev => {
-  const b = ev.target.closest('.level-btn');
+  const b = ev.target.closest('.lvl-chip');
   if (!b) return;
   ac(); sfx('tap');
-  location.hash = b.dataset.i === 'free' ? '#free' : '#lvl-' + (Number(b.dataset.i) + 1);
+  location.hash = '#lvl-' + b.dataset.n;
 });
+$('play-btn').addEventListener('click', () => {
+  ac(); sfx('tap');
+  location.hash = '#lvl-' + $('play-btn').dataset.n;
+});
+$('free-btn').addEventListener('click', () => { ac(); sfx('tap'); location.hash = '#free'; });
 
 function showMenu() {
   over = true; busy = false;
@@ -1697,8 +1941,8 @@ function showMenu() {
 
 function start(idx, resume) {
   freePlay = idx === 'free';
-  levelIdx = freePlay ? -1 : idx;
-  L = freePlay ? FREE : LEVELS[idx];
+  levelNo = freePlay ? 0 : idx;
+  L = freePlay ? FREE : levelFor(idx);
   R = L.rows; C = L.cols; KN = L.kinds;
   score = 0; movesLeft = L.moves; movesUsed = 0; usedHelp = false; over = false; busy = false; sel = null;
   goalGot = L.goals.map(() => 0);
@@ -1726,17 +1970,17 @@ function start(idx, resume) {
     restoreCovers(resume.cov);
     // Saves are only ever written from a settled board, so a run here means a
     // stale or hand-edited save — deal a fresh board rather than gift a match.
-    if (runsOn(grid).length) { buildBoard(); makeCovers(L.covers || 0); }
+    if (runsOn(grid).length) { buildBoard(); makeCovers(L.covers || 0, L.pattern); }
   } else {
     buildBoard();
-    makeCovers(L.covers || 0);
+    makeCovers(L.covers || 0, L.pattern);
   }
   paintGoals(false);
   paintHud();
   // If a restored board happens to be dead, mix it before the child touches it.
   if (!anyMove()) reshuffle();
   // First ever game? Bring the pointing hand in early — that's the tutorial.
-  armIdle(!freePlay && levelIdx === 0 && !Object.keys(stars()).length);
+  armIdle(!freePlay && levelNo === 1 && !Object.keys(stars()).length);
 }
 
 function applyRoute() {
@@ -1744,8 +1988,9 @@ function applyRoute() {
   if (h === '#free') { start('free'); return; }
   const m = /^#lvl-(\d+)$/.exec(h);
   if (m) {
-    const i = Number(m[1]) - 1;
-    if (i >= 0 && i < LEVELS.length) {
+    const i = Number(m[1]);
+    // Levels never run out, but you can't skip ahead to one you haven't reached.
+    if (i >= 1 && i <= maxLevel()) {
       const sv = loadSave();
       const ok = validSave(sv, i);
       start(i, ok ? sv : null);
@@ -1762,8 +2007,8 @@ window.addEventListener('hashchange', applyRoute);
 /* ---------------- buttons ---------------- */
 $('back-btn').onclick  = () => { saveGame(); location.hash = ''; };
 $('menu-btn').onclick  = () => { location.hash = ''; };
-$('again-btn').onclick = () => { clearSave(); start(freePlay ? 'free' : levelIdx); };
-$('next-btn').onclick  = () => { clearSave(); location.hash = '#lvl-' + (levelIdx + 2); };
+$('again-btn').onclick = () => { clearSave(); start(freePlay ? 'free' : levelNo); };
+$('next-btn').onclick  = () => { clearSave(); location.hash = '#lvl-' + (levelNo + 1); };
 $('home-btn').onclick  = () => { location.href = '../../'; };
 $('more-btn').onclick  = () => {
   usedHelp = true; movesLeft += 5;
@@ -1775,7 +2020,7 @@ $('more-quit').onclick = () => { $('more').classList.remove('show'); location.ha
 $('resume-yes').onclick = () => { sfx('tap'); $('resume').classList.remove('show'); armIdle(); };
 $('resume-new').onclick = () => {
   sfx('tap'); $('resume').classList.remove('show');
-  clearSave(); start(levelIdx);
+  clearSave(); start(levelNo);
 };
 
 $('set-btn').onclick   = () => $('settings').classList.add('show');
