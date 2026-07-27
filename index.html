@@ -243,11 +243,14 @@
     filter:drop-shadow(0 2px 2px rgba(0,0,0,.25));
   }
 
+  /* fixed column count from layoutSizes() — the tray never has to guess where
+     to wrap, so it always ends up the shape the geometry was solved for */
   #tray {
-    display:flex; flex-wrap:wrap; justify-content:center;
+    display:grid;
+    grid-template-columns:repeat(var(--tray-cols, 5), var(--tray-size));
     gap:var(--tray-gap, 10px);
+    justify-content:center;
     padding:8px;
-    max-width:96vw;
   }
   .tray-btn {
     border:none; cursor:pointer;
@@ -389,6 +392,39 @@
     color:#0d4d0c; background:linear-gradient(#ffe063,#ffce2c);
     box-shadow:0 0 0 2px #ffc21d; transform:scale(1.12);
   }
+
+  /* ---------- LANDSCAPE: board left, controls right ----------
+     Set by layoutSizes() whenever side-by-side buys a bigger board. The board
+     gets its own full-height column; the topbar, number keypad and progress
+     bar stack beside it. #board-area dissolves (display:contents) so the board
+     and the progress bar can land in different grid areas. */
+  html.land #game {
+    display:grid;
+    grid-template-columns:auto auto;
+    grid-template-rows:auto 1fr auto;
+    grid-template-areas:
+      "board top"
+      "board tray"
+      "board prog";
+    align-content:center; justify-content:center;
+    column-gap:clamp(10px,2.2vw,26px); row-gap:8px;
+    padding:8px max(8px,env(safe-area-inset-right)) 8px max(8px,env(safe-area-inset-left));
+  }
+  html.land #board-area { display:contents; }
+  html.land #board { grid-area:board; align-self:center; }
+  html.land .topbar { grid-area:top; width:auto; min-width:min(230px,32vw); }
+  html.land #tray { grid-area:tray; align-self:center; }
+  /* renderBoard() pins the bar to the board's width; beside the board it
+     should track the panel instead */
+  html.land #pwrap { grid-area:prog; align-self:end; width:auto !important; }
+  /* the panel is narrow — trim the chrome so the keypad keeps the room */
+  html.land .round-btn { width:46px; height:46px; font-size:21px; }
+  html.land .tb-spacer { width:46px; }
+  html.land #mascot { font-size:clamp(20px,3vw,30px); }
+  html.land #level-label { font-size:clamp(15px,2.4vw,22px); }
+  /* no room above or below the board — float the card over the panel instead */
+  html.land #hint-bubble { width:min(46vw,430px); max-height:94vh; overflow-y:auto; }
+  html.land #hint-bubble::after { display:none; }
 
   /* ---------- SETTINGS (always-visible button + panel) ---------- */
   .fab {
@@ -1214,26 +1250,73 @@ function renderMenu(){
   $('level-legend').style.display = (styleKey==='classic' && legendUnlocked()) ? '' : 'none';
 }
 
+/* Board + tray geometry for the current viewport.
+
+   Two arrangements. Stacked (topbar / board / tray down the page) is the
+   natural one and wins on any upright screen. Side-by-side (board left,
+   controls right) wins when the screen is wider than it is tall: the stack
+   then has to fit the board into ~60% of a short height, which shrinks it to
+   a postage stamp and pushes the tray off the bottom edge. We simply build
+   both and keep whichever gives the child a bigger board. */
 function layoutSizes(){
   const n=L.n;
   const vw=Math.min(window.innerWidth, document.documentElement.clientWidth||1e9);
   const vh=window.innerHeight;
-  // Board must fit width and leave room for topbar + progress + tray.
-  const trayRows = n>6 && vw<560 ? 2 : 1;
-  const boardMax=Math.min(vw*0.94, vh*(trayRows===2?0.54:0.6), 620);
   const gap = n===9?2:3;                 // thin line between cells
   const bgap = n===9?6:8;                // thick line between boxes
   const sx=n/L.boxW-1, sy=n/L.boxH-1;    // box separators per axis
-  const cell=Math.min(
-    Math.floor((boardMax-16-sx*bgap-(n+sx-1)*gap)/n),
-    Math.floor((boardMax-16-sy*bgap-(n+sy-1)*gap)/n));
+  const cellFor=max=>Math.max(12, Math.floor(Math.min(
+    (max-16-sx*bgap-(n+sx-1)*gap)/n,
+    (max-16-sy*bgap-(n+sy-1)*gap)/n)));
+  const boardWFor=c=>c*n+sx*bgap+(n+sx-1)*gap+16;
   const tgap=Math.min(vw*0.02, 12);
-  const perRow=Math.ceil((n+1)/trayRows);   // +1 for the eraser
-  const ts=Math.min(Math.floor((vw*0.94-16-tgap*(perRow-1))/perRow), 84);
+  const nBtn=n+1;                        // +1 for the eraser
+
+  // stacked: board must leave room for topbar + progress + tray below it
+  const stackRows = n>6 && vw<560 ? 2 : 1;
+  const stackCell=cellFor(Math.min(vw*0.94, vh*(stackRows===2?0.54:0.6), 620));
+  // side-by-side: board takes the height, the panel takes a slice of the width
+  const sideCell=cellFor(Math.min(vh-22, vw-PANEL_MIN, 620));   // -22 = page padding
+  const side = vw>vh && sideCell>stackCell;
+
+  let cell, cols, ts;
+  if(side){
+    cell=sideCell;
+    // Room left for the panel once the board has its column, and the height
+    // left once the topbar and progress bar have theirs. The gutter is the
+    // page padding, the column gap and the tray's own padding — miss any of
+    // it and the grid overflows, shoving the board off the left edge.
+    const colGap=Math.min(26,Math.max(10,vw*0.022));
+    const restW=vw-boardWFor(cell)-(32+colGap);
+    const restH=vh-PANEL_CHROME;
+    // Pick the keypad shape. Big buttons matter most (small fingers), but a
+    // shape is also better for spanning the panel instead of hugging one edge,
+    // worse for a ragged last row, and worse for standing taller than it is
+    // wide — a 2x5 strip beside the board reads as a leftover column, not a
+    // keypad. Once buttons hit the 84px cap those are all that's left to
+    // choose on; on a cramped panel the size term takes over again.
+    let bestScore=-1; ts=0; cols=1;
+    for(let k=1;k<=nBtn;k++){
+      const rows=Math.ceil(nBtn/k);
+      const s=Math.floor(Math.min((restW-(k-1)*tgap)/k, (restH-(rows-1)*tgap)/rows, 84));
+      const fill=Math.min(1,(k*s+(k-1)*tgap)/restW);
+      const score=s+26*fill-5*(k*rows-nBtn)-12*Math.max(0,rows-k);
+      if(score>bestScore){ bestScore=score; ts=s; cols=k; }
+    }
+    ts=Math.max(ts,30);
+  } else {
+    cell=stackCell;
+    cols=Math.ceil(nBtn/stackRows);
+    ts=Math.min(Math.floor((vw*0.94-16-tgap*(cols-1))/cols), 84);
+  }
+  document.documentElement.classList.toggle('land', side);
   document.documentElement.style.setProperty('--tray-size', ts+'px');
   document.documentElement.style.setProperty('--tray-gap', tgap+'px');
+  document.documentElement.style.setProperty('--tray-cols', cols);
   return {cell, gap, bgap, sx};
 }
+const PANEL_MIN=200;      // narrowest the side panel may squeeze the board to
+const PANEL_CHROME=124;   // topbar + progress bar + gaps above/below the tray
 
 function symColor(v){ return isClassic ? DIGIT_COLORS[(v-1)%DIGIT_COLORS.length] : ''; }
 // symbol as rich text for the hint bubble: colored bold digit, or the emoji piece
@@ -1911,10 +1994,24 @@ function renderHintStep(){
   $('hint-next').textContent = hintStep<total-1 ? 'Next ▸' : 'Got it! ✓';
   const b=$('hint-bubble');
   b.classList.add('show');
-  // Place the card where it hides nothing this step talks about: above the
-  // board normally, below the board when the action is in the top rows.
   const br=boardEl.getBoundingClientRect();
   const h=b.offsetHeight;
+  // Landscape: the board owns the full height, so there is no room above or
+  // below it. Float the card over the panel beside the board instead — the
+  // board, which is what the step is pointing at, stays fully visible.
+  if(document.documentElement.classList.contains('land')){
+    // centre it in the strip beside the board, then pull it back inside the
+    // screen — the close button hangs 10px past the card's own corner.
+    const w=b.offsetWidth;
+    const cx=Math.min((br.right+window.innerWidth)/2, window.innerWidth-14-w/2);
+    b.style.left=Math.max(w/2+14, cx)+'px';
+    b.style.top=Math.max(14,(window.innerHeight-h)/2)+'px';
+    b.classList.remove('below');
+    return;
+  }
+  // Portrait: put the card where it hides nothing this step talks about —
+  // above the board normally, below it when the action is in the top rows.
+  b.style.left='50%';
   const aboveTop=Math.max(8, br.top-h-14);
   const covers=collectStepCells(st).some(c=>{
     const el=boardEl.children[c];
