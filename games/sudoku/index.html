@@ -889,9 +889,9 @@ function logicSolvable(grid,L){
 // only while it stays logicSolvable also guarantees a unique solution.
 function makePuzzle(L){
   const n=L.n;
+  if(L.hard) return makeHardPuzzle(L);
   const solution=new Array(n*n).fill(0);
   fillGrid(solution,L);
-  if(L.hard) return { puzzle:makeHardPuzzle(solution,L), solution };
   const puzzle=solution.slice();
   let removed=0;
   for(const idx of shuffle([...Array(n*n).keys()])){
@@ -939,17 +939,81 @@ function digUnique(solution,L){
   }
   return puzzle;
 }
-// Hard puzzle: try several and keep the one needing the toughest technique, so
-// Legend genuinely demands advanced logic (not just singles).
-function makeHardPuzzle(solution,L){
-  let best=null, bestTier=-1;
-  for(let attempt=0; attempt<7; attempt++){
-    const pz=digUnique(solution,L);
-    const tier=solve(pz,L).hardestTier;
-    if(tier>bestTier){ best=pz; bestTier=tier; }
-    if(bestTier>=3) break;             // needs pairs or harder — hard enough
+/* ---- how hard is this puzzle, really? ----------------------------------
+   The solver always reaches for the cheapest technique that works, so its
+   trace is the least-effort human path — and what that path costs IS the
+   difficulty. Singles are free (you spot them without thinking); everything
+   above them is priced by how hard it is to see. `stalls` counts the separate
+   moments where the singles dry up and you have to go hunting, which is what
+   actually makes a grid feel hard rather than merely long.
+
+   Rating a Legend by its single toughest technique (the old measure) said a
+   puzzle needing one pair and fifty naked singles was as hard as one needing
+   six wings — which is how 7% of Legends came out solvable by singles alone. */
+function difficultyOf(pz,L){
+  const r=solve(pz,L);
+  if(!r.solved) return -1;                 // beyond the engine: unusable
+  let t2=0,t3=0,t4=0,stalls=0,prevAdv=false;
+  for(const d of r.trace){
+    if(d.tier===2) t2++; else if(d.tier===3) t3++; else if(d.tier===4) t4++;
+    if(d.tier>=2){ if(!prevAdv) stalls++; prevAdv=true; } else prevAdv=false;
   }
-  return best;
+  return 3*t2 + 9*t3 + 22*t4 + 4*stalls;
+}
+
+const LEGEND_TARGET=70;   // comfortably legendary — stop searching once here
+const LEGEND_FLOOR=28;    // keep spending seeds until at least this hard
+const LEGEND_MIN_TIER=3;  // ...and until a pair-or-harder is genuinely required
+const LEGEND_SLICE=130;   // ms of search per starting grid
+const LEGEND_BUDGET=260;  // ms after which the floor is all we still chase
+const LEGEND_SEEDS=4;     // hard cap on starting grids, so the wait is bounded
+const LEGEND_RUIN=12;     // clues handed back per ruin-and-recreate pass
+
+/* Hard puzzle by ruin-and-recreate search.
+
+   Digging at random lands on a singles-only grid ~70% of the time, so the old
+   best-of-7 sampling was doing all the work and doing it weakly. But a full
+   dig costs ~20ms (uniqueness counting) while a logic solve costs ~0.04ms, so
+   *searching* the clue set is 500x cheaper than resampling it: dig once for a
+   valid seed, then repeatedly hand a few clues back and greedily re-dig,
+   keeping whatever scores higher.
+
+   Every removal here is gated on the logic engine still solving the grid. A
+   deductive solve proves the answer is forced, so that single test keeps the
+   solution unique AND keeps every step explainable by the hint engine. */
+function makeHardPuzzle(L){
+  const n=L.n, all=[...Array(n*n).keys()];
+  const start=performance.now();
+  let best=null, bestSol=null, bestSc=-1, bestTier=0, seeds=0;
+  const keep=(pz,sol,sc)=>{ best=pz.slice(); bestSol=sol.slice(); bestSc=sc; bestTier=solve(pz,L).hardestTier; };
+  do {
+    seeds++;
+    const seedEnd=performance.now()+LEGEND_SLICE;
+    const solution=new Array(n*n).fill(0);
+    fillGrid(solution,L);
+    let cur=digUnique(solution,L), curSc=difficultyOf(cur,L);
+    if(curSc>bestSc) keep(cur,solution,curSc);
+    while(bestSc<LEGEND_TARGET && performance.now()<seedEnd){
+      const cand=cur.slice();
+      // ruin: hand a handful of clues back, opening up new ways to dig
+      for(const h of shuffle(all.filter(i=>cand[i]===0)).slice(0,LEGEND_RUIN))
+        cand[h]=solution[h];
+      // recreate: pull clues out again, in a fresh order, as deep as logic allows
+      for(const i of shuffle(all.slice())){
+        if(cand[i]===0) continue;
+        const saved=cand[i]; cand[i]=0;
+        if(!solve(cand,L).solved) cand[i]=saved;
+      }
+      const sc=difficultyOf(cand,L);
+      if(sc>=curSc){ cur=cand; curSc=sc; }        // sideways moves keep it exploring
+      if(sc>bestSc) keep(cand,solution,sc);
+    }
+    // Out of slice. Take another starting grid if this one still falls short of
+    // what Legend promises, or if the budget has room left to chase the target.
+  } while(bestSc<LEGEND_TARGET && seeds<LEGEND_SEEDS &&
+          (bestSc<LEGEND_FLOOR || bestTier<LEGEND_MIN_TIER ||
+           performance.now()-start<LEGEND_BUDGET));
+  return { puzzle:best, solution:bestSol };
 }
 
 /* ============================================================
