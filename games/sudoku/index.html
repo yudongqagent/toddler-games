@@ -110,6 +110,19 @@
   .legend-btn .desc { color:#ffe6a8; }
   .legend-btn .emoji { filter:drop-shadow(0 3px 4px rgba(0,0,0,.4)); }
 
+  /* way back out to the arcade — every game has one, styled the same */
+  .arcade-link {
+    border:none; cursor:pointer; font-family:inherit; font-weight:800;
+    font-size:clamp(13px,3.4vw,16px);
+    padding:9px 18px; border-radius:999px;
+    background:rgba(255,255,255,.35); color:#fff;
+    display:flex; align-items:center; gap:7px;
+    transition:transform .1s, background .15s;
+  }
+  .arcade-link:active { transform:scale(.95); background:rgba(255,255,255,.5); }
+  .arcade-link svg.ic { width:1.1em; height:1.1em; }
+  .arcade-link svg.ic path { stroke:#fff; }
+
   /* ---------- GAME ---------- */
   #game { justify-content:space-between; }
   .topbar {
@@ -620,6 +633,7 @@
       <span class="emoji" id="emoji4"></span><span class="name" id="name4"></span><span class="desc" id="desc4"></span><span class="stars" id="stars4"></span>
     </button>
   </div>
+  <button class="arcade-link" id="arcade-btn">All games</button>
 </div>
 
 <div id="game" class="screen hidden">
@@ -2578,6 +2592,8 @@ if(typeof navigator.vibrate!=='function') $('row-vibe').style.display='none';
 
 /* icon chrome (SVG, no raw emoji) */
 $('settings-btn').innerHTML=ICONS.gear;
+$('arcade-btn').innerHTML=ICONS.home+' All games';
+$('arcade-btn').addEventListener('click',()=>{ sfx('tap'); location.href='../../'; });
 $('back-btn').innerHTML=ICONS.home;
 $('hint-btn').innerHTML=ICONS.bulb;
 $('menu-btn').innerHTML=ICONS.home+' Menu';
