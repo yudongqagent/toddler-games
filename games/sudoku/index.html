@@ -339,7 +339,11 @@
     width:min(92vw,480px); text-align:center;
     opacity:0; pointer-events:none;
     transition:opacity .25s, transform .25s;
+    /* the card is held at the tallest beat's height, so keep the buttons
+       pinned to the bottom edge — they must not drift as the text changes */
+    display:flex; flex-direction:column;
   }
+  #hint-bubble .hint-foot { margin-top:auto; }
   #hint-bubble.show { opacity:1; pointer-events:auto; transform:translateX(-50%) scale(1); }
   #hint-bubble::after {
     content:''; position:absolute; left:50%; top:100%;
@@ -361,10 +365,21 @@
   #hint-x:active { transform:scale(.9); }
   #hint-text { padding:0 4px; }
   .hint-foot {
-    display:flex; align-items:center; justify-content:space-between;
+    display:flex; align-items:center;
     gap:10px; margin-top:10px;
   }
-  #hint-dots { display:flex; gap:6px; padding-left:4px; }
+  /* the walkthrough is user-paced in both directions — Back re-reads a beat */
+  #hint-back {
+    border:none; cursor:pointer; font-family:inherit;
+    border-radius:999px; padding:9px 16px;
+    font-size:clamp(13px,3.4vw,16px); font-weight:800;
+    background:#f1eeff; color:#5b3fd4;
+    box-shadow:0 4px 0 rgba(0,0,0,.12), inset 0 2px 0 rgba(255,255,255,.7);
+    transition:opacity .15s;
+  }
+  #hint-back:active { transform:translateY(2px); box-shadow:0 2px 0 rgba(0,0,0,.12); }
+  #hint-back:disabled { opacity:.3; box-shadow:none; cursor:default; transform:none; }
+  #hint-dots { display:flex; gap:6px; flex:1; justify-content:center; }
   .hdot { width:9px; height:9px; border-radius:50%; background:#ddd6f8; }
   .hdot.on { background:#7c5cff; transform:scale(1.25); }
   #hint-next {
@@ -374,6 +389,8 @@
     background:linear-gradient(#8de78a,#54c452); color:#0d4d0c;
     box-shadow:0 4px 0 rgba(0,0,0,.18), inset 0 2px 0 rgba(255,255,255,.5);
     margin-left:auto;
+    /* wide enough for "Got it! ✓" so the last beat doesn't resize the button */
+    min-width:7.2em;
   }
   #hint-next:active { transform:translateY(2px); box-shadow:0 2px 0 rgba(0,0,0,.18); }
   /* arrows overlay drawn between cells during a hint step */
@@ -687,6 +704,7 @@
   <button id="hint-x" aria-label="Close hint">✕</button>
   <div id="hint-text"></div>
   <div class="hint-foot">
+    <button id="hint-back">◂ Back</button>
     <div id="hint-dots"></div>
     <button id="hint-next">Next ▸</button>
   </div>
@@ -746,10 +764,12 @@ const LEVELS = {
       tune:{ clues:33, tierMin:2, tierMax:2, climb:false, ceil:800,
              slice:70, budget:900, seeds:10, ruin:8 } },
     // hidden level — only reachable from the Champion win screen.
-    // Legend climbs for as much difficulty as the search can find in its slice,
-    // so its ceiling is open-ended. Measured effort ~810-1370.
+    // Legend climbs for as much difficulty as the search can find, so its
+    // ceiling is set by the solver's technique set rather than by a target.
+    // tierMin 4 means every Legend needs a wing or a fish, not just a pair.
     { name:'Legend',   emoji:'👑', desc:'9×9 · legendary',  n:9, boxW:3, boxH:3, blanks:59,
-      tune:{ clues:22, tierMin:3, tierMax:4, climb:true, floor:850, slice:340, budget:1200, seeds:3, ruin:12 } },
+      tune:{ clues:22, tierMin:4, tierMax:5, climb:true, floor:1200,
+             minStalls:4, minHard:2, slice:2500, budget:15000, seeds:5, ruin:12 } },
   ],
 };
 const SUBTITLES = {
@@ -967,7 +987,7 @@ function digUnique(solution,L){
 function effortOf(pz,L){
   const ctx=solverCtx(L), n=L.n;
   const state={grid:pz.slice(), cand:computeCands(pz,ctx)};
-  let e=0,t2=0,t3=0,t4=0,stalls=0,prevAdv=false,guard=0;
+  let e=0,t2=0,t3=0,t4=0,t5=0,stalls=0,prevAdv=false,guard=0;
   while(state.grid.some(v=>v===0)){
     if(++guard>n*n*2) return null;
     let moves=0, empty=0;
@@ -983,11 +1003,13 @@ function effortOf(pz,L){
     if(d.tier===1) e += (d.tech==='naked single' ? scan : 1.6*scan);
     else if(d.tier===2){ t2++; e+=14; }
     else if(d.tier===3){ t3++; e+=34; }
-    else { t4++; e+=80; }
+    else if(d.tier===4){ t4++; e+=80; }
+    else { t5++; e+=170; }
     if(d.tier>=2){ if(!prevAdv){ stalls++; e+=10; } prevAdv=true; } else prevAdv=false;
     applyDeduction(state,d,ctx);
   }
-  return { effort:Math.round(e), tier:(t4?4:t3?3:t2?2:1), stalls };
+  return { effort:Math.round(e), tier:(t5?5:t4?4:t3?3:t2?2:1), stalls,
+           hard:t4+t5, adv:t2+t3+t4+t5 };
 }
 
 /* Tuned puzzle by ruin-and-recreate search, aimed at the level's `tune` spec.
@@ -1017,16 +1039,20 @@ function makeTunedPuzzle(L){
   // Champion's ceiling and Legend's floor are what keep the two levels from
   // ever meeting: 800 < 850, so the bands cannot overlap by construction.
   const lo=T.floor||0, hi=T.ceil||Infinity;
-  const fits=r=>!!r && r.tier>=T.tierMin && r.tier<=T.tierMax && r.effort>=lo && r.effort<=hi;
+  const fits=r=>!!r && r.tier>=T.tierMin && r.tier<=T.tierMax
+    && r.effort>=lo && r.effort<=hi
+    && r.stalls>=(T.minStalls||0) && r.hard>=(T.minHard||0);
   const fit=r=>{
     if(!r) return -1e9;
     let f=0;
     if(r.tier<T.tierMin) f-=1e4*(T.tierMin-r.tier);
     if(r.tier>T.tierMax) f-=1e4*(r.tier-T.tierMax);
-    // Climbing levels chase effort; banded ones steer back into the band, with
-    // a faint upward pull so the search still has a gradient to follow once
-    // it's inside (a perfectly flat band leaves it wandering at random).
-    return f + (T.climb ? r.effort
+    // Climbing levels chase effort AND the moments that make it feel hard —
+    // raw effort is dominated by scanning ~57 singles, which is bounded, so on
+    // its own it plateaus while the board still plays as mostly easy moves.
+    // Banded levels steer back into the band, with a faint upward pull so the
+    // search keeps a gradient once inside (a flat band leaves it wandering).
+    return f + (T.climb ? r.effort + 30*r.stalls + 45*r.hard
                         : -(Math.max(0,lo-r.effort)+Math.max(0,r.effort-hi))
                           + r.effort/1000);
   };
@@ -1209,30 +1235,74 @@ function tHiddenSubset(s,ctx,k){
   }
   return null;
 }
-function tXWing(s,ctx){
+/* Fish of size k: pick k rows in which v fits in at most k columns between
+   them. Those k rows need k different v's and only those k columns can supply
+   them, so every other row loses v in those columns. k=2 is the X-Wing, k=3
+   the Swordfish — same argument, one row wider. */
+function tFish(s,ctx,k){
   const n=ctx.n;
   for(let v=1;v<=n;v++){
     const b=1<<(v-1);
-    const rowCols=[];
-    for(let r=0;r<n;r++){ const cs=[]; for(let c=0;c<n;c++){ const p=r*n+c; if(s.grid[p]===0&&(s.cand[p]&b)) cs.push(c); } rowCols[r]=cs; }
-    for(let r1=0;r1<n;r1++){ if(rowCols[r1].length!==2) continue;
-      for(let r2=r1+1;r2<n;r2++){ if(rowCols[r2].length!==2) continue;
-        if(rowCols[r1][0]===rowCols[r2][0] && rowCols[r1][1]===rowCols[r2][1]){
-          const [c1,c2]=rowCols[r1], elims=[];
-          for(let r=0;r<n;r++){ if(r===r1||r===r2) continue; for(const c of [c1,c2]){ const p=r*n+c; if(s.grid[p]===0&&(s.cand[p]&b)) elims.push({cell:p,value:v}); } }
-          if(elims.length) return {tier:4,kind:'elim',tech:'X-Wing',value:v,elims,patternCells:[r1*n+c1,r1*n+c2,r2*n+c1,r2*n+c2],unitKind:'row'};
+    for(const rowMode of [true,false]){
+      const spots=[];                       // spots[i] = where v still fits in line i
+      for(let i=0;i<n;i++){
+        const at=[];
+        for(let j=0;j<n;j++){
+          const p=rowMode ? i*n+j : j*n+i;
+          if(s.grid[p]===0 && (s.cand[p]&b)) at.push(j);
         }
+        spots[i]=at;
+      }
+      const usable=[];
+      for(let i=0;i<n;i++) if(spots[i].length>=2 && spots[i].length<=k) usable.push(i);
+      if(usable.length<k) continue;
+      for(const base of kcombos(usable,k)){
+        const cover=new Set();
+        for(const i of base) for(const j of spots[i]) cover.add(j);
+        if(cover.size!==k) continue;
+        const inBase=new Set(base), pattern=[], elims=[];
+        for(const i of base) for(const j of spots[i]) pattern.push(rowMode ? i*n+j : j*n+i);
+        for(let i=0;i<n;i++){
+          if(inBase.has(i)) continue;
+          for(const j of cover){
+            const p=rowMode ? i*n+j : j*n+i;
+            if(s.grid[p]===0 && (s.cand[p]&b)) elims.push({cell:p,value:v});
+          }
+        }
+        if(elims.length) return {tier:k===2?4:5, kind:'elim', tech:k===2?'X-Wing':'Swordfish',
+          value:v, elims, patternCells:pattern, unitKind:rowMode?'row':'column',
+          baseIdx:base.slice(), crossIdx:[...cover].sort((a,b)=>a-b)};
       }
     }
-    const colRows=[];
-    for(let c=0;c<n;c++){ const rs=[]; for(let r=0;r<n;r++){ const p=r*n+c; if(s.grid[p]===0&&(s.cand[p]&b)) rs.push(r); } colRows[c]=rs; }
-    for(let c1=0;c1<n;c1++){ if(colRows[c1].length!==2) continue;
-      for(let c2=c1+1;c2<n;c2++){ if(colRows[c2].length!==2) continue;
-        if(colRows[c1][0]===colRows[c2][0] && colRows[c1][1]===colRows[c2][1]){
-          const [r1,r2]=colRows[c1], elims=[];
-          for(let c=0;c<n;c++){ if(c===c1||c===c2) continue; for(const r of [r1,r2]){ const p=r*n+c; if(s.grid[p]===0&&(s.cand[p]&b)) elims.push({cell:p,value:v}); } }
-          if(elims.length) return {tier:4,kind:'elim',tech:'X-Wing',value:v,elims,patternCells:[r1*n+c1,r2*n+c1,r1*n+c2,r2*n+c2],unitKind:'column'};
+  }
+  return null;
+}
+/* XYZ-Wing: the hinge has three choices {x,y,z} and each wing shares two of
+   them, so between the three of them one is always z — and any square seeing
+   all three loses z. Same shape as the XY-Wing with the hinge itself in play. */
+function tXYZWing(s,ctx){
+  const n=ctx.n, see=(a,b)=>ctx.peers[a].has(b);
+  const tri=[], bi=[];
+  for(let i=0;i<n*n;i++){
+    if(s.grid[i]!==0) continue;
+    const c=bitcount(s.cand[i]);
+    if(c===3) tri.push(i); else if(c===2) bi.push(i);
+  }
+  for(const piv of tri){
+    const pm=s.cand[piv];
+    for(const w1 of bi){
+      if(!see(piv,w1) || (s.cand[w1]&pm)!==s.cand[w1]) continue;
+      for(const w2 of bi){
+        if(w2===w1 || !see(piv,w2) || (s.cand[w2]&pm)!==s.cand[w2]) continue;
+        const zm=s.cand[w1]&s.cand[w2];
+        if(bitcount(zm)!==1 || (s.cand[w1]|s.cand[w2])!==pm) continue;
+        const z=bitsOf(zm)[0], elims=[];
+        for(let i=0;i<n*n;i++){
+          if(s.grid[i]!==0 || i===piv || i===w1 || i===w2) continue;
+          if((s.cand[i]&zm) && see(piv,i) && see(w1,i) && see(w2,i)) elims.push({cell:i,value:z});
         }
+        if(elims.length) return {tier:5,kind:'elim',tech:'XYZ-Wing',value:z,elims,
+          patternCells:[piv,w1,w2],unitKind:null};
       }
     }
   }
@@ -1259,11 +1329,14 @@ function tXYWing(s,ctx){
   return null;
 }
 
+// cheapest first — the solver's trace is only a fair difficulty measure if it
+// always reaches for the easiest technique that works
 const TECHS=[
   tNakedSingle, tHiddenSingle, tPointing, tClaiming,
   (s,c)=>tNakedSubset(s,c,2), (s,c)=>tHiddenSubset(s,c,2),
   (s,c)=>tNakedSubset(s,c,3), (s,c)=>tHiddenSubset(s,c,3),
-  tXWing, tXYWing
+  (s,c)=>tFish(s,c,2), tXYWing,
+  (s,c)=>tFish(s,c,3), tXYZWing
 ];
 
 // Solve as far as pure logic allows, recording the full reasoned trace.
@@ -1805,13 +1878,15 @@ function onCellTap(i,el){
 
 let hintTimers=[];
 let hintStory=null, hintStep=0;
+let hintPlaced=false;    // the card is sized and positioned once per story
 function hintActive(){ return !!hintStory; }
 
 function clearHintFx(){
   hintTimers.forEach(clearTimeout);
   hintTimers=[];
-  hintStory=null; hintStep=0;
+  hintStory=null; hintStep=0; hintPlaced=false;
   $('hint-bubble').classList.remove('show');
+  $('hint-bubble').style.minHeight='';
   const svg=$('hint-arrows'); if(svg){ svg.style.display='none'; svg.innerHTML=''; }
   boardEl.querySelectorAll('.dim,.band,.ev,.goal,.explain,.hintwrong').forEach(el=>el.classList.remove('dim','band','ev','goal','explain','hintwrong'));
   boardEl.querySelectorAll('.cands').forEach(el=>el.remove());
@@ -1928,16 +2003,15 @@ function premiseNeeds(d, g){
     case 'hidden pair': case 'hidden triple':
       for(const p of d.unitCells) if(!pat.has(p)) for(const v of d.values) add(p, v);
       break;
-    // in each base line, v sits in only the two pattern spots
-    case 'X-Wing': {
+    // in each base line, v sits only in the pattern spots
+    case 'X-Wing': case 'Swordfish': {
       const rowMode=d.unitKind==='row';
-      const base=[...new Set(d.patternCells.map(c=>rowMode?Math.floor(c/n):c%n))];
-      for(const i of base)
+      for(const i of d.baseIdx)
         for(const p of (rowMode?rowCellsOf(i):colCellsOf(i))) if(!pat.has(p)) add(p, d.value);
       break;
     }
-    // each of the three cells is down to exactly two choices
-    case 'XY-Wing':
+    // the wings are down to exactly two choices (and the XYZ hinge to three)
+    case 'XY-Wing': case 'XYZ-Wing':
       for(const p of d.patternCells){
         const m=d.candBefore[p];
         for(let v=1;v<=n;v++) if(!(m&(1<<(v-1)))) add(p, v);
@@ -2109,21 +2183,37 @@ function collectStepCells(st){
   (st.arrows||[]).forEach(pr=>{ s.add(pr[0]); s.add(pr[1]); });
   return [...s];
 }
-function renderHintStep(){
-  const st=hintStory[hintStep];
-  applyStepVisuals(st);
-  $('hint-text').innerHTML=st.text;
-  const total=hintStory.length;
-  $('hint-dots').innerHTML = total>1
-    ? hintStory.map((_,k)=>'<span class="hdot'+(k===hintStep?' on':'')+'"></span>').join('') : '';
-  $('hint-next').textContent = hintStep<total-1 ? 'Next ▸' : 'Got it! ✓';
-  const b=$('hint-bubble');
+/* Size and place the card ONCE for the whole walkthrough.
+
+   Stepping through a hint used to move the card: each beat was measured and
+   re-positioned on its own, so a longer sentence grew the box and a beat that
+   touched the top rows flipped it to the other side of the board. The reader
+   had to find the text and the Next button again every tap.
+
+   So: measure every beat up front, hold the box at the tallest one, and pick a
+   single side that clears every beat's squares. Nothing moves after that — the
+   text swaps inside a box that stays put. */
+function layoutHintCard(){
+  const b=$('hint-bubble'), textEl=$('hint-text'), total=hintStory.length;
+  const wasShown=b.classList.contains('show');
+  const keep=textEl.innerHTML;
+  b.style.minHeight='0px';
+  b.style.visibility='hidden';
   b.classList.add('show');
+  // dots and buttons are part of the height, so put them in before measuring
+  $('hint-dots').innerHTML = total>1 ? hintStory.map(()=>'<span class="hdot"></span>').join('') : '';
+  $('hint-back').style.display = total>1 ? '' : 'none';
+  let h=0;
+  for(const st of hintStory){ textEl.innerHTML=st.text; h=Math.max(h, b.offsetHeight); }
+  textEl.innerHTML=keep;
+  b.style.minHeight=h+'px';
+  b.style.visibility='';
+  if(!wasShown) b.classList.remove('show');
+
   const br=boardEl.getBoundingClientRect();
-  const h=b.offsetHeight;
   // Landscape: the board owns the full height, so there is no room above or
   // below it. Float the card over the panel beside the board instead — the
-  // board, which is what the step is pointing at, stays fully visible.
+  // board, which is what every step points at, stays fully visible.
   if(document.documentElement.classList.contains('land')){
     // centre it in the strip beside the board, then pull it back inside the
     // screen — the close button hangs 10px past the card's own corner.
@@ -2132,16 +2222,17 @@ function renderHintStep(){
     b.style.left=Math.max(w/2+14, cx)+'px';
     b.style.top=Math.max(14,(window.innerHeight-h)/2)+'px';
     b.classList.remove('below');
+    hintPlaced=true;
     return;
   }
-  // Portrait: put the card where it hides nothing this step talks about —
-  // above the board normally, below it when the action is in the top rows.
+  // Portrait: above the board normally, below it when ANY beat works in the
+  // rows the card would cover — one side for the whole story, so it can't flip.
   b.style.left='50%';
   const aboveTop=Math.max(8, br.top-h-14);
-  const covers=collectStepCells(st).some(c=>{
+  const covers=hintStory.some(st=>collectStepCells(st).some(c=>{
     const el=boardEl.children[c];
     return el && el.getBoundingClientRect().top < aboveTop+h+12;
-  });
+  }));
   const belowTop=br.bottom+14;
   if(covers && belowTop+h <= window.innerHeight-8){
     b.style.top=belowTop+'px';
@@ -2150,11 +2241,24 @@ function renderHintStep(){
     b.style.top=aboveTop+'px';
     b.classList.remove('below');
   }
+  hintPlaced=true;
+}
+function renderHintStep(){
+  if(!hintPlaced) layoutHintCard();
+  const st=hintStory[hintStep];
+  applyStepVisuals(st);
+  $('hint-text').innerHTML=st.text;
+  const total=hintStory.length;
+  $('hint-dots').innerHTML = total>1
+    ? hintStory.map((_,k)=>'<span class="hdot'+(k===hintStep?' on':'')+'"></span>').join('') : '';
+  $('hint-next').textContent = hintStep<total-1 ? 'Next ▸' : 'Got it! ✓';
+  $('hint-back').disabled = hintStep===0;
+  $('hint-bubble').classList.add('show');
 }
 function showStory(steps){
   hintStory=steps.filter(Boolean);
   if(!hintStory.length){ hintStory=null; return; }
-  hintStep=0;
+  hintStep=0; hintPlaced=false;
   renderHintStep();
 }
 function hintNext(){
@@ -2162,6 +2266,11 @@ function hintNext(){
   sfx('tap');
   if(hintStep<hintStory.length-1){ hintStep++; renderHintStep(); }
   else clearHintFx();
+}
+function hintBack(){
+  if(!hintStory || hintStep===0) return;
+  sfx('tap');
+  hintStep--; renderHintStep();
 }
 
 function pulseTrayBtn(v){
@@ -2224,7 +2333,8 @@ const colCellsOf=c=>[...Array(L.n).keys()].map(r=>r*L.n+c);
 function elimBeats(d){
   switch(d.tech){
     case 'XY-Wing':  return xyWingBeats(d);
-    case 'X-Wing':   return xWingBeats(d);
+    case 'XYZ-Wing': return xyzWingBeats(d);
+    case 'X-Wing': case 'Swordfish': return fishBeats(d);
     case 'naked pair': case 'naked triple':  return pairBeats(d, false);
     case 'hidden pair': case 'hidden triple': return pairBeats(d, true);
     default:         return pointClaimBeats(d);
@@ -2303,26 +2413,32 @@ function pairBeats(d, hidden){
   ];
 }
 
-// X-Wing — rectangle, then the either/or, then the sweep
-function xWingBeats(d){
-  const v=d.value, pc=d.patternCells;
+// Fish (X-Wing / Swordfish) — show the frame, then the either/or, then the
+// sweep. Two base lines make a rectangle you can draw diagonals across; three
+// make a shape with no nice name, so that beat leans on the counting instead.
+function fishBeats(d){
+  const v=d.value, pc=d.patternCells, k=d.baseIdx.length;
   const rowMode=d.unitKind==='row';
-  const rset=[...new Set(pc.map(c=>Math.floor(c/L.n)))].sort((a,b)=>a-b);
-  const cset=[...new Set(pc.map(c=>c%L.n))].sort((a,b)=>a-b);
-  const baseIdx=rowMode?rset:cset, crossIdx=rowMode?cset:rset;
   const baseName=rowMode?'rows':'columns', crossName=rowMode?'columns':'rows';
-  const baseCells=baseIdx.flatMap(i=>rowMode?rowCellsOf(i):colCellsOf(i));
-  const crossCells=crossIdx.flatMap(i=>rowMode?colCellsOf(i):rowCellsOf(i));
-  const baseNums=joinAnd(baseIdx.map(i=>String(i+1)));
-  const crossNums=joinAnd(crossIdx.map(i=>String(i+1)));
+  const baseCells=d.baseIdx.flatMap(i=>rowMode?rowCellsOf(i):colCellsOf(i));
+  const crossCells=d.crossIdx.flatMap(i=>rowMode?colCellsOf(i):rowCellsOf(i));
+  const baseNums=joinAnd(d.baseIdx.map(i=>String(i+1)));
+  const crossNums=joinAnd(d.crossIdx.map(i=>String(i+1)));
   const focus=pc.map(c=>({cell:c, values:[v]}));
-  const diag=[[pc[0],pc[3]],[pc[1],pc[2]]];
+  const diag=k===2 ? [[pc[0],pc[3]],[pc[1],pc[2]]] : [];
   const cross=groupElims(d.elims);
+  const open = k===2
+    ? 'A rectangle trick! In '+baseName+' '+baseNums+', '+symTag(v)+' fits in only two spots each — and they line up into these four corners.'
+    : 'The big one! Look at '+baseName+' '+baseNums+' — every spot left for '+symTag(v)+
+      ' in them sits in just '+countWord(k)+' '+crossName+': '+crossNums+'.';
+  const mid = k===2
+    ? symTag(v)+' has to take one pair of opposite corners or the other. '+emph('Either way')+', it lands once in each of '+crossName+' '+crossNums+'.'
+    : 'Those '+countWord(k)+' '+baseName+' each need a '+symTag(v)+', and only those '+
+      countWord(k)+' '+crossName+' can give them one. '+emph('However they land')+
+      ', they fill all '+countWord(k)+' '+crossName+'.';
   return [
-    { text:'A rectangle trick! In '+baseName+' '+baseNums+', '+symTag(v)+' fits in only two spots each — and they line up into these four corners.',
-      band:baseCells, focus, arrows:diag },
-    { text:symTag(v)+' has to take one pair of opposite corners or the other. '+emph('Either way')+', it lands once in each of '+crossName+' '+crossNums+'.',
-      focus, arrows:diag },
+    { text:open, band:baseCells, focus, arrows:diag },
+    { text:mid, focus, arrows:diag },
     { text:'So '+crossName+' '+crossNums+' have used up their '+symTag(v)+' here — cross '+symTag(v)+' out of every other square in them.',
       band:crossCells, focus, cross }
   ];
@@ -2345,6 +2461,28 @@ function xyWingBeats(d){
     { text:emph('Either way')+', one partner ends up '+symTag(Z)+'! So any square that sees '+emph('both')+' partners can never be '+symTag(Z)+' (crossed out).',
       focus:[{cell:w1,values:[Z]},{cell:w2,values:[Z]}], cross,
       arrows:cross.flatMap(m=>[[w1,m.cell],[w2,m.cell]]) }
+  ];
+}
+
+// XYZ-Wing — the XY-Wing with the hinge itself in the running, so there are
+// three cases to walk instead of two, and the crossed squares must see all
+// three cells rather than just the two partners.
+function xyzWingBeats(d){
+  const [piv,w1,w2]=d.patternCells, Z=d.value, zb=1<<(Z-1);
+  const pm=d.candBefore[piv], m1=d.candBefore[w1], m2=d.candBefore[w2];
+  const x=bitsOf(m1&~zb)[0], y=bitsOf(m2&~zb)[0];   // each wing's other value
+  const cross=groupElims(d.elims);
+  return [
+    { text:'Three squares again — but this time the '+emph('hinge')+', where the arrows begin, has '+emph('three')+' choices: '+symTag(x)+', '+symTag(y)+' or '+symTag(Z)+'.',
+      focus:[{cell:piv,values:bitsOf(pm)},{cell:w1,values:bitsOf(m1)},{cell:w2,values:bitsOf(m2)}],
+      arrows:[[piv,w1],[piv,w2]] },
+    { text:'Say the hinge is '+symTag(x)+'. Then this partner can\'t be '+symTag(x)+' too — so it must be '+symTag(Z)+'.',
+      focus:[{cell:piv,values:[x]},{cell:w1,values:[Z]}], arrows:[[piv,w1]] },
+    { text:'Say it\'s '+symTag(y)+' instead. Then the other partner must be '+symTag(Z)+'.',
+      focus:[{cell:piv,values:[y]},{cell:w2,values:[Z]}], arrows:[[piv,w2]] },
+    { text:'And if the hinge is '+symTag(Z)+' — there it is already! '+emph('Every way')+', one of these three is '+symTag(Z)+'. So a square seeing '+emph('all three')+' can never be '+symTag(Z)+' (crossed out).',
+      focus:[{cell:piv,values:[Z]},{cell:w1,values:[Z]},{cell:w2,values:[Z]}], cross,
+      arrows:cross.flatMap(m=>[[piv,m.cell],[w1,m.cell],[w2,m.cell]]) }
   ];
 }
 
@@ -2677,6 +2815,7 @@ $('back-btn').addEventListener('click',()=>{ sfx('tap'); goMenu(); });
 $('menu-btn').addEventListener('click',()=>{ sfx('tap'); goMenu(); });
 $('hint-btn').addEventListener('click',onHint);
 $('hint-next').addEventListener('click',hintNext);
+$('hint-back').addEventListener('click',hintBack);
 $('hint-x').addEventListener('click',()=>{ sfx('tap'); clearHintFx(); });
 $('again-btn').addEventListener('click',()=>{ sfx('tap'); playAgain(); });
 $('secret-btn').addEventListener('click',()=>{ sfx('tap'); goLevel('classic',4); });
@@ -2722,7 +2861,8 @@ $('mascot').innerHTML=mascotSvg('happy');
 window.addEventListener('resize',()=>{
   if($('game').classList.contains('hidden')) return;
   renderBoard();
-  if(hintActive()) renderHintStep();   // keep the walkthrough alive across rotation
+  // rotation moves the board, so the card has to be re-measured and re-placed
+  if(hintActive()){ hintPlaced=false; renderHintStep(); }
 });
 window.addEventListener('hashchange', applyRoute);
 // block pinch zoom on iOS (double-tap zoom is disabled via touch-action:manipulation)
