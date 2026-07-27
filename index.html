@@ -17,9 +17,10 @@
     font-family:-apple-system-rounded, "SF Pro Rounded", -apple-system, "Segoe UI", "Comic Sans MS", sans-serif;
   }
   body {
+    min-height:100dvh;
     background:linear-gradient(160deg,#9d87ff 0%,#74c3ff 45%,#7df5b9 100%);
     background-attachment:fixed;
-    display:flex; flex-direction:column; align-items:center;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
     padding:max(14px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
             max(18px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
   }
@@ -194,8 +195,9 @@ sndBtn.addEventListener('click', () => {
 paintSnd();
 
 /* ---------- cards ---------- */
-// Fixed drift spots so the cast icons never land under the text.
-const SPOTS = [[8, 12], [26, 66], [70, 18], [86, 60]];
+// Fixed drift spots: clear of the badge (far left) and of the ▸ arrow, which
+// sits at the middle of the right edge.
+const SPOTS = [[58, 6], [86, 14], [80, 76], [44, 88]];
 
 const host = document.getElementById('cards');
 GAMES.forEach((g, i) => {
