@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#7c5cff">
+<title>Toddler Games</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎈</text></svg>">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body {
+    min-height:100%;
+    touch-action:manipulation;
+    user-select:none; -webkit-user-select:none;
+    font-family:-apple-system-rounded, "SF Pro Rounded", -apple-system, "Segoe UI", "Comic Sans MS", sans-serif;
+  }
+  body {
+    background:linear-gradient(160deg,#9d87ff 0%,#74c3ff 45%,#7df5b9 100%);
+    background-attachment:fixed;
+    display:flex; flex-direction:column; align-items:center;
+    padding:max(14px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+            max(18px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  }
+
+  /* soft drifting bubbles behind everything */
+  .bub {
+    position:fixed; border-radius:50%; z-index:0; pointer-events:none;
+    background:radial-gradient(circle at 35% 30%, rgba(255,255,255,.5), rgba(255,255,255,.08) 70%);
+    animation:drift ease-in-out infinite alternate;
+  }
+  @keyframes drift { from{transform:translate(0,0) scale(1)} to{transform:translate(4vw,-6vh) scale(1.12)} }
+
+  .wrap {
+    position:relative; z-index:1;
+    width:min(94vw, 720px);
+    margin:auto 0;
+    display:flex; flex-direction:column; align-items:center; gap:clamp(14px,3.2vh,26px);
+    padding:clamp(8px,2vh,20px) 0;
+  }
+
+  h1 {
+    font-size:clamp(30px, 8.5vw, 58px);
+    color:#fff; text-align:center; line-height:1.05;
+    text-shadow:0 3px 0 rgba(80,60,180,.35);
+    animation:bob 2.5s ease-in-out infinite;
+  }
+  @keyframes bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+  .subtitle { font-size:clamp(15px,4vw,22px); color:#ffffffdd; font-weight:700; margin-top:-8px; }
+
+  .cards { display:grid; grid-template-columns:1fr; gap:clamp(14px,2.6vh,20px); width:100%; }
+  @media (min-width:640px){ .cards { grid-template-columns:1fr 1fr; } }
+
+  .card {
+    position:relative; overflow:hidden;
+    display:flex; align-items:center; gap:clamp(12px,3.5vw,20px);
+    border:none; cursor:pointer; text-decoration:none;
+    border-radius:30px;
+    padding:clamp(16px,2.6vh,24px) clamp(16px,4vw,24px);
+    min-height:clamp(108px, 17vh, 150px);
+    text-align:left;
+    font-family:inherit;
+    box-shadow:0 7px 0 rgba(0,0,0,.18), inset 0 2px 0 rgba(255,255,255,.4), 0 10px 24px rgba(40,20,90,.18);
+    transition:transform .12s ease, box-shadow .12s ease;
+    animation:cardin .5s cubic-bezier(.22,1.2,.36,1) backwards;
+  }
+  @keyframes cardin { from { opacity:0; transform:translateY(22px) scale(.94); } }
+  .card:active {
+    transform:translateY(5px) scale(.985);
+    box-shadow:0 2px 0 rgba(0,0,0,.18), inset 0 2px 0 rgba(255,255,255,.4), 0 4px 12px rgba(40,20,90,.18);
+  }
+  .card:focus-visible { outline:4px solid #fff; outline-offset:3px; }
+
+  /* the extra icons drifting behind the badge */
+  .card .cast { position:absolute; inset:0; pointer-events:none; }
+  .card .cast span {
+    position:absolute; font-size:clamp(26px,7vw,42px); opacity:.28;
+    filter:drop-shadow(0 2px 3px rgba(0,0,0,.18));
+    animation:float 5s ease-in-out infinite alternate;
+  }
+  @keyframes float { from{transform:translateY(0) rotate(-6deg)} to{transform:translateY(-11px) rotate(8deg)} }
+
+  .badge {
+    position:relative; flex:none;
+    width:clamp(66px,17vw,92px); height:clamp(66px,17vw,92px);
+    border-radius:50%;
+    background:rgba(255,255,255,.92);
+    display:grid; place-items:center;
+    font-size:clamp(34px,9vw,52px);
+    box-shadow:0 4px 0 rgba(0,0,0,.12), inset 0 -3px 6px rgba(0,0,0,.06);
+    animation:bob 3.2s ease-in-out infinite;
+  }
+
+  .meta { position:relative; flex:1; min-width:0; }
+  .meta .name {
+    font-size:clamp(21px,5.6vw,30px); font-weight:800; line-height:1.15;
+  }
+  .meta .tagline {
+    font-size:clamp(13px,3.5vw,17px); font-weight:700; line-height:1.25; margin-top:3px;
+  }
+  .meta .stars {
+    display:inline-block; margin-top:8px; min-height:1px;
+    font-size:clamp(12px,3.2vw,16px); font-weight:800;
+    padding:3px 11px; border-radius:999px;
+    background:rgba(255,255,255,.28);
+  }
+  .meta .stars:empty { display:none; }
+
+  .ink-light .name    { color:#fff; text-shadow:0 2px 0 rgba(60,40,120,.32); }
+  .ink-light .tagline { color:#ffffffe0; }
+  .ink-light .stars   { color:#fff; }
+  .ink-light .go      { color:#ffffffcc; }
+  .ink-dark .name     { color:#4a3800; }
+  .ink-dark .tagline  { color:#4a3800b0; }
+  .ink-dark .stars    { color:#4a3800; }
+  .ink-dark .go       { color:#4a380099; }
+
+  .go { flex:none; font-size:clamp(24px,6vw,34px); font-weight:800; }
+
+  .foot { color:#ffffffcc; font-size:clamp(12px,3.2vw,15px); font-weight:700; text-align:center; }
+
+  /* sound toggle */
+  #snd {
+    position:fixed; z-index:3;
+    top:max(10px, env(safe-area-inset-top)); right:max(10px, env(safe-area-inset-right));
+    width:44px; height:44px; border:none; border-radius:50%; cursor:pointer;
+    background:rgba(255,255,255,.35); color:#fff; font-size:20px;
+    display:grid; place-items:center;
+    backdrop-filter:blur(6px);
+  }
+  #snd:active { transform:scale(.92); }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration:.001s !important; animation-iteration-count:1 !important; }
+  }
+</style>
+</head>
+<body>
+
+<button id="snd" aria-label="Sound on or off">🔊</button>
+
+<div class="wrap">
+  <h1>🎈 Toddler Games</h1>
+  <p class="subtitle">Pick a game!</p>
+  <div class="cards" id="cards"></div>
+  <p class="foot">Made for little hands · works offline</p>
+</div>
+
+<script src="games/games.js"></script>
+<script>
+/* ---------- bubbles ---------- */
+for (let i = 0; i < 9; i++) {
+  const b = document.createElement('div');
+  b.className = 'bub';
+  const s = 40 + Math.random() * 130;
+  b.style.width = b.style.height = s + 'px';
+  b.style.left = Math.random() * 100 + 'vw';
+  b.style.top = Math.random() * 100 + 'vh';
+  b.style.animationDuration = (5 + Math.random() * 6) + 's';
+  b.style.animationDelay = (-Math.random() * 6) + 's';
+  document.body.appendChild(b);
+}
+
+/* ---------- sound (WebAudio, no assets) ---------- */
+let soundOn = localStorage.getItem('home-sound') !== 'off';
+let actx = null;
+function ac() {
+  if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+  if (actx.state === 'suspended') actx.resume();
+  return actx;
+}
+function tone(freq, t0, dur, type = 'triangle', vol = .16) {
+  const ctx = ac(), o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = type; o.frequency.value = freq;
+  g.gain.setValueAtTime(0, ctx.currentTime + t0);
+  g.gain.linearRampToValueAtTime(vol, ctx.currentTime + t0 + .015);
+  g.gain.exponentialRampToValueAtTime(.001, ctx.currentTime + t0 + dur);
+  o.connect(g); g.connect(ctx.destination);
+  o.start(ctx.currentTime + t0); o.stop(ctx.currentTime + t0 + dur + .05);
+}
+function pick() {
+  if (!soundOn) return;
+  try { tone(659, 0, .1); tone(988, .07, .16); } catch (e) {}
+}
+const sndBtn = document.getElementById('snd');
+function paintSnd() { sndBtn.textContent = soundOn ? '🔊' : '🔇'; }
+sndBtn.addEventListener('click', () => {
+  soundOn = !soundOn;
+  localStorage.setItem('home-sound', soundOn ? 'on' : 'off');
+  paintSnd();
+  if (soundOn) pick();
+});
+paintSnd();
+
+/* ---------- cards ---------- */
+// Fixed drift spots so the cast icons never land under the text.
+const SPOTS = [[8, 12], [26, 66], [70, 18], [86, 60]];
+
+const host = document.getElementById('cards');
+GAMES.forEach((g, i) => {
+  const a = document.createElement('a');
+  a.className = 'card ink-' + (g.ink === 'dark' ? 'dark' : 'light');
+  a.href = 'games/' + g.id + '/';
+  a.style.background = 'linear-gradient(135deg,' + g.colors[0] + ',' + g.colors[1] + ')';
+  a.style.animationDelay = (i * .09) + 's';
+
+  const cast = document.createElement('div');
+  cast.className = 'cast';
+  (g.cast || []).slice(0, 4).forEach((c, k) => {
+    const s = document.createElement('span');
+    s.textContent = c;
+    s.style.left = SPOTS[k % SPOTS.length][0] + '%';
+    s.style.top = SPOTS[k % SPOTS.length][1] + '%';
+    s.style.animationDelay = (-k * 1.3) + 's';
+    cast.appendChild(s);
+  });
+
+  let stars = '';
+  try { stars = (g.progress && g.progress()) || ''; } catch (e) {}
+
+  const badge = document.createElement('div');
+  badge.className = 'badge';
+  badge.textContent = g.emoji;
+  badge.style.animationDelay = (i * .25) + 's';
+
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  const nm = document.createElement('div'); nm.className = 'name'; nm.textContent = g.name;
+  const tg = document.createElement('div'); tg.className = 'tagline'; tg.textContent = g.tagline;
+  const st = document.createElement('div'); st.className = 'stars'; st.textContent = stars;
+  meta.append(nm, tg, st);
+
+  const go = document.createElement('div');
+  go.className = 'go'; go.textContent = '▸'; go.setAttribute('aria-hidden', 'true');
+
+  a.append(cast, badge, meta, go);
+  a.setAttribute('aria-label', g.name + ' — ' + g.tagline);
+
+  // Let the pick sound and the press animation land before we navigate away.
+  a.addEventListener('click', ev => {
+    if (ev.metaKey || ev.ctrlKey || ev.shiftKey) return;
+    ev.preventDefault();
+    pick();
+    setTimeout(() => { location.href = a.href; }, 130);
+  });
+
+  host.appendChild(a);
+});
+</script>
+</body>
+</html>
