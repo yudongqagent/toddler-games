@@ -106,6 +106,20 @@ already a distinct silhouette *and* a distinct colour, so the polygons were a
 redundant third channel that made the board look busy. Nothing here depends on
 colour vision alone.
 
+**A level arrives, it doesn't appear.** Starting one plays a card announcing it
+and its goal over an empty board, then the fruit rains in along a diagonal wave
+so the board assembles itself in front of you — about 2.2 seconds before you
+can play, and input is held until it lands. Finishing one runs the wave in
+reverse: the board sweeps itself away first, so the confetti and the stars land
+on a clear stage instead of covering up a board still full of fruit.
+
+**Every clear has three beats.** The matched fruit flare white for a moment
+first — that beat is what tells you *which* ones matched — then they burst in
+waves travelling out from the tile you actually moved, each leaving a halo
+behind, and the burst throws more confetti the deeper the cascade runs. Falling
+fruit squashes on impact and kicks up a puff of dust. Swapped fruit lift and
+swell as they trade places.
+
 **Sound.** Each fruit owns a note of the pentatonic scale, so clearing bananas
 always sounds like bananas, and each cascade step lifts the whole chord — a long
 chain plays a tune. Cascade cheers carry an emoji as well as a word, since the

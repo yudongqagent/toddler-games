@@ -34,9 +34,9 @@
     display:flex; flex-direction:column; align-items:center; justify-content:center;
     gap:min(2.4vh,16px);
     padding:max(10px, env(safe-area-inset-top)) 12px max(10px, env(safe-area-inset-bottom));
-    transition:opacity .25s, transform .25s;
+    transition:opacity .32s cubic-bezier(.4,0,.2,1), transform .32s cubic-bezier(.4,0,.2,1);
   }
-  .screen.hidden { opacity:0; pointer-events:none; transform:scale(.96); }
+  .screen.hidden { opacity:0; pointer-events:none; transform:scale(.92) translateY(16px); }
 
   /* ---------------- MENU ---------------- */
   #menu { overflow-y:auto; justify-content:flex-start; }
@@ -213,7 +213,7 @@
     width:var(--cell); height:var(--cell);
     padding:calc(var(--cell) * .06);
     transform:translate3d(calc(var(--tc) * var(--cell)), calc(var(--tr) * var(--cell)), 0);
-    transition:transform .18s cubic-bezier(.3,.9,.4,1);
+    transition:transform .26s cubic-bezier(.34,1.2,.5,1);
     cursor:pointer; z-index:2;
   }
   .tile .inner {
@@ -258,12 +258,18 @@
   @keyframes nudge { 0%,100%{transform:scale(1)} 40%{transform:scale(1.16)} }
   .tile.nope .inner { animation:nope .34s ease; }
   @keyframes nope { 25%{transform:translateX(-9%) rotate(-7deg)} 75%{transform:translateX(9%) rotate(7deg)} }
-  .tile.land .inner { animation:land .22s cubic-bezier(.3,1.6,.5,1); }
-  @keyframes land { 0%{transform:scaleY(.78) scaleX(1.12)} 100%{transform:none} }
-  .tile.pop { z-index:5; }
-  .tile.pop .inner { animation:pop .3s cubic-bezier(.4,0,.6,1) forwards; }
+  .tile.land .inner { animation:land .3s cubic-bezier(.25,1.5,.4,1); }
+  @keyframes land {
+    0%{transform:scaleY(.72) scaleX(1.16)} 55%{transform:scaleY(1.07) scaleX(.95)} 100%{transform:none}
+  }
+  .tile.pop { z-index:6; }
+  /* picks up exactly where .charge left off, so the flash and the burst are one
+     continuous motion rather than two animations fighting */
+  .tile.pop .inner { animation:pop .42s cubic-bezier(.35,0,.5,1) forwards; }
   @keyframes pop {
-    0%{transform:scale(1)} 35%{transform:scale(1.35) rotate(9deg)} 100%{transform:scale(0) rotate(-24deg); opacity:0}
+    0%   { transform:scale(1.22); filter:brightness(2.1) saturate(.35); }
+    30%  { transform:scale(1.45) rotate(11deg); filter:brightness(1.35); }
+    100% { transform:scale(0) rotate(-34deg); opacity:0; filter:brightness(1); }
   }
   .tile.born .inner { animation:born .3s cubic-bezier(.3,1.5,.5,1); }
   @keyframes born { 0%{transform:scale(.4); opacity:.4} 100%{transform:scale(1); opacity:1} }
@@ -426,6 +432,84 @@
     88%,100%{ transform:translate3d(var(--hx0), var(--hy0), 0) scale(1); }
   }
 
+  /* ---------------- level transitions ----------------
+     A level should arrive, not appear. The card announces it, then the fruit
+     rains in along a diagonal so the board assembles itself in front of you. */
+  #levelcard {
+    position:fixed; inset:0; z-index:64;
+    display:grid; place-items:center;
+    pointer-events:none; opacity:0;
+  }
+  #levelcard.show { opacity:1; }
+  #levelcard .lc-in {
+    background:linear-gradient(150deg,#fff,#ffe9f0);
+    border-radius:28px; padding:clamp(16px,3.5vw,26px) clamp(26px,7vw,48px);
+    text-align:center;
+    box-shadow:0 14px 40px rgba(120,40,80,.35), inset 0 2px 0 #fff;
+    transform:scale(.5) translateY(30px); opacity:0;
+  }
+  #levelcard.show .lc-in { animation:lcIn .42s cubic-bezier(.25,1.5,.45,1) forwards; }
+  #levelcard.out  .lc-in { animation:lcOut .34s cubic-bezier(.5,0,.75,0) forwards; }
+  @keyframes lcIn  { to { transform:scale(1) translateY(0); opacity:1; } }
+  @keyframes lcOut { from { transform:scale(1); opacity:1; } to { transform:scale(1.25) translateY(-24px); opacity:0; } }
+  #levelcard .lc-n {
+    font-size:clamp(28px,8vw,46px); font-weight:800; color:#c2410c;
+    text-shadow:0 2px 0 rgba(255,255,255,.9);
+  }
+  #levelcard .lc-goals { font-size:clamp(18px,5vw,26px); font-weight:800; color:#8a5a3c; margin-top:4px; }
+
+  /* fruit raining in on a diagonal — delay is a pure function of the cell, so
+     the wave sweeps from the top-left corner without any JS bookkeeping */
+  .tile.dropin .inner {
+    animation:dropIn .52s cubic-bezier(.28,1.35,.5,1) backwards;
+    animation-delay:calc((var(--tr) + var(--tc)) * 42ms);
+  }
+  @keyframes dropIn {
+    0%   { transform:translateY(calc(var(--cell) * -5.5)) scale(.6) rotate(-14deg); opacity:0; }
+    55%  { opacity:1; }
+    100% { transform:none; }
+  }
+  /* and sweeping out the same way when the level is done */
+  .tile.sweepout .inner {
+    animation:sweepOut .5s cubic-bezier(.45,0,.75,.2) forwards;
+    animation-delay:calc((var(--tr) + var(--tc)) * 32ms);
+  }
+  @keyframes sweepOut {
+    0%   { transform:none; opacity:1; }
+    25%  { transform:scale(1.18) rotate(6deg); }
+    100% { transform:translateY(calc(var(--cell) * 6)) scale(.35) rotate(38deg); opacity:0; }
+  }
+
+  /* the beat before a match pops — says "these ones" before they go */
+  .tile.charge .inner { animation:charge .17s ease-out forwards; }
+  @keyframes charge {
+    0%   { filter:brightness(1); transform:scale(1); }
+    100% { filter:brightness(2.1) saturate(.35); transform:scale(1.22); }
+  }
+  /* halo left behind by every popped fruit */
+  .ring {
+    position:absolute; z-index:7; pointer-events:none;
+    border-radius:50%; border:calc(var(--cell)*.07) solid #fff;
+    animation:ringOut .52s cubic-bezier(.2,.8,.35,1) forwards;
+  }
+  @keyframes ringOut {
+    0%   { transform:translate(-50%,-50%) scale(.15); opacity:.95; }
+    100% { transform:translate(-50%,-50%) scale(1.9); opacity:0; }
+  }
+  /* puff of dust where a falling fruit lands */
+  .dust {
+    position:absolute; z-index:3; pointer-events:none; border-radius:50%;
+    background:rgba(255,255,255,.85);
+    animation:dustOut .38s ease-out forwards;
+  }
+  @keyframes dustOut {
+    0%   { transform:translate(-50%,-50%) scale(.2); opacity:.8; }
+    100% { transform:translate(-50%,-50%) scale(1.6); opacity:0; }
+  }
+  .tile.swapping { z-index:5; }
+  .tile.swapping .inner { animation:swapPulse .26s ease-in-out; }
+  @keyframes swapPulse { 50% { transform:scale(1.16); } }
+
   /* particles + score pops */
   .pt { position:fixed; z-index:60; border-radius:50%; pointer-events:none;
         animation:pt .58s cubic-bezier(.2,.7,.4,1) forwards; }
@@ -548,6 +632,8 @@
   @media (prefers-reduced-motion: reduce) {
     .bub, .win-mascot, #menu h1, .tile.sel .inner, .tile.sp1 .crown i, .tile.sp1 .shape,
     .tile.sp2 .shape, .tile.sp2 .crown, .tile.aim .inner, .hand,
+    .tile.dropin .inner, .tile.sweepout .inner, .tile.charge .inner,
+    .tile.swapping .inner, .ring, .dust, #levelcard .lc-in,
     .moves.low, .cann-p { animation:none !important; }
     /* the aim ring still has to read without the pulse */
     .tile.aim .shape { box-shadow:0 0 0 calc(var(--cell)*.05) #fff; }
@@ -589,6 +675,7 @@
     <div class="goals" id="goals"></div>
   </div>
   <div id="board-wrap"><div id="board"><div id="covers"></div></div></div>
+  <div id="levelcard"><div class="lc-in"><div class="lc-n"></div><div class="lc-goals"></div></div></div>
   <p class="footnote" id="foot">Tap a fruit, then tap the one next to it.</p>
 </div>
 
@@ -844,6 +931,7 @@ function sfx(name, n = 0, notes) {
     if (name === 'leaf')  { noise(0, .16, .07, 3200); tone(300, 0, .1, 'sine', .05); }
     if (name === 'make')  [784, 988, 1319, 1568].forEach((f, i) => tone(f, i * .06, .18, 'triangle', .13));
     if (name === 'lucky') [523, 784, 1047, 1319, 1568].forEach((f, i) => tone(f, i * .05, .22, 'triangle', .14));
+    if (name === 'level') { [392, 523, 659, 784].forEach((f, i) => tone(f, i * .09, .34, 'triangle', .13)); noise(.05, .3, .03, 1200); }
     if (name === 'blast') { noise(0, .3, .1, 900); [660, 520, 400].forEach((f, i) => tone(f, i * .05, .2, 'sawtooth', .07)); }
     if (name === 'goal')  { tone(880, 0, .09, 'sine', .12); tone(1319, .07, .14, 'sine', .1); }
     if (name === 'mix')   { for (let i = 0; i < 6; i++) tone(400 + i * 90, i * .04, .1, 'sine', .07); }
@@ -1160,11 +1248,14 @@ function cellCentre(r, c) {
   const cell = board.clientWidth / C;
   return { x: box.left + (c + .5) * cell, y: box.top + (r + .5) * cell };
 }
-function particles(r, c, kind) {
+// `boost` ramps the burst with the cascade depth, so a long chain visibly
+// throws more confetti than a plain three.
+function particles(r, c, kind, boost) {
   if (REDUCED) return;
   const p = cellCentre(r, c);
   const col = kind == null ? '#fff' : KINDS[kind].from;
-  for (let i = 0; i < 7; i++) {
+  const n = Math.min(16, 7 + (boost || 0) * 3);
+  for (let i = 0; i < n; i++) {
     const s = document.createElement('span');
     s.className = 'pt';
     const size = 5 + Math.random() * 8;
@@ -1201,6 +1292,31 @@ function converge(r, c, kind) {
     document.body.appendChild(s);
     setTimeout(() => s.remove(), 750);
   }
+}
+// Halo left where a fruit was. Lives inside the board so it scrolls/resizes
+// with it, unlike the fixed-position particles.
+function ring(r, c) {
+  if (REDUCED) return;
+  const cell = board.clientWidth / C;
+  const el = document.createElement('div');
+  el.className = 'ring';
+  el.style.width = el.style.height = (cell * .9) + 'px';
+  el.style.left = ((c + .5) * cell) + 'px';
+  el.style.top = ((r + .5) * cell) + 'px';
+  board.appendChild(el);
+  setTimeout(() => el.remove(), 560);
+}
+function dust(r, c) {
+  if (REDUCED) return;
+  const cell = board.clientWidth / C;
+  const el = document.createElement('div');
+  el.className = 'dust';
+  el.style.width = (cell * .8) + 'px';
+  el.style.height = (cell * .3) + 'px';
+  el.style.left = ((c + .5) * cell) + 'px';
+  el.style.top = ((r + .9) * cell) + 'px';
+  board.appendChild(el);
+  setTimeout(() => el.remove(), 420);
 }
 function scorePop(r, c, n) {
   const p = cellCentre(r, c);
@@ -1328,6 +1444,16 @@ async function clearCells(keys, cascade, from) {
   let goalHits = 0, coverHits = 0, notes = [];
   const flyBudget = { n: 0 };
 
+  // A beat where the doomed fruit flare white before they go. Without it the
+  // board just loses tiles; with it you can see WHICH ones matched.
+  if (!REDUCED) {
+    keys.forEach(key => {
+      const t = grid[Math.floor(key / C)][key % C];
+      if (t) t.el.classList.add('charge');
+    });
+    await sleep(150);
+  }
+
   keys.forEach(key => {
     const r = Math.floor(key / C), c = key % C;
     const t = grid[r][c];
@@ -1342,16 +1468,22 @@ async function clearCells(keys, cascade, from) {
     }
     if (sweepCover(r, c)) coverHits++;
     if (t.k >= 0) notes.push(KINDS[t.k].note);
-    const delay = from ? Math.min(260, (Math.abs(r - from[0]) + Math.abs(c - from[1])) * 42) : 0;
+    // Pops travel outward from wherever this clear started — the tile you moved,
+    // or the booster that went off — so the burst reads as a consequence of it.
+    const delay = from ? Math.min(300, (Math.abs(r - from[0]) + Math.abs(c - from[1])) * 46) : 0;
     const el = t.el;
-    if (delay) {
-      el.style.transitionDelay = delay + 'ms';
-      setTimeout(() => { particles(r, c, t.sp === SP_RAIN ? null : t.k); el.classList.add('pop'); }, delay);
-    } else {
-      particles(r, c, t.sp === SP_RAIN ? null : t.k);
+    const kind = t.sp === SP_RAIN ? null : t.k;
+    // Drop .charge as .pop goes on: both style .inner and .charge is defined
+    // later in the sheet, so leaving it would win the cascade and the tile
+    // would sit there flashing instead of bursting. Pop opens on charge's end
+    // state, so the handover is invisible.
+    const fire = () => {
+      el.classList.remove('charge');
+      particles(r, c, kind, cascade - 1); ring(r, c);
       el.classList.add('pop');
-    }
-    setTimeout(() => el.remove(), 340 + delay);
+    };
+    if (delay) { setTimeout(fire, delay); } else fire();
+    setTimeout(() => el.remove(), 470 + delay);
     grid[r][c] = null;
   });
 
@@ -1362,8 +1494,8 @@ async function clearCells(keys, cascade, from) {
   const mid = [...keys][Math.floor(keys.size / 2)];
   scorePop(Math.floor(mid / C), mid % C, gained);
   paintHud();
-  // A blast needs long enough for its last wave to actually be seen.
-  await sleep(REDUCED ? 60 : (from ? 420 : 260));
+  // Long enough for the last wave of the burst to actually be seen.
+  await sleep(REDUCED ? 60 : (from ? 520 : 400));
 }
 
 async function gravity() {
@@ -1409,9 +1541,13 @@ async function gravity() {
     t.el.style.transitionDuration = '';
     t.el.style.transitionTimingFunction = '';
     t.el.classList.add('land');
-    setTimeout(() => t.el.classList.remove('land'), 240);
+    setTimeout(() => t.el.classList.remove('land'), 320);
   });
-  await sleep(REDUCED ? 10 : 60);
+  // A puff under the fruit that sits on the floor of each column — one per
+  // column, so a full refill doesn't spray forty puffs at once.
+  const bottoms = new Set();
+  landed.forEach(t => { if (!bottoms.has(t.c) && (t.r === R - 1 || (grid[t.r + 1] && grid[t.r + 1][t.c] && !landed.includes(grid[t.r + 1][t.c])))) { bottoms.add(t.c); dust(t.r, t.c); } });
+  await sleep(REDUCED ? 10 : 110);
 }
 
 // Toddlers can't read these, so each one carries an emoji that says the same
@@ -1421,6 +1557,9 @@ const CHEERS = [['Nice!', '✨'], ['Wow!', '🌟'], ['Amazing!', '🎉'], ['Incr
 // Runs matches → boosters → clears → gravity, over and over until it settles.
 async function resolve(origins) {
   let cascade = 0, madeBooster = false, lucky = false;
+  // Remember where the player actually touched, so the very first burst can
+  // radiate out from their own move.
+  const touched = origins && origins.length ? origins[0] : null;
   for (;;) {
     const gs = groups();
     if (!gs.length) break;
@@ -1461,7 +1600,7 @@ async function resolve(origins) {
     }
     if (cascade >= 3) shake();
 
-    await clearCells(keys, cascade, blastFrom);
+    await clearCells(keys, cascade, blastFrom || (cascade === 1 ? touched : null));
 
     // promote the spawn tiles into boosters
     for (const [key, sp, k] of spawns) {
@@ -1488,6 +1627,46 @@ async function resolve(origins) {
   }
   if (madeBooster) sinceBooster = 0; else if (cascade) sinceBooster++;
   return cascade;
+}
+
+/* ---------------- level intro / outro ----------------
+   A level should arrive and leave, not blink in and out. */
+async function playIntro(showCard) {
+  if (REDUCED) { busy = false; return; }
+  const tiles = grid.flat().filter(Boolean);
+  // Hold the fruit off-stage so the card lands on an empty board and the wave
+  // is the payoff — running both at once meant the board quietly finished
+  // assembling behind the card and then nothing happened for a second.
+  tiles.forEach(t => { t.el.style.visibility = 'hidden'; });
+
+  if (showCard) {
+    const card = $('levelcard');
+    card.querySelector('.lc-n').textContent = L.name;
+    const bits = L.goals.map(g => g[1] + KINDS[g[0]].emoji);
+    if (L.covers) bits.push(L.covers + '🍃');
+    card.querySelector('.lc-goals').textContent = bits.join('  ');
+    card.classList.remove('out'); card.classList.add('show');
+    sfx('level');
+    await sleep(780);
+    card.classList.add('out');
+    await sleep(330);
+    card.classList.remove('show', 'out');
+  }
+
+  tiles.forEach(t => { t.el.style.visibility = ''; t.el.classList.add('dropin'); });
+  // longest delay is the far corner of the wave, plus the animation itself
+  await sleep(((R - 1) + (C - 1)) * 42 + 520);
+  tiles.forEach(t => t.el.classList.remove('dropin'));
+  sfx('land');
+  busy = false;
+}
+
+async function playOutro() {
+  if (REDUCED) return;
+  const tiles = grid.flat().filter(Boolean);
+  tiles.forEach(t => t.el.classList.add('sweepout'));
+  await sleep(((R - 1 + C - 1) * 32) + 500);
+  tiles.forEach(t => { t.el.classList.remove('sweepout'); t.el.style.opacity = '0'; });
 }
 
 function shake() {
@@ -1582,11 +1761,13 @@ async function trySwap(a, b) {
   clearNudge();
   sfx('swap');
 
-  // visual swap
+  // visual swap — both tiles lift and swell as they trade places
   const ar = a.r, ac2 = a.c, br = b.r, bc = b.c;
+  a.el.classList.add('swapping'); b.el.classList.add('swapping');
   place(a, br, bc); place(b, ar, ac2);
   grid[br][bc] = a; grid[ar][ac2] = b;
-  await sleep(REDUCED ? 20 : 190);
+  await sleep(REDUCED ? 20 : 270);
+  a.el.classList.remove('swapping'); b.el.classList.remove('swapping');
 
   // Two boosters swapped together combine into something bigger than either.
   // This is the biggest reward in the game, so it gets a name and a toast.
@@ -1832,16 +2013,21 @@ function checkWin() {
   unlockLevel(levelNo + 1);     // there is always a next level
   paintMenu();
   sfx('win'); buzz([80, 60, 80, 60, 160]);
-  confettiBurst(); cannon('left'); cannon('right');
-  setTimeout(() => { if ($('win').classList.contains('show')) { cannon('left'); cannon('right'); } }, 850);
   $('win-title').textContent = n === 3 ? 'Perfect!' : n === 2 ? 'Great job!' : 'You did it!';
   $('win-sub').textContent = score.toLocaleString() + ' points · 🏆 ' + totalScore().toLocaleString() + ' total';
   $('win-mascot').textContent = ['🐻', '🐰', '🦊', '🐸', '🐨'][rnd(5)];
   const row = $('starrow').children;
   for (let i = 0; i < 3; i++) row[i].classList.remove('on');
   $('next-btn').textContent = 'Level ' + (levelNo + 1) + ' ▸';
-  setTimeout(() => $('win').classList.add('show'), 260);
-  for (let i = 0; i < n; i++) setTimeout(() => { row[i].classList.add('on'); sfx('star', i); }, 700 + i * 340);
+  // Clear the board away first — the celebration lands on an empty stage
+  // instead of covering up a board still full of fruit.
+  (async () => {
+    await playOutro();
+    confettiBurst(); cannon('left'); cannon('right');
+    $('win').classList.add('show');
+    setTimeout(() => { if ($('win').classList.contains('show')) { cannon('left'); cannon('right'); } }, 850);
+    for (let i = 0; i < n; i++) setTimeout(() => { row[i].classList.add('on'); sfx('star', i); }, 420 + i * 340);
+  })();
   return true;
 }
 
@@ -1939,7 +2125,7 @@ function showMenu() {
   paintMenu();
 }
 
-function start(idx, resume) {
+function start(idx, resume, quiet) {
   freePlay = idx === 'free';
   levelNo = freePlay ? 0 : idx;
   L = freePlay ? FREE : levelFor(idx);
@@ -1979,8 +2165,14 @@ function start(idx, resume) {
   paintHud();
   // If a restored board happens to be dead, mix it before the child touches it.
   if (!anyMove()) reshuffle();
-  // First ever game? Bring the pointing hand in early — that's the tutorial.
-  armIdle(!freePlay && levelNo === 1 && !Object.keys(stars()).length);
+
+  // Play the arrival, and hold input until the board has finished landing.
+  // Resuming skips the card — the "welcome back" dialog is already the intro.
+  busy = true;
+  playIntro(!quiet && !resume).then(() => {
+    // First ever game? Bring the pointing hand in early — that's the tutorial.
+    armIdle(!freePlay && levelNo === 1 && !Object.keys(stars()).length);
+  });
 }
 
 function applyRoute() {
