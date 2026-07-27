@@ -762,14 +762,15 @@ const LEVELS = {
     // it's a real step up without being Legend. Measured effort ~260-570.
     { name:'Champion', emoji:'🏆', desc:'9×9 · expert',     n:9, boxW:3, boxH:3, blanks:48,
       tune:{ clues:33, tierMin:2, tierMax:2, climb:false, ceil:800,
-             slice:70, budget:900, seeds:10, ruin:8 } },
-    // hidden level — only reachable from the Champion win screen.
-    // Legend climbs for as much difficulty as the search can find, so its
-    // ceiling is set by the solver's technique set rather than by a target.
-    // tierMin 4 means every Legend needs a wing or a fish, not just a pair.
-    { name:'Legend',   emoji:'👑', desc:'9×9 · legendary',  n:9, boxW:3, boxH:3, blanks:59,
-      tune:{ clues:22, tierMin:4, tierMax:5, climb:true, floor:1200,
-             minStalls:4, minHard:2, slice:2500, budget:15000, seeds:5, ruin:12 } },
+             slice:160, budget:2200, seeds:10, ruin:8 } },
+    // Hidden level, only reachable from the Champion win screen — and the one
+    // rung aimed at grown-ups rather than the kids the rest of the app is for.
+    // It climbs for as much difficulty as the search can find, so its ceiling
+    // is set by the solver's technique set rather than by a target. tierMin 5
+    // means every Legend needs a swordfish, an XYZ/W-wing or a colouring chain.
+    { name:'Legend',   emoji:'👑', desc:'9×9 · grown-up hard', n:9, boxW:3, boxH:3, blanks:59,
+      tune:{ clues:22, tierMin:5, tierMax:6, climb:true, floor:1600,
+             minStalls:4, minHard:4, slice:4000, budget:25000, seeds:5, ruin:12 } },
   ],
 };
 const SUBTITLES = {
@@ -987,7 +988,7 @@ function digUnique(solution,L){
 function effortOf(pz,L){
   const ctx=solverCtx(L), n=L.n;
   const state={grid:pz.slice(), cand:computeCands(pz,ctx)};
-  let e=0,t2=0,t3=0,t4=0,t5=0,stalls=0,prevAdv=false,guard=0;
+  let e=0,t2=0,t3=0,t4=0,t5=0,t6=0,stalls=0,prevAdv=false,guard=0;
   while(state.grid.some(v=>v===0)){
     if(++guard>n*n*2) return null;
     let moves=0, empty=0;
@@ -1004,12 +1005,13 @@ function effortOf(pz,L){
     else if(d.tier===2){ t2++; e+=14; }
     else if(d.tier===3){ t3++; e+=34; }
     else if(d.tier===4){ t4++; e+=80; }
-    else { t5++; e+=170; }
+    else if(d.tier===5){ t5++; e+=170; }
+    else { t6++; e+=320; }
     if(d.tier>=2){ if(!prevAdv){ stalls++; e+=10; } prevAdv=true; } else prevAdv=false;
     applyDeduction(state,d,ctx);
   }
-  return { effort:Math.round(e), tier:(t5?5:t4?4:t3?3:t2?2:1), stalls,
-           hard:t4+t5, adv:t2+t3+t4+t5 };
+  return { effort:Math.round(e), tier:(t6?6:t5?5:t4?4:t3?3:t2?2:1), stalls,
+           hard:t4+t5+t6, adv:t2+t3+t4+t5+t6 };
 }
 
 /* Tuned puzzle by ruin-and-recreate search, aimed at the level's `tune` spec.
@@ -1308,6 +1310,97 @@ function tXYZWing(s,ctx){
   }
   return null;
 }
+/* W-Wing: twin cells hold the same pair {x,z} and don't see each other. Some
+   unit has only two homes left for z, one seeing each twin — so one of those
+   two is z, which forces the twin it sees to be x. Either way an x lands on a
+   twin, and anything seeing both twins loses x. */
+function tWWing(s,ctx){
+  const n=ctx.n, see=(a,b)=>ctx.peers[a].has(b);
+  const bi=[];
+  for(let i=0;i<n*n;i++) if(s.grid[i]===0 && bitcount(s.cand[i])===2) bi.push(i);
+  for(let a=0;a<bi.length;a++) for(let b=a+1;b<bi.length;b++){
+    const p=bi[a], q=bi[b];
+    if(s.cand[p]!==s.cand[q] || see(p,q)) continue;
+    const pair=bitsOf(s.cand[p]);
+    for(const [X,Z] of [[pair[0],pair[1]],[pair[1],pair[0]]]){
+      const zb=1<<(Z-1), xb=1<<(X-1);
+      for(const u of ctx.units){
+        const spots=u.cells.filter(c=>s.grid[c]===0 && (s.cand[c]&zb));
+        if(spots.length!==2) continue;
+        const [c1,c2]=spots;
+        if(c1===p||c1===q||c2===p||c2===q) continue;
+        if(!((see(c1,p)&&see(c2,q)) || (see(c1,q)&&see(c2,p)))) continue;
+        const elims=[];
+        for(let i=0;i<n*n;i++){
+          if(s.grid[i]!==0||i===p||i===q) continue;
+          if((s.cand[i]&xb) && see(i,p) && see(i,q)) elims.push({cell:i,value:X});
+        }
+        if(elims.length) return {tier:5,kind:'elim',tech:'W-Wing',value:X,elims,
+          patternCells:[p,q],linkCells:[c1,c2],linkValue:Z,unitCells:u.cells,unitKind:u.kind};
+      }
+    }
+  }
+  return null;
+}
+/* Simple colouring. For one digit, a unit with exactly two homes left is a
+   strong link: one end is the digit, the other isn't. Follow those links and
+   two-colour the chain — every cell of one colour is the digit, every cell of
+   the other isn't, we just don't know which way round. Two payoffs:
+     trap — two cells of the SAME colour see each other, so that colour is
+            impossible and every cell of it loses the digit
+     wrap — any cell outside seeing BOTH colours loses the digit, since one of
+            the two colours is the true one */
+function tColour(s,ctx){
+  const n=ctx.n;
+  for(let v=1;v<=n;v++){
+    const b=1<<(v-1);
+    const adj=new Map(), linkUnits=[];
+    for(const u of ctx.units){
+      const spots=u.cells.filter(c=>s.grid[c]===0 && (s.cand[c]&b));
+      if(spots.length!==2) continue;
+      linkUnits.push({cells:u.cells, spots});
+      if(!adj.has(spots[0])) adj.set(spots[0],[]);
+      if(!adj.has(spots[1])) adj.set(spots[1],[]);
+      adj.get(spots[0]).push(spots[1]);
+      adj.get(spots[1]).push(spots[0]);
+    }
+    if(!adj.size) continue;
+    const colour=new Map();
+    for(const seed of adj.keys()){
+      if(colour.has(seed)) continue;
+      const comp=[seed], queue=[seed];
+      colour.set(seed,0);
+      while(queue.length){
+        const c=queue.shift();
+        for(const nb of adj.get(c)) if(!colour.has(nb)){
+          colour.set(nb, 1-colour.get(c)); comp.push(nb); queue.push(nb);
+        }
+      }
+      if(comp.length<4) continue;                 // too short to be worth walking
+      const A=comp.filter(c=>colour.get(c)===0), B=comp.filter(c=>colour.get(c)===1);
+      const used=linkUnits.filter(lu=>colour.has(lu.spots[0]) && comp.includes(lu.spots[0]));
+      for(const [same,dead] of [[A,'A'],[B,'B']]){
+        let clash=null;
+        outer: for(let i=0;i<same.length;i++) for(let j=i+1;j<same.length;j++)
+          if(ctx.peers[same[i]].has(same[j])){ clash=[same[i],same[j]]; break outer; }
+        if(clash) return {tier:6,kind:'elim',tech:'Colouring',value:v,rule:'trap',
+          elims:same.map(c=>({cell:c,value:v})),
+          patternCells:comp.slice(), colourA:A, colourB:B, deadColour:dead, clash,
+          linkUnits:used, unitKind:null};
+      }
+      const inComp=new Set(comp), elims=[];
+      for(let i=0;i<n*n;i++){
+        if(s.grid[i]!==0 || inComp.has(i) || !(s.cand[i]&b)) continue;
+        if(A.some(c=>ctx.peers[i].has(c)) && B.some(c=>ctx.peers[i].has(c)))
+          elims.push({cell:i,value:v});
+      }
+      if(elims.length) return {tier:6,kind:'elim',tech:'Colouring',value:v,rule:'wrap',
+        elims, patternCells:comp.slice(), colourA:A, colourB:B,
+        linkUnits:used, unitKind:null};
+    }
+  }
+  return null;
+}
 function tXYWing(s,ctx){
   const n=ctx.n;
   const bi=[]; for(let i=0;i<n*n;i++) if(s.grid[i]===0 && bitcount(s.cand[i])===2) bi.push({i,m:s.cand[i]});
@@ -1336,7 +1429,8 @@ const TECHS=[
   (s,c)=>tNakedSubset(s,c,2), (s,c)=>tHiddenSubset(s,c,2),
   (s,c)=>tNakedSubset(s,c,3), (s,c)=>tHiddenSubset(s,c,3),
   (s,c)=>tFish(s,c,2), tXYWing,
-  (s,c)=>tFish(s,c,3), tXYZWing
+  (s,c)=>tFish(s,c,3), tXYZWing, tWWing,
+  tColour
 ];
 
 // Solve as far as pure logic allows, recording the full reasoned trace.
@@ -2017,6 +2111,23 @@ function premiseNeeds(d, g){
         for(let v=1;v<=n;v++) if(!(m&(1<<(v-1)))) add(p, v);
       }
       break;
+    // the twins are bivalue, and the link unit really has only two homes for z
+    case 'W-Wing': {
+      for(const p of d.patternCells){
+        const m=d.candBefore[p];
+        for(let v=1;v<=n;v++) if(!(m&(1<<(v-1)))) add(p, v);
+      }
+      const ends=new Set(d.linkCells);
+      for(const c of d.unitCells) if(!ends.has(c)) add(c, d.linkValue);
+      break;
+    }
+    // every link in the chain is a unit with only two homes left for the digit
+    case 'Colouring':
+      for(const lu of d.linkUnits){
+        const ends=new Set(lu.spots);
+        for(const c of lu.cells) if(!ends.has(c)) add(c, d.value);
+      }
+      break;
   }
   return out;
 }
@@ -2334,6 +2445,8 @@ function elimBeats(d){
   switch(d.tech){
     case 'XY-Wing':  return xyWingBeats(d);
     case 'XYZ-Wing': return xyzWingBeats(d);
+    case 'W-Wing':   return wWingBeats(d);
+    case 'Colouring': return colourBeats(d);
     case 'X-Wing': case 'Swordfish': return fishBeats(d);
     case 'naked pair': case 'naked triple':  return pairBeats(d, false);
     case 'hidden pair': case 'hidden triple': return pairBeats(d, true);
@@ -2483,6 +2596,50 @@ function xyzWingBeats(d){
     { text:'And if the hinge is '+symTag(Z)+' — there it is already! '+emph('Every way')+', one of these three is '+symTag(Z)+'. So a square seeing '+emph('all three')+' can never be '+symTag(Z)+' (crossed out).',
       focus:[{cell:piv,values:[Z]},{cell:w1,values:[Z]},{cell:w2,values:[Z]}], cross,
       arrows:cross.flatMap(m=>[[piv,m.cell],[w1,m.cell],[w2,m.cell]]) }
+  ];
+}
+
+// W-Wing — the twins, the strong link that connects them, then the sweep.
+function wWingBeats(d){
+  const [p,q]=d.patternCells, [c1,c2]=d.linkCells, X=d.value, Z=d.linkValue;
+  const cross=groupElims(d.elims);
+  return [
+    { text:'Twin squares: both are '+symTag(X)+' or '+symTag(Z)+', and they can\'t see each other.',
+      focus:[{cell:p,values:bitsOf(d.candBefore[p])},{cell:q,values:bitsOf(d.candBefore[q])}] },
+    { text:'This '+uname(d.unitKind)+' has only two homes left for '+symTag(Z)+' (green), and one of them sees each twin.',
+      band:d.unitCells, ev:d.linkCells,
+      focus:[{cell:c1,values:[Z]},{cell:c2,values:[Z]}],
+      arrows:[[c1,p],[c2,q]] },
+    { text:'Whichever green square takes the '+symTag(Z)+', the twin it sees can\'t be '+symTag(Z)+' — so that twin is '+symTag(X)+'. '+
+      emph('Either way')+' a twin is '+symTag(X)+', and anything seeing '+emph('both')+' twins can\'t be (crossed out).',
+      focus:[{cell:p,values:[X]},{cell:q,values:[X]}], cross,
+      arrows:cross.flatMap(m=>[[p,m.cell],[q,m.cell]]) }
+  ];
+}
+
+// Simple colouring — build the chain, then trap or wrap. Green and blue are
+// the two colours; one of them is entirely right, we just don't know which.
+function colourBeats(d){
+  const v=d.value, A=d.colourA, B=d.colourB;
+  const focus=d.patternCells.map(c=>({cell:c, values:[v]}));
+  const cross=groupElims(d.elims);
+  const chain={ text:'Chain on '+symTag(v)+': each link is a unit with only two homes left for it, so the two ends flip — one is '+symTag(v)+', the other isn\'t. Follow that all the way and the chain falls into two colours.',
+    ev:A, band:B, focus,
+    arrows:d.linkUnits.map(lu=>[lu.spots[0],lu.spots[1]]) };
+  if(d.rule==='trap'){
+    const dead=d.deadColour==='A'?A:B, deadName=d.deadColour==='A'?'green':'blue';
+    return [ chain,
+      { text:'One whole colour is '+symTag(v)+' and the other isn\'t. But these two '+deadName+' squares see each other — they can\'t both be '+symTag(v)+'.',
+        ev:A, band:B, focus, wrongRing:d.clash },
+      { text:'So '+deadName+' is the wrong colour entirely — every '+deadName+' square loses its '+symTag(v)+' (crossed out).',
+        cross, focus:d.patternCells.filter(c=>dead.indexOf(c)<0).map(c=>({cell:c,values:[v]})) }
+    ];
+  }
+  return [ chain,
+    { text:'One colour is right and one is wrong — either way, '+emph('one of the two')+' holds the '+symTag(v)+' for this chain.',
+      ev:A, band:B, focus },
+    { text:'So any square seeing '+emph('both')+' colours can never be '+symTag(v)+' (crossed out).',
+      ev:A, band:B, focus, cross }
   ];
 }
 
