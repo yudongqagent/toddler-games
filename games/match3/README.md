@@ -26,7 +26,11 @@ the blast, so what a booster does is guessable rather than memorised:
 
 Swap two boosters together and they combine — a bomb pair makes one much
 bigger blast, star + bomb makes a three-wide cross, and a rainbow turns every
-fruit of a colour into the other booster and sets them all off at once.
+fruit of a colour into the other booster and sets them all off at once. That
+last one converts them **one at a time**, nearest first, each getting its own
+bolt, so you watch the rainbow seed the whole board before any of it goes off.
+Measured on a real board: 12 fruit converted, 13 bombs detonating, 45 of 49
+tiles cleared.
 
 Each one has to answer three questions at a glance — what am I, what will I
 clear, and how do I go off:
@@ -104,18 +108,32 @@ one, and Level 34 is the same board every time you replay it. Beating a level
 unlocks the next; the menu keeps every level you've reached, with its stars,
 and a **total score that never resets**.
 
-The curve, all on the same board:
+**Five kinds of level, in rotation**, so no two in a row ask the same thing:
 
-| Level | Fruit kinds | Goals | Leaves | Moves |
-|---|---|---|---|---|
-| 1 | 4 | 9 of one fruit | — | 12 |
-| 3 | 5 | 11 of two fruit | 4 | 14 |
-| 8 | 6 | 16 of three fruit | 8 | 27 |
-| 16+ | 6 | 24 of three fruit | 8 | 35 |
+| | Asks for |
+|---|---|
+| 🍓 | collect three fruit |
+| 🍃 | collect two fruit **and** sweep the leaves |
+| ✨ | **make boosters** (any kind) and collect a fruit |
+| 🏆 | **reach a score** |
+| 💣 | sweep the leaves **and** make boosters |
 
-Both the goal size and the leaf count plateau around level 16 — a toddler game
-should not get harder forever. Past that the variety comes from which fruit is
-asked for and which shape the leaves make.
+Which one you get is a pure function of the level number, so Level 34 is always
+the same level. A sample of the opening run:
+
+```
+1: 9🍌            2: 10🍇 10🍏      3: 8,100🏆       4: 5🍃 2✨
+5: 13🍓 13🍌 13🍇  6: 14🍓 14🍌 7🍃   7: 3✨ 15🍌       8: 12,600🏆
+```
+
+Goal sizes and the leaf count plateau around level 16 — a toddler game should
+not get harder forever. Past that the variety comes from the rotation, which
+fruit is asked for, and which shape the leaves make.
+
+The booster goal counts **any** booster on purpose. Asking specifically for
+bombs meant asking a three-year-old to engineer an L-shape deliberately;
+measured, that produced one bomb in 27 moves against a goal of three — an
+unfinishable level.
 
 Plus **Free Play** — no goal, no move count, endless.
 
@@ -149,8 +167,9 @@ fruit squashes on impact and kicks up a puff of dust. Swapped fruit lift and
 swell as they trade places. Fruit around a newly born booster flinch away from
 it. The score number doesn't just drift off — it **flies to the score counter**
 and lands on it, which is what actually connects the burst to the number going
-up. And one tile at a time catches a glint of light, so a board sitting
-untouched never looks frozen.
+up. Every blast also leads its own destruction by a beat — the beam or the ring
+arrives visibly *before* the fruit it's hitting disappears, because firing both
+on the same frame just read as "everything vanished".
 
 **Nothing zooms.** Setting off a booster means tapping an already-selected tile
 — which *is* a double tap, so the browser's double-tap-to-zoom was fighting the

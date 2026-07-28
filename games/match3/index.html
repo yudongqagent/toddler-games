@@ -276,13 +276,10 @@
     35%  { transform:scale(.86) translate(var(--px), var(--py)); }
     100% { transform:scale(1); }
   }
-  /* ambient glint that wanders the board so it never looks frozen */
-  .tile.glint .shape::before {
-    content:''; position:absolute; inset:0; border-radius:inherit;
-    background:linear-gradient(115deg, transparent 38%, rgba(255,255,255,.9) 50%, transparent 62%);
-    animation:glint 1s ease-out; pointer-events:none;
-  }
-  @keyframes glint { 0%{ opacity:0; transform:translateX(-70%) } 30%{opacity:1} 100%{ opacity:0; transform:translateX(70%) } }
+  /* (An ambient glint used to live here. Its sliding highlight was a child of
+     .shape, which has no overflow clipping, so the band slid clear of the tile
+     and read as a white bar flashing next to the board. Ambient decoration
+     isn't worth that, so it's gone rather than patched.) */
 
   /* board */
   #board-wrap { position:relative; }
@@ -772,7 +769,7 @@
     .tile.sp2 .shape, .tile.sp2 .crown, .tile.aim .inner, .hand,
     .tile.dropin .inner, .tile.sweepout .inner, .tile.charge .inner,
     .tile.swapping .inner, .ring, .dust, #levelcard .lc-in,
-    .tile.mixing .inner, .tile.push .inner, .tile.glint .shape::before,
+    .tile.mixing .inner, .tile.push .inner,
     .smash, .zap, .tile.firing .inner, .tool.armed, .tool.armed::after, .tool.spent,
     .moves.low, .cann-p { animation:none !important; }
     /* the aim ring still has to read without the pulse */
@@ -922,8 +919,12 @@ const SP_NONE = 0, SP_STAR = 1, SP_RAIN = 2, SP_BOMB = 3;
    about one per move. Budget is 1.6x the binding constraint — a safety net wide
    enough that a child swapping at random still finishes.                      */
 const ROWS = 7, COLS = 7;
-const TILES_PER_MOVE = 6.2;    // measured, naive play
-const COVERS_PER_MOVE = 0.45;  // measured — leaves come off far slower than fruit
+// All four measured from real play, and all four are what the move budget is
+// derived from — see cost() in levelFor.
+const TILES_PER_MOVE    = 6.2;   // fruit cleared per move, naive play
+const COVERS_PER_MOVE   = 0.45;  // leaves come off far slower than fruit
+const BOOSTERS_PER_MOVE = 0.25;  // ~8 boosters per 30 moves, measured
+const POINTS_PER_MOVE   = 900;   // ~15.5k over 14 moves, measured, kept pessimistic
 const LEVEL_EMOJI = ['🍓','🍌','🍇','🍏','🍊','🫐','🍃','🌿','🌈','⭐','💣','🎀'];
 // Centre-weighted only. Ring and scatter patterns looked nicer but stranded
 // leaves on cold edge cells that almost never get matched, so the last two
@@ -944,25 +945,53 @@ function levelFor(n) {
   // leaf per move — far slower than fruit — so a big patch quietly becomes the
   // binding constraint and blows the budget. Eight keeps them a real objective
   // without turning the level into a hunt for the last stubborn one.
-  const covers = n < 2 ? 0 : Math.min(8, 1 + n);
+  const leaves = Math.min(8, 1 + n);
 
-  const goals = [];
   // n % kinds, not (n*3) % kinds — the latter only ever lands on two values for
   // six fruit, so every other level asked for exactly the same three.
   const start = n % kinds;
-  for (let i = 0; i < goalCount; i++) goals.push([(start + i) % kinds, per]);
+  const fruit = i => ({ t: 'fruit', k: (start + i) % kinds, need: per });
+  const leaf  = () => ({ t: 'leaf',  need: leaves });
+  // ANY booster counts. Asking specifically for bombs meant asking a three-
+  // year-old to engineer an L-shape on purpose; measured, that was 1 bomb in
+  // 27 moves against a goal of 3, i.e. unfinishable.
+  const boost = need => ({ t: 'boost', need });
+  const score = need => ({ t: 'score', need });
 
-  const fruitMoves = per * kinds / TILES_PER_MOVE;
-  const coverMoves = covers / COVERS_PER_MOVE;
+  // Five flavours in rotation, so no two levels in a row ask the same thing.
+  // Which one you get is a pure function of the level number.
+  const goals =
+      n === 1 ? [fruit(0)]
+    : n === 2 ? [fruit(0), fruit(1)]
+    : [
+        () => [fruit(0), fruit(1), fruit(2)].slice(0, goalCount),
+        () => [fruit(0), fruit(1)].slice(0, goalCount).concat([leaf()]),
+        () => [boost(Math.min(6, 2 + Math.floor(n / 5))), fruit(0)],
+        // Priced in moves, not in points — a flat "2500 + n*450" was worth
+        // about four moves against a twelve move budget, i.e. already won.
+        () => [score(Math.round(POINTS_PER_MOVE * Math.min(20, 6 + n) / 100) * 100)],
+        () => [leaf(), boost(Math.min(5, 2 + Math.floor(n / 7)))],
+      ][n % 5]();
+
+  // Every goal type gets costed in moves from measured throughput, and the
+  // budget follows whichever is slowest — otherwise a "make 4 bombs" level
+  // would inherit a fruit level's budget and be impossible.
+  const cost = g =>
+      g.t === 'fruit' ? g.need * kinds / TILES_PER_MOVE
+    : g.t === 'leaf'  ? g.need / COVERS_PER_MOVE
+    : g.t === 'boost' ? g.need / BOOSTERS_PER_MOVE
+    : g.t === 'score' ? g.need / POINTS_PER_MOVE
+    : 0;
   // 1.5x the binding constraint — tighter than it was, which is most of what
   // makes these levels harder. Still a safety net, and the "+5 moves" offer is
   // still there behind it, so nobody gets stuck.
-  const moves = Math.max(12, Math.ceil(Math.max(fruitMoves, coverMoves) * 1.5));
+  const moves = Math.max(12, Math.ceil(Math.max(...goals.map(cost)) * 1.5));
 
   return {
     n, name: 'Level ' + n,
     emoji: LEVEL_EMOJI[(n - 1) % LEVEL_EMOJI.length],
-    rows: ROWS, cols: COLS, kinds, moves, goals, covers,
+    rows: ROWS, cols: COLS, kinds, moves, goals,
+    covers: (goals.find(g => g.t === 'leaf') || {}).need || 0,
     pattern: COVER_PATTERNS[(n - 1) % COVER_PATTERNS.length],
   };
 }
@@ -1030,7 +1059,7 @@ function saveGame() {
   try {
     localStorage.setItem('match3-save', JSON.stringify({
       lv: levelNo, score, movesLeft, used: movesUsed, helped: usedHelp,
-      got: goalGot,
+      got: goalGot, made: boostMade,
       cov: covers.map(row => row.slice()),
       grid: grid.map(row => row.map(t => t ? [t.k, t.sp] : null)),
     }));
@@ -1049,13 +1078,17 @@ function validSave(sv, i) {
   if (!Array.isArray(sv.grid) || sv.grid.length !== lv.rows) return false;
   if (!sv.grid.every(row => Array.isArray(row) && row.length === lv.cols)) return false;
   if (!Array.isArray(sv.got) || sv.got.length !== lv.goals.length) return false;
-  // Don't offer to resume something already finished. Note a covers level can
-  // have no fruit goals at all, so "every goal met" alone isn't the test.
-  const fruitDone = lv.goals.every((g, k) => (sv.got[k] || 0) >= g[1]);
-  const covLeft = lv.covers
-    ? (Array.isArray(sv.cov) ? sv.cov.reduce((a, row) => a + (row || []).filter(Boolean).length, 0) : lv.covers)
-    : 0;
-  return !(fruitDone && covLeft === 0);
+  // Don't offer to resume a level that's already finished — checked against
+  // whatever kinds of goal it actually has.
+  const covLeft = Array.isArray(sv.cov)
+    ? sv.cov.reduce((a, row) => a + (row || []).filter(Boolean).length, 0) : lv.covers;
+  const made = sv.made || {};
+  const allDone = lv.goals.every((g, k) =>
+      g.t === 'leaf'  ? covLeft === 0
+    : g.t === 'score' ? (sv.score || 0) >= g.need
+    : g.t === 'boost' ? Object.values(made).reduce((x, y) => x + y, 0) >= g.need
+    : (sv.got[k] || 0) >= g.need);
+  return !allDone;
 }
 
 /* ---------------- sound (WebAudio, no assets) ---------------- */
@@ -1129,7 +1162,8 @@ let L = null, levelNo = 0, freePlay = false;
 let R = 0, C = 0, KN = 4;
 let grid = [];               // grid[r][c] = tile | null
 let score = 0, movesLeft = 0, movesUsed = 0, usedHelp = false;
-let goalGot = [];            // parallel to L.goals
+let goalGot = [];            // parallel to L.goals (fruit counts)
+let boostMade = {};          // boosters created this level, by kind
 let covers = [], coversLeft = 0;
 let busy = false, sel = null, over = false;
 let armed = null, toolPick = null;   // which helper tool is primed, and its first pick
@@ -1528,20 +1562,6 @@ function bumpScore() {
   s.classList.remove('bump'); void s.offsetWidth; s.classList.add('bump');
   setTimeout(() => s.classList.remove('bump'), 320);
 }
-// One tile at a time catches the light, so a board sitting still still breathes.
-let glintTimer = null;
-function startGlints() {
-  stopGlints();
-  glintTimer = setInterval(() => {
-    if (busy || over || REDUCED || document.hidden) return;
-    const tiles = grid.flat().filter(Boolean);
-    if (!tiles.length) return;
-    const t = tiles[rnd(tiles.length)];
-    t.el.classList.remove('glint'); void t.el.offsetWidth; t.el.classList.add('glint');
-    setTimeout(() => t.el.classList.remove('glint'), 1050);
-  }, 1500);
-}
-function stopGlints() { if (glintTimer) { clearInterval(glintTimer); glintTimer = null; } }
 function toast(msg) {
   const el = document.createElement('div');
   el.className = 'toast';
@@ -1557,7 +1577,7 @@ function flyToGoal(r, c, gi) {
   const from = cellCentre(r, c), to = chip.getBoundingClientRect();
   const el = document.createElement('div');
   el.className = 'fly';
-  el.textContent = KINDS[L.goals[gi][0]].emoji;
+  el.textContent = KINDS[L.goals[gi].k].emoji;
   const size = Math.max(20, board.clientWidth / C * .45);
   el.style.font = size + 'px/1 sans-serif';
   el.style.left = (from.x - size / 2) + 'px';
@@ -1728,9 +1748,9 @@ async function clearCells(keys, cascade, from, zapFrom) {
     const t = grid[r][c];
     if (!t) return;
     // credit the goal
-    if (L.goals.length && t.sp !== SP_RAIN) {
-      const gi = L.goals.findIndex(g => g[0] === t.k);
-      if (gi >= 0 && goalGot[gi] < L.goals[gi][1]) {
+    if (t.sp !== SP_RAIN) {
+      const gi = L.goals.findIndex(g => g.t === 'fruit' && g.k === t.k);
+      if (gi >= 0 && goalGot[gi] < L.goals[gi].need) {
         goalGot[gi]++; goalHits++;
         if (flyBudget.n++ < 6) flyToGoal(r, c, gi);
       }
@@ -1763,6 +1783,9 @@ async function clearCells(keys, cascade, from, zapFrom) {
   buzz(cascade > 1 ? 22 : 14);
   if (coverHits) { sfx('leaf'); paintGoals(true); }
   if (goalHits) { paintGoals(true); sfx('goal'); }
+  // A score goal has no "hit" to react to — it moves on every clear, so it has
+  // to be refreshed here or the chip sits at 0 for the whole level.
+  if (L.goals.some(g => g.t === 'score')) paintGoals(true);
   const mid = [...keys][Math.floor(keys.size / 2)];
   scorePop(Math.floor(mid / C), mid % C, gained);
   paintHud();
@@ -1863,7 +1886,9 @@ async function resolve(origins) {
     origins = null;
 
     const blastFrom = expand(keys);
-    if (blastFrom) { sfx('blast'); shake(); }
+    // Let the beam or the ring actually arrive before the fruit it's hitting
+    // disappears — firing both on the same frame read as "everything vanished".
+    if (blastFrom) { sfx('blast'); shake(); await sleep(REDUCED ? 0 : 130); }
     spawns.forEach(([key]) => keys.delete(key));
 
     if (cascade >= 2 && !REDUCED) {
@@ -1891,6 +1916,8 @@ async function resolve(origins) {
     }
     if (spawns.length) {
       madeBooster = true;
+      spawns.forEach(([, sp]) => { boostMade[sp] = (boostMade[sp] || 0) + 1; });
+      if (L.goals.some(g => g.t === 'boost')) paintGoals(true);
       sfx(lucky ? 'lucky' : 'make'); buzz(30);
       if (lucky) toast('⭐ Lucky!');
       await sleep(REDUCED ? 20 : 260);   // let the new booster be seen
@@ -1915,9 +1942,7 @@ async function playIntro(showCard) {
   if (showCard) {
     const card = $('levelcard');
     card.querySelector('.lc-n').textContent = L.name;
-    const bits = L.goals.map(g => g[1] + KINDS[g[0]].emoji);
-    if (L.covers) bits.push(L.covers + '🍃');
-    card.querySelector('.lc-goals').textContent = bits.join('  ');
+    card.querySelector('.lc-goals').textContent = goalSummary(L).join('  ');
     card.classList.remove('out'); card.classList.add('show');
     sfx('level');
     await sleep(780);
@@ -1932,7 +1957,6 @@ async function playIntro(showCard) {
   tiles.forEach(t => t.el.classList.remove('dropin'));
   sfx('land');
   busy = false;
-  startGlints();
 }
 
 async function playOutro() {
@@ -2021,6 +2045,7 @@ async function activate(t) {
     t.fired = true;
     expand(keys);
     sfx('blast'); buzz(40); shake();
+  await sleep(REDUCED ? 0 : 130);
     await clearCells(keys, 2, at, at);      // one bolt per fruit, in turn
     await gravity();
     await resolve(null);
@@ -2035,6 +2060,7 @@ async function activate(t) {
   t.fired = true;
   expand(keys);
   sfx('blast'); shake(); buzz(40);
+  await sleep(REDUCED ? 0 : 130);
   await clearCells(keys, 2, at);
   await gravity();
   await resolve(null);
@@ -2096,6 +2122,7 @@ async function useHammer(t) {
   if (t.sp !== SP_NONE) { t.fired = true; blastCells(t.r, t.c, t.sp, t.sp === SP_RAIN ? commonKind() : t.k, keys, t.radius); }
   expand(keys);
   sfx('blast'); buzz(45); shake();
+  await sleep(REDUCED ? 0 : 130);
   await clearCells(keys, 1, at);
   await gravity();
   await resolve(null);
@@ -2176,17 +2203,35 @@ async function trySwap(a, b) {
       // goes off. The showiest thing in the game.
       const other = isRain(a) ? b : a;
       const rb = isRain(a) ? a : b;
-      let n = 0;
+      const changed = [];
       for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) {
         const t = grid[r][c];
-        if (t && t.k === other.k && t.sp === SP_NONE) { t.sp = other.sp; t.radius = other.radius; t.fired = false; paint(t); n++; }
+        if (t && t.k === other.k && t.sp === SP_NONE) {
+          t.sp = other.sp; t.radius = other.radius; t.fired = false;
+          changed.push(t);
+        }
       }
       rb.fired = true;
       keys.add(rb.r * C + rb.c);
-      toast(other.sp === SP_BOMB ? '💣 x' + n + '!' : '⭐ x' + n + '!');
+      // EVERY transformed tile has to go into the clear set. Without this only
+      // the ones that happened to sit in the original booster's blast ever
+      // fired, so most of the board it had just converted did nothing at all.
+      changed.forEach(t => keys.add(t.r * C + t.c));
+      toast(other.sp === SP_BOMB ? '💣 x' + changed.length + '!' : '⭐ x' + changed.length + '!');
       await windUp(rb);
       shockwave(at[0], at[1]);
-      await sleep(REDUCED ? 20 : 320);       // let the transformation land first
+      // Convert them one at a time, nearest first, so you watch the rainbow
+      // seed the whole board before any of it goes off.
+      if (!REDUCED) {
+        changed.sort((p, q) => (Math.hypot(p.r - at[0], p.c - at[1]) - Math.hypot(q.r - at[0], q.c - at[1])));
+        const step = changed.length > 12 ? 38 : 62;
+        changed.forEach((t, i) => setTimeout(() => {
+          paint(t); zap(at[0], at[1], t.r, t.c); converge(t.r, t.c, t.k); sfx('zap');
+        }, i * step));
+        await sleep(changed.length * step + 260);
+      } else {
+        changed.forEach(t => paint(t));
+      }
     } else if (pair === String(SP_BOMB) + String(SP_BOMB)) {
       a.radius = 2; a.fired = false;         // one big 5x5 instead of two 3x3s
       b.sp = SP_NONE;
@@ -2209,6 +2254,7 @@ async function trySwap(a, b) {
 
     expand(keys);
     sfx('blast'); shake(); buzz(60);
+  await sleep(REDUCED ? 0 : 130);
     await clearCells(keys, 3, at, zapFrom);
     await gravity();
     await resolve(null);
@@ -2228,6 +2274,7 @@ async function trySwap(a, b) {
     a.fired = b.fired = true;
     expand(keys);
     sfx('blast'); shake(); buzz(45);
+  await sleep(REDUCED ? 0 : 130);
     await clearCells(keys, 2, at, at);      // hunt the colour down one by one
     await gravity();
     await resolve(null);
@@ -2364,44 +2411,63 @@ function miniTile(k) {
        + K.from + ',' + K.to + ')"></span><span class="face">' + K.emoji + '</span></span>';
 }
 let goalSig = '';
+// One chip per goal, whatever kind it is.
+function goalChip(g) {
+  if (g.t === 'fruit') return miniTile(g.k);
+  const face = g.t === 'leaf' ? '🍃'
+             : g.t === 'score' ? '🏆'
+             : '✨';
+  const bg = g.t === 'leaf' ? 'linear-gradient(160deg,#d6f5b0,#7cc94e)'
+           : g.t === 'score' ? 'linear-gradient(160deg,#ffe08a,#f5a524)'
+           : 'linear-gradient(160deg,#cfe4ff,#7aa8ff)';
+  return '<span class="mini"><span class="shape" style="border-radius:26%;background:' + bg
+       + '"></span><span class="face">' + face + '</span></span>';
+}
+// Short "12🍓 6🍃" style summary, used on the level card and the menu.
+function goalSummary(lv) {
+  return lv.goals.map(g =>
+      g.t === 'fruit' ? g.need + KINDS[g.k].emoji
+    : g.t === 'leaf'  ? g.need + '🍃'
+    : g.t === 'score' ? g.need.toLocaleString() + '🏆'
+    : g.need + '✨');
+}
+function goalLabel(g) {
+  return g.t === 'fruit' ? 'collect ' + g.need + ' ' + KINDS[g.k].name
+       : g.t === 'leaf'  ? 'sweep ' + g.need + ' leaves'
+       : g.t === 'score' ? 'score ' + g.need + ' points'
+       : 'make ' + g.need + ' boosters';
+}
+// How far along a goal is, and what it needs.
+function goalProgress(g, i) {
+  if (g.t === 'leaf')  return Math.max(0, g.need - coversLeft);
+  if (g.t === 'score') return Math.min(g.need, score);
+  if (g.t === 'boost') return Object.values(boostMade).reduce((a, b) => a + b, 0);
+  return goalGot[i] || 0;
+}
 function paintGoals(animate) {
   const host = $('goals');
-  const n = L.goals.length + (L.covers ? 1 : 0);
   // Rebuild on the actual goal set, not the chip count — two levels can want
   // the same NUMBER of chips but different ones, which used to leave the
   // previous level's chip sitting there showing this level's numbers.
-  const sig = L.name + '|' + L.goals.map(g => g.join(':')).join(',') + '|' + (L.covers || 0);
-  if (!n) { host.innerHTML = ''; goalSig = sig; return; }
+  const sig = L.name + '|' + L.goals.map(g => [g.t, g.k, g.sp, g.need].join(':')).join(',');
+  if (!L.goals.length) { host.innerHTML = ''; goalSig = sig; return; }
   if (sig !== goalSig) {
     goalSig = sig;
-    let html = L.goals.map((g, i) =>
-      '<div class="goal" data-i="' + i + '" aria-label="collect ' + g[1] + ' ' + KINDS[g[0]].name + '">'
-      + miniTile(g[0]) + '<span class="num"></span></div>').join('');
-    if (L.covers) {
-      html += '<div class="goal" data-i="cov" aria-label="sweep away all the leaves">'
-        + '<span class="mini"><span class="shape" style="border-radius:26%;background:linear-gradient(160deg,#d6f5b0,#7cc94e)"></span>'
-        + '<span class="face">🍃</span></span><span class="num"></span></div>';
-    }
-    host.innerHTML = html;
+    host.innerHTML = L.goals.map((g, i) =>
+      '<div class="goal" data-i="' + i + '" aria-label="' + goalLabel(g) + '">'
+      + goalChip(g) + '<span class="num"></span></div>').join('');
   }
   L.goals.forEach((g, i) => {
     const chip = host.children[i];
-    const done = goalGot[i] >= g[1];
-    chip.querySelector('.num').textContent = done ? '✓' : (goalGot[i] + '/' + g[1]);
+    const got = goalProgress(g, i);
+    const done = got >= g.need;
+    chip.querySelector('.num').textContent = done ? '✓'
+      : (g.t === 'score' ? got.toLocaleString() + '/' + g.need.toLocaleString() : got + '/' + g.need);
     chip.classList.toggle('done', done);
     if (animate) { chip.classList.remove('pulse'); void chip.offsetWidth; chip.classList.add('pulse'); }
   });
-  if (L.covers) {
-    const chip = host.children[L.goals.length];
-    const done = coversLeft <= 0;
-    chip.querySelector('.num').textContent = done ? '✓' : ((L.covers - coversLeft) + '/' + L.covers);
-    chip.classList.toggle('done', done);
-    if (animate) { chip.classList.remove('pulse'); void chip.offsetWidth; chip.classList.add('pulse'); }
-  }
 }
-function goalMet() {
-  return L.goals.every((g, i) => goalGot[i] >= g[1]) && (!L.covers || coversLeft <= 0);
-}
+function goalMet() { return L.goals.every((g, i) => goalProgress(g, i) >= g.need); }
 
 /* ---------------- win ---------------- */
 function checkWin() {
@@ -2535,7 +2601,6 @@ $('tools').addEventListener('click', ev => {
 function showMenu() {
   over = true; busy = false;
   clearNudge();
-  stopGlints();
   $('menu').classList.remove('hidden');
   $('game').classList.add('hidden');
   $('win').classList.remove('show');
@@ -2551,11 +2616,13 @@ function start(idx, resume, quiet) {
   R = L.rows; C = L.cols; KN = L.kinds;
   score = 0; movesLeft = L.moves; movesUsed = 0; usedHelp = false; over = false; busy = false; sel = null;
   goalGot = L.goals.map(() => 0);
+  boostMade = {};
   sinceBooster = 0;
 
   if (resume) {
     score = resume.score; movesLeft = resume.movesLeft; movesUsed = resume.used;
     usedHelp = !!resume.helped; goalGot = resume.got.slice();
+    boostMade = resume.made || {};
   }
 
   $('menu').classList.add('hidden');
