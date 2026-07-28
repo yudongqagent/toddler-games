@@ -576,6 +576,18 @@
     100% { transform:translateY(calc(var(--cell) * 6)) scale(.35) rotate(38deg); opacity:0; }
   }
 
+  /* Fruit that are about to become a booster don't pop where they stand — they
+     rush into the cell the booster is forming in and shrink out as they arrive,
+     so the creation is one motion instead of "everything vanishes, pause, a
+     booster appears". The travel itself rides the tile's own --tr/--tc
+     transform, so it uses the same movement system as gravity. */
+  .tile.suck { z-index:7; }
+  .tile.suck .inner { animation:suckIn .3s cubic-bezier(.45,0,.7,.35) forwards; }
+  @keyframes suckIn {
+    0%   { transform:scale(1.18); filter:brightness(2) saturate(.4); }
+    100% { transform:scale(.12) rotate(120deg); opacity:0; filter:brightness(1.4); }
+  }
+
   /* the beat before a match pops — says "these ones" before they go */
   .tile.charge .inner { animation:charge .17s ease-out forwards; }
   @keyframes charge {
@@ -1801,7 +1813,10 @@ function expand(set) {
 // targets are taken in order of distance, each getting its own bolt, with the
 // cadence tightened for big sets so the whole show still lands in about a
 // second whether it's eight fruit or the entire board.
-async function clearCells(keys, cascade, from, zapFrom) {
+// `suckTo` maps a doomed cell to the cell a booster is forming in. Those fruit
+// travel into it and shrink out on arrival instead of popping where they stand,
+// which is what stitches the clear and the creation into one motion.
+async function clearCells(keys, cascade, from, zapFrom, suckTo) {
   const gained = keys.size * 60 * Math.min(cascade, 5);
   score += gained;
   let goalHits = 0, coverHits = 0, notes = [];
@@ -1850,14 +1865,25 @@ async function clearCells(keys, cascade, from, zapFrom) {
     // later in the sheet, so leaving it would win the cascade and the tile
     // would sit there flashing instead of bursting. Pop opens on charge's end
     // state, so the handover is invisible.
-    const fire = () => {
+    const target = suckTo && suckTo.get(key);
+    const fire = target ? () => {
+      // Rush into the cell the booster is forming in. Riding the tile's own
+      // --tr/--tc transform means this uses the same movement path as gravity,
+      // so it reads as the fruit physically being drawn in.
+      el.classList.remove('charge');
+      el.style.transitionDuration = '300ms';
+      el.style.transitionTimingFunction = 'cubic-bezier(.45,0,.7,.35)';
+      el.classList.add('suck');
+      place(t, target[0], target[1]);
+      fxSparks(r, c, kind == null ? '#fff' : KINDS[kind].from, 6, .55);
+    } : () => {
       el.classList.remove('charge');
       if (zapFrom) { zap(zapFrom[0], zapFrom[1], r, c); sfx('zap'); }
       particles(r, c, kind, cascade - 1); ring(r, c);
       el.classList.add('pop');
     };
     if (delay) { setTimeout(fire, delay); } else fire();
-    setTimeout(() => el.remove(), 470 + delay);
+    setTimeout(() => el.remove(), (target ? 330 : 470) + delay);
     grid[r][c] = null;
   });
 
@@ -1943,7 +1969,8 @@ async function resolve(origins) {
     cascade++;
 
     const keys = new Set();
-    const spawns = [];   // [key, spKind, fruitKind]
+    const spawns = [];              // [key, spKind, fruitKind, cell]
+    const suckTo = new Map();       // doomed cell -> cell its booster forms in
     for (const g of gs) {
       // A rainbow is the prize for a deliberate straight five. Corners and Ts —
       // which are easy to make by accident — give the (still lovely) star.
@@ -1969,10 +1996,17 @@ async function resolve(origins) {
         // put a new one — they simply all go off, which is the better show.
         if (cell) {
           spawnKey = cell[0] * C + cell[1];
-          spawns.push([spawnKey, sp, g.k]);
+          spawns.push([spawnKey, sp, g.k, cell]);
         }
       }
-      g.cells.forEach(([r, c]) => { const key = r * C + c; if (key !== spawnKey) keys.add(key); });
+      g.cells.forEach(([r, c]) => {
+        const key = r * C + c;
+        if (key !== spawnKey) {
+          keys.add(key);
+          // Everything in a group that's forming a booster gets drawn into it.
+          if (spawnKey !== null) suckTo.set(key, [Math.floor(spawnKey / C), spawnKey % C]);
+        }
+      });
     }
     origins = null;
 
@@ -1988,31 +2022,39 @@ async function resolve(origins) {
     }
     if (cascade >= 3) shake();
 
-    await clearCells(keys, cascade, blastFrom || (cascade === 1 ? touched : null));
-
-    // promote the spawn tiles into boosters
-    for (const [key, sp, k] of spawns) {
-      const r = Math.floor(key / C), c = key % C;
-      const t = grid[r][c];
-      if (!t) continue;
-      t.sp = sp; if (sp === SP_RAIN) t.k = -1; else t.k = k;
-      t.fired = false;
-      paint(t);
-      // Sparks rushing IN, so a booster looks assembled out of the fruit that
-      // just vanished rather than teleported in from nowhere.
-      converge(r, c, sp === SP_RAIN ? null : k);
-      pushNeighbours(r, c);
-      t.el.classList.add('born');
-      setTimeout(() => t.el.classList.remove('born'), 320);
-    }
-    if (spawns.length) {
+    // The booster is born WHILE its fruit are still travelling into it, not
+    // after the whole clear has finished. Firing it afterwards was what made
+    // creation feel like a separate, disconnected second animation.
+    let promoted = false;
+    const promote = () => {
+      if (promoted) return;
+      promoted = true;
+      for (const [key, sp, k] of spawns) {
+        const r = Math.floor(key / C), c = key % C;
+        const t = grid[r][c];
+        if (!t) continue;
+        t.sp = sp; if (sp === SP_RAIN) t.k = -1; else t.k = k;
+        t.fired = false;
+        paint(t);
+        converge(r, c, sp === SP_RAIN ? null : k);
+        pushNeighbours(r, c);
+        t.el.classList.add('born');
+        setTimeout(() => t.el.classList.remove('born'), 320);
+      }
       madeBooster = true;
       spawns.forEach(([, sp]) => { boostMade[sp] = (boostMade[sp] || 0) + 1; });
       if (L.goals.some(g => g.t === 'boost')) paintGoals(true);
       sfx(lucky ? 'lucky' : 'make'); buzz(30);
       if (lucky) toast('⭐ Lucky!');
-      await sleep(REDUCED ? 20 : 260);   // let the new booster be seen
-    }
+    };
+    // 150ms of charge, then ~180ms of travel — the booster lands as they arrive.
+    let promoteTimer = null;
+    if (spawns.length) promoteTimer = setTimeout(promote, REDUCED ? 0 : 330);
+
+    await clearCells(keys, cascade, blastFrom || (cascade === 1 ? touched : null), null, suckTo);
+
+    // Guarantee it happened before gravity, whatever the timer did.
+    if (spawns.length) { clearTimeout(promoteTimer); promote(); }
 
     await gravity();
   }

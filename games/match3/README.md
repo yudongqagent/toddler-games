@@ -47,8 +47,13 @@ clear, and how do I go off:
   out from the centre rather than all vanishing at once. Boosters set off by
   other boosters draw their own beams, so a chain reaction reads as a chain
   reaction instead of the board erasing itself.
-- Creating one pulls sparks *inward* to the new tile, so it looks assembled out
-  of the fruit that just vanished.
+- Creating one is a single motion, not two. The matched fruit **rush into the
+  cell the booster is forming in** and shrink out as they arrive, and the
+  booster is born *while they're still travelling* — measured, the fruit start
+  moving at 511ms and the booster lands at 657ms, mid-flight. Clearing first
+  and then spawning afterwards read as two disconnected animations with a pause
+  between them. The travel rides the tile's own transform, so it uses the same
+  movement path as gravity.
 
 **Helper tools.** Three of them sit in a bar pinned to the bottom of the
 screen, thumb-height, and none of them cost a move — they're a treat, not a currency, and nothing here is for sale:
