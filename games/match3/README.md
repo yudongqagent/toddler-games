@@ -185,10 +185,33 @@ audience can't read.
 ## Tech
 
 One self-contained `index.html` — vanilla HTML/CSS/JS, zero dependencies, no
-build step. Sound is synthesized with WebAudio (no audio files). Tiles are
-absolutely-positioned divs moved with CSS transforms, so falls and swaps are
-GPU-composited transitions rather than a repainting canvas. Covers live in their
-own layer keyed to cells, not tiles, because tiles fall and cells don't.
+build step. Sound is synthesized with WebAudio (no audio files).
+
+**Hybrid renderer.** Tiles are absolutely-positioned divs moved with CSS
+transforms — GPU-composited, and they stay real elements so the board is
+readable to a screen reader. Every *effect* (sparks, shards, rings, blooms,
+blades, lightning) is drawn on a single `<canvas>` above the board by one rAF
+loop with additive blending.
+
+Why not WebGL: the board is 49 sprites and a few hundred particles, nowhere
+near fill-rate or geometry bound, so a shader pipeline would buy nothing but
+code — plus context-loss handling and no DOM to be accessible. What actually
+hurt was creating and destroying a DOM node per particle (**242 nodes per
+combo**, measured) and giving every effect its own CSS keyframe clock so
+nothing could share a timeline. The canvas fixes both: **0 effect nodes**, one
+clock, and effects that can overlap and glow into each other. Tiles stayed DOM
+because ordinary movement was already smooth and that's where accessibility
+lives.
+
+Two things worth knowing if you touch it. A `<canvas>` is a *replaced element*,
+so `inset` positions it but will not stretch it — the CSS size must be set
+explicitly next to the backing-store size, or it silently lays out at the
+device-pixel size. And effect expiry is driven by the clock, never by frames: a
+hidden tab gets no rAF at all, which leaked to 239 stale effects in testing that
+would all have dumped onto the screen at once on return.
+
+Covers live in their own layer keyed to cells, not tiles, because tiles fall and
+cells don't.
 
 State lives under `match3-` localStorage keys: `match3-stars` (per level),
 `match3-total` (points, kept forever), `match3-max` (highest level unlocked),

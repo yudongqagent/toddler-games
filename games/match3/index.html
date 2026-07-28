@@ -283,6 +283,10 @@
 
   /* board */
   #board-wrap { position:relative; }
+  /* All the blast work happens here: one canvas, one frame loop, no DOM churn.
+     It sits ABOVE the tiles and spills past the board edge so sparks can leave
+     the playfield. */
+  #fx { position:absolute; inset:-26px; z-index:12; pointer-events:none; }
   /* Emphasis without motion. The board used to jolt on a big clear, which is
      unpleasant to look at and worse on a small screen you're holding close —
      it flares instead. */
@@ -468,34 +472,6 @@
     filter:brightness(1.22);
   }
 
-  /* the blast itself: a bar of light sweeping the row and column it takes out */
-  .beam {
-    position:absolute; z-index:6; pointer-events:none; border-radius:999px;
-    background:linear-gradient(var(--dir), transparent, #fff 18%, #ffe98a 50%, #fff 82%, transparent);
-    animation:beamGo .4s cubic-bezier(.2,.85,.3,1) forwards;
-  }
-  @keyframes beamGo {
-    0%   { transform:scale(var(--sx0), var(--sy0)); opacity:1; }
-    55%  { opacity:.95; }
-    100% { transform:scale(1,1); opacity:0; }
-  }
-  /* The rainbow reaches out and takes each fruit in turn — a bolt per target,
-     fired one after another, so you watch it hunt the colour down. */
-  .zap {
-    position:absolute; z-index:8; pointer-events:none;
-    height:calc(var(--cell)*.15);
-    margin-top:calc(var(--cell)*-.075);
-    background:linear-gradient(90deg, rgba(255,255,255,0), #fff 25%, #ffe98a 65%, #fff);
-    border-radius:999px;
-    transform-origin:0 50%;
-    filter:drop-shadow(0 0 calc(var(--cell)*.1) #fff);
-    animation:zapGo .36s cubic-bezier(.2,.9,.3,1) forwards;
-  }
-  @keyframes zapGo {
-    0%   { transform:rotate(var(--ang)) scaleX(0); opacity:1; }
-    40%  { transform:rotate(var(--ang)) scaleX(1); opacity:1; }
-    100% { transform:rotate(var(--ang)) scaleX(1); opacity:0; }
-  }
   /* the orb winding up before it fires */
   .tile.firing { z-index:9; }
   .tile.firing .inner { animation:rbFire .45s cubic-bezier(.3,1.4,.5,1); }
@@ -505,16 +481,6 @@
     100% { transform:scale(1.18); }
   }
 
-  /* rainbow's blast: a ring washing outward over the whole board */
-  .shock {
-    position:absolute; z-index:6; pointer-events:none; border-radius:50%;
-    border:calc(var(--cell)*.09) solid #fff;
-    animation:shockGo .55s cubic-bezier(.2,.8,.3,1) forwards;
-  }
-  @keyframes shockGo {
-    0%   { transform:translate(-50%,-50%) scale(.05); opacity:1; }
-    100% { transform:translate(-50%,-50%) scale(1); opacity:0; }
-  }
 
   /* ---- leaf covers: they belong to CELLS, not tiles, so they sit in their
      own layer above the fruit and stay put while fruit falls past them ---- */
@@ -616,37 +582,11 @@
     0%   { filter:brightness(1); transform:scale(1); }
     100% { filter:brightness(2.1) saturate(.35); transform:scale(1.22); }
   }
-  /* halo left behind by every popped fruit */
-  .ring {
-    position:absolute; z-index:7; pointer-events:none;
-    border-radius:50%; border:calc(var(--cell)*.07) solid #fff;
-    animation:ringOut .52s cubic-bezier(.2,.8,.35,1) forwards;
-  }
-  @keyframes ringOut {
-    0%   { transform:translate(-50%,-50%) scale(.15); opacity:.95; }
-    100% { transform:translate(-50%,-50%) scale(1.9); opacity:0; }
-  }
-  /* puff of dust where a falling fruit lands */
-  .dust {
-    position:absolute; z-index:3; pointer-events:none; border-radius:50%;
-    background:rgba(255,255,255,.85);
-    animation:dustOut .38s ease-out forwards;
-  }
-  @keyframes dustOut {
-    0%   { transform:translate(-50%,-50%) scale(.2); opacity:.8; }
-    100% { transform:translate(-50%,-50%) scale(1.6); opacity:0; }
-  }
   .tile.swapping { z-index:5; }
   .tile.swapping .inner { animation:swapPulse .26s ease-in-out; }
   @keyframes swapPulse { 50% { transform:scale(1.16); } }
 
   /* particles + score pops */
-  .pt { position:fixed; z-index:60; border-radius:50%; pointer-events:none;
-        animation:pt .58s cubic-bezier(.2,.7,.4,1) forwards; }
-  @keyframes pt {
-    0%{transform:translate(-50%,-50%) scale(1); opacity:1}
-    100%{transform:translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(.2); opacity:0}
-  }
   .pop-score {
     position:fixed; z-index:61; pointer-events:none;
     font-weight:800; color:#fff; text-shadow:0 2px 4px rgba(150,50,80,.6);
@@ -768,9 +708,9 @@
     .bub, .win-mascot, #menu h1, .tile.sel .inner, .tile.sp1 .crown i, .tile.sp1 .shape,
     .tile.sp2 .shape, .tile.sp2 .crown, .tile.aim .inner, .hand,
     .tile.dropin .inner, .tile.sweepout .inner, .tile.charge .inner,
-    .tile.swapping .inner, .ring, .dust, #levelcard .lc-in,
+    .tile.swapping .inner, #levelcard .lc-in,
     .tile.mixing .inner, .tile.push .inner,
-    .smash, .zap, .tile.firing .inner, .tool.armed, .tool.armed::after, .tool.spent,
+    .smash, .tile.firing .inner, .tool.armed, .tool.armed::after, .tool.spent,
     .moves.low, .cann-p { animation:none !important; }
     /* the aim ring still has to read without the pulse */
     .tile.aim .shape { box-shadow:0 0 0 calc(var(--cell)*.05) #fff; }
@@ -816,7 +756,7 @@
       <button class="tool" data-t="mix"><span class="ic">🌀</span><span class="ct"></span></button>
     </div>
   </div>
-  <div id="board-wrap"><div id="board"><div id="covers"></div></div></div>
+  <div id="board-wrap"><canvas id="fx"></canvas><div id="board"><div id="covers"></div></div></div>
   <div id="levelcard"><div class="lc-in"><div class="lc-n"></div><div class="lc-goals"></div></div></div>
   <p class="footnote" id="foot">Tap a fruit, then tap the one next to it.</p>
 </div>
@@ -1240,6 +1180,7 @@ function layout() {
   board.style.setProperty('--cell', cell + 'px');
   board.style.setProperty('--rows', R);
   board.style.setProperty('--cols', C);
+  fxResize();
 }
 window.addEventListener('resize', layout);
 window.addEventListener('orientationchange', () => setTimeout(layout, 120));
@@ -1460,6 +1401,226 @@ function restoreBoard(saved) {
   }
 }
 
+/* ---------------- the effects engine ----------------
+   Every blast, spark, ring and bolt is drawn on ONE canvas by ONE rAF loop.
+
+   Why not WebGL: the board is 49 sprites and a few hundred particles — nowhere
+   near fill-rate or geometry bound, so a shader pipeline would buy nothing but
+   code. What actually hurt was creating and destroying a DOM node per particle
+   (a big combo churned hundreds inside a second) and driving every effect off
+   its own CSS keyframe clock, so nothing could share a timeline. A single
+   canvas with additive blending fixes both, keeps the file dependency-free,
+   and leaves the tiles as real DOM elements — which is what makes the ordinary
+   moves smooth and keeps the board readable to a screen reader. */
+const FX_PAD = 26;
+const fxCanvas = $('fx');
+const fxCtx = fxCanvas.getContext('2d');
+let fxItems = [], fxQueued = false, fxW = 0, fxH = 0;
+
+function fxResize() {
+  const b = board.getBoundingClientRect();
+  fxW = b.width + FX_PAD * 2;
+  fxH = b.height + FX_PAD * 2;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  fxCanvas.width = Math.max(1, Math.round(fxW * dpr));
+  fxCanvas.height = Math.max(1, Math.round(fxH * dpr));
+  // A canvas is a REPLACED element: `inset` positions it but will not stretch
+  // it, so with width:auto it falls back to its attribute size — it was being
+  // laid out at the device-pixel backing size (2x) and drawn mostly off-board.
+  // The CSS size has to be set explicitly alongside the backing size.
+  fxCanvas.style.width = fxW + 'px';
+  fxCanvas.style.height = fxH + 'px';
+  fxCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+// board-local pixel centre of a cell, in canvas space
+function fxAt(r, c) {
+  const cell = board.clientWidth / C;
+  return { x: FX_PAD + (c + .5) * cell, y: FX_PAD + (r + .5) * cell, cell };
+}
+// Expiry is decided by the clock, never by whether a frame happened. A hidden
+// tab gets no rAF at all — this leaked to 239 stale effects in testing, which
+// would then all dump onto the screen at once on the way back.
+function fxPrune(now) { fxItems = fxItems.filter(it => (now - it.t0) < it.dur); }
+function fxArm() { if (!fxQueued) { fxQueued = true; requestAnimationFrame(fxTick); } }
+function fxPush(dur, draw) {
+  if (REDUCED) return;
+  const now = performance.now();
+  fxPrune(now);
+  fxItems.push({ t0: now, dur, draw });
+  if (fxItems.length > 400) fxItems.splice(0, fxItems.length - 400);   // hard ceiling
+  fxArm();
+}
+function fxTick(now) {
+  fxQueued = false;
+  fxPrune(now);
+  fxCtx.clearRect(0, 0, fxW, fxH);
+  fxCtx.globalCompositeOperation = 'lighter';   // light adds up, so overlaps glow
+  for (const it of fxItems) {
+    fxCtx.save();
+    it.draw(fxCtx, Math.max(0, Math.min(1, (now - it.t0) / it.dur)));
+    fxCtx.restore();
+  }
+  if (fxItems.length) fxArm();
+  else fxCtx.clearRect(0, 0, fxW, fxH);
+}
+const easeOut = p => 1 - Math.pow(1 - p, 3);
+
+// --- primitives ---------------------------------------------------------
+// Sparks with drag, gravity and a motion trail. The trail is what reads as
+// speed; single dots just look like static confetti.
+function fxSparks(r, c, colour, n, power) {
+  const { x, y, cell } = fxAt(r, c);
+  const seeds = [];
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const sp = (0.5 + Math.random()) * cell * (power || 1) * 3.4;
+    seeds.push({ a, sp, size: cell * (0.05 + Math.random() * 0.07), white: Math.random() < .35 });
+  }
+  fxPush(620, (g, p) => {
+    const e = easeOut(p), fade = 1 - p;
+    for (const s of seeds) {
+      const d = s.sp * e / 3.4;
+      const px = x + Math.cos(s.a) * d;
+      const py = y + Math.sin(s.a) * d + cell * 1.5 * p * p;   // gravity
+      const tx = x + Math.cos(s.a) * d * 0.82;
+      const ty = y + Math.sin(s.a) * d * 0.82 + cell * 1.5 * p * p * 0.82;
+      g.globalAlpha = fade;
+      g.strokeStyle = s.white ? '#fff' : colour;
+      g.lineWidth = s.size * fade;
+      g.lineCap = 'round';
+      g.beginPath(); g.moveTo(tx, ty); g.lineTo(px, py); g.stroke();
+    }
+  });
+}
+// Chunky rotating shards — gives a pop physical debris instead of only dust.
+function fxShards(r, c, colour, n) {
+  const { x, y, cell } = fxAt(r, c);
+  const seeds = [];
+  for (let i = 0; i < (n || 5); i++)
+    seeds.push({ a: Math.random() * Math.PI * 2, sp: (.6 + Math.random()) * cell * 1.9,
+                 rot: (Math.random() - .5) * 12, s: cell * (.1 + Math.random() * .1) });
+  fxPush(620, (g, p) => {
+    const e = easeOut(p), fade = 1 - p * p;
+    g.globalAlpha = fade;
+    g.fillStyle = colour;
+    for (const s of seeds) {
+      const px = x + Math.cos(s.a) * s.sp * e;
+      const py = y + Math.sin(s.a) * s.sp * e + cell * 1.8 * p * p;
+      g.save(); g.translate(px, py); g.rotate(s.rot * p);
+      g.fillRect(-s.s / 2, -s.s / 2, s.s, s.s * .7);
+      g.restore();
+    }
+  });
+}
+// Expanding ring. `span` is in cells, so a bomb's ring stops at its blast
+// radius and the rainbow's washes the board — the size is information.
+function fxRing(r, c, span, colour, dur) {
+  const { x, y, cell } = fxAt(r, c);
+  const rMax = span * cell * .5;
+  fxPush(dur || 520, (g, p) => {
+    const e = easeOut(p);
+    g.globalAlpha = (1 - p) * .95;
+    g.strokeStyle = colour || '#fff';
+    g.lineWidth = Math.max(1, cell * .16 * (1 - p));
+    g.beginPath(); g.arc(x, y, Math.max(0.1, rMax * e), 0, Math.PI * 2); g.stroke();
+  });
+}
+// Soft radial bloom at the heart of a blast.
+function fxFlash(r, c, span, colour) {
+  const { x, y, cell } = fxAt(r, c);
+  const rMax = span * cell * .5;
+  fxPush(400, (g, p) => {
+    const rr = Math.max(0.1, rMax * (.35 + easeOut(p) * .65));
+    const grd = g.createRadialGradient(x, y, 0, x, y, rr);
+    const a = (1 - p) * .85;
+    grd.addColorStop(0, 'rgba(255,255,255,' + a + ')');
+    grd.addColorStop(.45, (colour || 'rgba(255,225,140,') + (a * .6) + ')');
+    grd.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grd;
+    g.beginPath(); g.arc(x, y, rr, 0, Math.PI * 2); g.fill();
+  });
+}
+// A blade of light shooting out along one axis, bright core inside a glow.
+function fxBeam(r, c, dr, dc) {
+  const { x, y, cell } = fxAt(r, c);
+  // Stop at the board edge. Using the full row length overshot by half a board
+  // and the blades ran off the sides of the screen.
+  const len = dc > 0 ? (C - c - .5) * cell : dc < 0 ? (c + .5) * cell
+            : dr > 0 ? (R - r - .5) * cell : (r + .5) * cell;
+  const cap = (g, X, Y, W, H, Rr) => {
+    if (g.roundRect) { g.beginPath(); g.roundRect(X, Y, W, H, Rr); g.fill(); }
+    else g.fillRect(X, Y, W, H);          // older Safari has no roundRect
+  };
+  fxPush(460, (g, p) => {
+    const e = easeOut(Math.min(1, p * 1.5)), fade = 1 - Math.max(0, (p - .45) / .55);
+    const L = len * e, w = cell * .46 * fade;
+    g.globalAlpha = fade;
+    g.translate(x, y);
+    g.rotate(Math.atan2(dr, dc));
+    const grd = g.createLinearGradient(0, 0, Math.max(1, L), 0);
+    grd.addColorStop(0, 'rgba(255,255,255,.95)');
+    grd.addColorStop(.6, 'rgba(255,226,130,.75)');
+    grd.addColorStop(1, 'rgba(255,200,80,0)');
+    g.fillStyle = grd;
+    cap(g, 0, -w / 2, L, w, w / 2);
+    g.fillStyle = 'rgba(255,255,255,' + (.9 * fade) + ')';
+    cap(g, 0, -w * .16, L, w * .32, w * .16);
+  });
+}
+// Jagged lightning from the rainbow to a doomed fruit — a straight bar read as
+// a UI divider, a forked bolt reads as power.
+function fxBolt(fr, fc, tr, tc) {
+  const a = fxAt(fr, fc), b = fxAt(tr, tc);
+  const segs = 6, pts = [];
+  for (let i = 0; i <= segs; i++) {
+    const t = i / segs;
+    const jitter = (i === 0 || i === segs) ? 0 : (Math.random() - .5) * a.cell * .55;
+    const nx = -(b.y - a.y), ny = (b.x - a.x);
+    const nl = Math.hypot(nx, ny) || 1;
+    pts.push([a.x + (b.x - a.x) * t + nx / nl * jitter,
+              a.y + (b.y - a.y) * t + ny / nl * jitter]);
+  }
+  fxPush(340, (g, p) => {
+    const fade = 1 - p;
+    g.globalAlpha = fade;
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    const drawPath = () => {
+      g.beginPath(); g.moveTo(pts[0][0], pts[0][1]);
+      const upTo = Math.min(segs, Math.ceil(easeOut(Math.min(1, p * 2.2)) * segs));
+      for (let i = 1; i <= upTo; i++) g.lineTo(pts[i][0], pts[i][1]);
+      g.stroke();
+    };
+    g.strokeStyle = 'rgba(255,210,120,.75)'; g.lineWidth = a.cell * .22 * fade; drawPath();
+    g.strokeStyle = 'rgba(255,255,255,.98)'; g.lineWidth = a.cell * .08 * fade; drawPath();
+  });
+}
+// Sparks running INWARD — the grammar of something being assembled.
+function fxImplode(r, c, colour) {
+  const { x, y, cell } = fxAt(r, c);
+  const seeds = [];
+  for (let i = 0; i < 12; i++)
+    seeds.push({ a: Math.random() * Math.PI * 2, d: cell * (1.1 + Math.random() * .9), s: cell * .06 });
+  fxPush(480, (g, p) => {
+    const e = easeOut(p);
+    g.globalAlpha = p < .75 ? 1 : (1 - p) * 4;
+    g.fillStyle = colour || '#fff';
+    for (const s of seeds) {
+      const d = s.d * (1 - e);
+      g.beginPath(); g.arc(x + Math.cos(s.a) * d, y + Math.sin(s.a) * d, s.s * (1 - p * .5), 0, Math.PI * 2); g.fill();
+    }
+  });
+}
+function fxDust(r, c) {
+  const { x, y, cell } = fxAt(r, c);
+  fxPush(380, (g, p) => {
+    g.globalAlpha = (1 - p) * .5;
+    g.fillStyle = '#fff';
+    g.beginPath();
+    g.ellipse(x, y + cell * .42, cell * (.28 + p * .5), cell * (.1 + p * .1), 0, 0, Math.PI * 2);
+    g.fill();
+  });
+}
+
 /* ---------------- effects ---------------- */
 function cellCentre(r, c) {
   const box = board.getBoundingClientRect();
@@ -1468,74 +1629,25 @@ function cellCentre(r, c) {
 }
 // `boost` ramps the burst with the cascade depth, so a long chain visibly
 // throws more confetti than a plain three.
+// `boost` ramps the burst with cascade depth, so a long chain visibly throws
+// more than a plain three.
 function particles(r, c, kind, boost) {
-  if (REDUCED) return;
-  const p = cellCentre(r, c);
-  const col = kind == null ? '#fff' : KINDS[kind].from;
-  const n = Math.min(16, 7 + (boost || 0) * 3);
-  for (let i = 0; i < n; i++) {
-    const s = document.createElement('span');
-    s.className = 'pt';
-    const size = 5 + Math.random() * 8;
-    s.style.width = s.style.height = size + 'px';
-    s.style.background = i % 3 === 0 ? '#fff' : col;
-    s.style.left = p.x + 'px'; s.style.top = p.y + 'px';
-    const a = Math.random() * Math.PI * 2, d = 22 + Math.random() * 46;
-    s.style.setProperty('--dx', Math.cos(a) * d + 'px');
-    s.style.setProperty('--dy', Math.sin(a) * d + 'px');
-    s.style.animationDelay = (Math.random() * .06) + 's';
-    document.body.appendChild(s);
-    setTimeout(() => s.remove(), 700);
-  }
+  const col = kind == null ? '#ffe9a8' : KINDS[kind].from;
+  const b = boost || 0;
+  fxSparks(r, c, col, Math.min(22, 10 + b * 4), 1 + b * .25);
+  fxShards(r, c, col, Math.min(9, 5 + b));
+  fxFlash(r, c, 1.6 + b * .2, 'rgba(255,235,170,');
 }
 // Particles that fly INWARD — the visual grammar of something being created
 // rather than destroyed.
 function converge(r, c, kind) {
-  if (REDUCED) return;
-  const p = cellCentre(r, c);
-  const col = kind == null ? '#fff' : KINDS[kind].from;
-  for (let i = 0; i < 10; i++) {
-    const s = document.createElement('span');
-    s.className = 'pt';
-    const size = 5 + Math.random() * 7;
-    s.style.width = s.style.height = size + 'px';
-    s.style.background = i % 3 === 0 ? '#fff' : col;
-    const a = Math.random() * Math.PI * 2, d = 40 + Math.random() * 48;
-    // start out at the rim, then animate back to the middle
-    s.style.left = (p.x + Math.cos(a) * d) + 'px';
-    s.style.top = (p.y + Math.sin(a) * d) + 'px';
-    s.style.setProperty('--dx', (-Math.cos(a) * d) + 'px');
-    s.style.setProperty('--dy', (-Math.sin(a) * d) + 'px');
-    s.style.animationDelay = (Math.random() * .08) + 's';
-    document.body.appendChild(s);
-    setTimeout(() => s.remove(), 750);
-  }
+  fxImplode(r, c, kind == null ? '#fff' : KINDS[kind].from);
+  fxRing(r, c, 2.4, 'rgba(255,240,190,.9)', 460);
 }
 // Halo left where a fruit was. Lives inside the board so it scrolls/resizes
 // with it, unlike the fixed-position particles.
-function ring(r, c) {
-  if (REDUCED) return;
-  const cell = board.clientWidth / C;
-  const el = document.createElement('div');
-  el.className = 'ring';
-  el.style.width = el.style.height = (cell * .9) + 'px';
-  el.style.left = ((c + .5) * cell) + 'px';
-  el.style.top = ((r + .5) * cell) + 'px';
-  board.appendChild(el);
-  setTimeout(() => el.remove(), 560);
-}
-function dust(r, c) {
-  if (REDUCED) return;
-  const cell = board.clientWidth / C;
-  const el = document.createElement('div');
-  el.className = 'dust';
-  el.style.width = (cell * .8) + 'px';
-  el.style.height = (cell * .3) + 'px';
-  el.style.left = ((c + .5) * cell) + 'px';
-  el.style.top = ((r + .9) * cell) + 'px';
-  board.appendChild(el);
-  setTimeout(() => el.remove(), 420);
-}
+function ring(r, c) { fxRing(r, c, 2.1, 'rgba(255,255,255,.95)', 500); }
+function dust(r, c) { fxDust(r, c); }
 // The number doesn't just float off — it flies to the score counter and lands
 // on it, which is what actually connects the burst to the number going up.
 function scorePop(r, c, n) {
@@ -1592,42 +1704,23 @@ function flyToGoal(r, c, gi) {
   setTimeout(() => el.remove(), 620);
 }
 
-// A bar of light down the row and the column the star is about to take out.
+// Four blades of light, one down each arm, instead of two bars crossing. The
+// arms grow outward from the star so you can see the blast travel.
 function starBeams(r, c) {
-  if (REDUCED) return;
-  const cell = board.clientWidth / C;
-  for (const dir of ['h', 'v']) {
-    const b = document.createElement('div');
-    b.className = 'beam';
-    if (dir === 'h') {
-      b.style.cssText = 'left:0;width:100%;height:' + (cell * .5) + 'px;top:' + ((r + .5) * cell - cell * .25) + 'px';
-      b.style.setProperty('--dir', '90deg');
-      b.style.setProperty('--sx0', '0'); b.style.setProperty('--sy0', '1');
-      b.style.transformOrigin = ((c + .5) * cell) + 'px center';
-    } else {
-      b.style.cssText = 'top:0;height:100%;width:' + (cell * .5) + 'px;left:' + ((c + .5) * cell - cell * .25) + 'px';
-      b.style.setProperty('--dir', '180deg');
-      b.style.setProperty('--sx0', '1'); b.style.setProperty('--sy0', '0');
-      b.style.transformOrigin = 'center ' + ((r + .5) * cell) + 'px';
-    }
-    board.appendChild(b);
-    setTimeout(() => b.remove(), 450);
-  }
+  fxFlash(r, c, 2.6, 'rgba(255,235,150,');
+  fxBeam(r, c, 0, 1); fxBeam(r, c, 0, -1);
+  fxBeam(r, c, 1, 0); fxBeam(r, c, -1, 0);
+  fxRing(r, c, 2.4, 'rgba(255,236,150,.9)', 480);
 }
 // A ring washing outward. `span` is how many cells across it should reach, so
 // a bomb's ring stops at its blast radius and the rainbow's covers the board —
 // the size of the ring is itself information.
 function shockwave(r, c, span) {
-  if (REDUCED) return;
-  const cell = board.clientWidth / C;
-  const size = (span || Math.max(R, C) * 2.2) * cell;
-  const s = document.createElement('div');
-  s.className = 'shock';
-  s.style.width = s.style.height = size + 'px';
-  s.style.left = ((c + .5) * cell) + 'px';
-  s.style.top = ((r + .5) * cell) + 'px';
-  board.appendChild(s);
-  setTimeout(() => s.remove(), 600);
+  const s = span || Math.max(R, C) * 2.2;
+  fxFlash(r, c, Math.min(s, 5), 'rgba(255,210,140,');
+  fxRing(r, c, s, 'rgba(255,255,255,.95)', 560);
+  fxRing(r, c, s * .72, 'rgba(255,200,110,.8)', 460);   // inner wave, slight lag
+  fxSparks(r, c, '#ffd48a', 16, 1.5);
 }
 
 // The orb swells and flares before it starts firing — the beat that says
@@ -1657,20 +1750,9 @@ function pushNeighbours(r, c) {
 
 // A bolt of light from the rainbow to one doomed fruit.
 function zap(fr, fc, tr, tc) {
-  if (REDUCED) return;
-  const cell = board.clientWidth / C;
-  const x0 = (fc + .5) * cell, y0 = (fr + .5) * cell;
-  const dx = (tc + .5) * cell - x0, dy = (tr + .5) * cell - y0;
-  const len = Math.hypot(dx, dy);
-  if (len < 1) return;
-  const el = document.createElement('div');
-  el.className = 'zap';
-  el.style.left = x0 + 'px';
-  el.style.top = y0 + 'px';
-  el.style.width = len + 'px';
-  el.style.setProperty('--ang', Math.atan2(dy, dx) + 'rad');
-  board.appendChild(el);
-  setTimeout(() => el.remove(), 420);
+  if (fr === tr && fc === tc) return;
+  fxBolt(fr, fc, tr, tc);
+  fxFlash(tr, tc, 1.5, 'rgba(200,230,255,');
 }
 
 /* ---------------- the resolve loop ---------------- */
@@ -1875,11 +1957,20 @@ async function resolve(origins) {
 
       let spawnKey = null;
       if (sp) {
-        // Prefer the tile the player actually moved — that's where they're looking.
-        const hit = (origins || []).find(o => g.cells.some(([r, c]) => r === o[0] && c === o[1]));
-        const cell = hit || g.cells[Math.floor(g.cells.length / 2)];
-        spawnKey = cell[0] * C + cell[1];
-        spawns.push([spawnKey, sp, g.k]);
+        // The new booster may NOT be planted on a cell that already holds one.
+        // It used to prefer the tile the player moved, and if that tile was
+        // itself a star or bomb it got excluded from the clear set, never
+        // fired, and was then overwritten — the player's booster vanished with
+        // no blast at all. Plain fruit only; nearest the player's move first.
+        const plain = ([r, c]) => grid[r][c] && grid[r][c].sp === SP_NONE;
+        const hit = (origins || []).find(o => g.cells.some(([r, c]) => r === o[0] && c === o[1]) && plain(o));
+        const cell = hit || g.cells.filter(plain)[Math.floor(g.cells.filter(plain).length / 2)];
+        // If every cell in the group is already a booster there's nowhere to
+        // put a new one — they simply all go off, which is the better show.
+        if (cell) {
+          spawnKey = cell[0] * C + cell[1];
+          spawns.push([spawnKey, sp, g.k]);
+        }
       }
       g.cells.forEach(([r, c]) => { const key = r * C + c; if (key !== spawnKey) keys.add(key); });
     }
