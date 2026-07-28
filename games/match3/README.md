@@ -46,8 +46,8 @@ clear, and how do I go off:
 - Creating one pulls sparks *inward* to the new tile, so it looks assembled out
   of the fruit that just vanished.
 
-**Helper tools.** Three of them sit under the goals, and none of them cost a
-move — they're a treat, not a currency, and nothing here is for sale:
+**Helper tools.** Three of them sit in a bar pinned to the bottom of the
+screen, thumb-height, and none of them cost a move — they're a treat, not a currency, and nothing here is for sale:
 
 - 🔨 **hammer** — tap any single fruit and pop it (set off a booster with it too)
 - 🔄 **swap** — trade any two neighbours, even when it makes no match at all
@@ -55,9 +55,12 @@ move — they're a treat, not a currency, and nothing here is for sale:
 
 You start with a couple of each and earn more by finishing levels: one per
 level, rotating so the stock stays balanced, plus a bonus one for three stars.
-They cap at nine so the counters stay legible. Tapping a tool primes it, the
-board pulses to show every tile is now a target, and the footnote says what to
-do next.
+They cap at nine so the counters stay legible. Tapping a tool primes it — it
+lifts, tilts and throws off a pulsing ring, the board pulses to show every tile
+is now a target, and the footnote says what to do next. Each has its own
+payoff: the hammer swings down and lands *before* anything breaks, the mix
+tumbles the whole board through a spin and re-deals at the midpoint where every
+tile is small and blurred, so the swap itself is invisible.
 
 **The rainbow hunts.** It doesn't just delete a colour. The orb swells and
 flares, then fires a bolt of light at each fruit of that colour **one at a
@@ -143,7 +146,17 @@ first — that beat is what tells you *which* ones matched — then they burst i
 waves travelling out from the tile you actually moved, each leaving a halo
 behind, and the burst throws more confetti the deeper the cascade runs. Falling
 fruit squashes on impact and kicks up a puff of dust. Swapped fruit lift and
-swell as they trade places.
+swell as they trade places. Fruit around a newly born booster flinch away from
+it. The score number doesn't just drift off — it **flies to the score counter**
+and lands on it, which is what actually connects the burst to the number going
+up. And one tile at a time catches a glint of light, so a board sitting
+untouched never looks frozen.
+
+**Nothing zooms.** Setting off a booster means tapping an already-selected tile
+— which *is* a double tap, so the browser's double-tap-to-zoom was fighting the
+game. Gesture and double-tap events are swallowed explicitly (iOS Safari
+ignores `user-scalable`), and only the second tap of a fast pair is cancelled,
+so ordinary taps still work.
 
 **Sound.** Each fruit owns a note of the pentatonic scale, so clearing bananas
 always sounds like bananas, and each cascade step lifts the whole chord — a long
