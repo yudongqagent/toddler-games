@@ -46,6 +46,30 @@ clear, and how do I go off:
 - Creating one pulls sparks *inward* to the new tile, so it looks assembled out
   of the fruit that just vanished.
 
+**Helper tools.** Three of them sit under the goals, and none of them cost a
+move — they're a treat, not a currency, and nothing here is for sale:
+
+- 🔨 **hammer** — tap any single fruit and pop it (set off a booster with it too)
+- 🔄 **swap** — trade any two neighbours, even when it makes no match at all
+- 🌀 **mix** — reshuffle the whole board
+
+You start with a couple of each and earn more by finishing levels: one per
+level, rotating so the stock stays balanced, plus a bonus one for three stars.
+They cap at nine so the counters stay legible. Tapping a tool primes it, the
+board pulses to show every tile is now a target, and the footnote says what to
+do next.
+
+**The rainbow hunts.** It doesn't just delete a colour. The orb swells and
+flares, then fires a bolt of light at each fruit of that colour **one at a
+time**, and each one pops as its bolt lands — so you watch it work through the
+board. The cadence tightens for bigger sets, so eight fruit and the entire
+board both take about a second. Measured: 14 targets, 14 bolts, exactly the
+14 tiles the aim preview lit up before you committed.
+
+**Nothing shakes.** A big clear used to jolt the whole board, which is
+unpleasant to look at and worse on a device held close to a small face. The
+board flares instead — same "that was big" beat, none of the motion.
+
 **Boosters you'll actually see.** Measured over 300 simulated games, a 7×7 with
 six fruit threw off **1.7 boosters per 30 moves** — most children would never
 have met one. Two changes fixed that, both scaled to how sparse the board is
@@ -82,22 +106,23 @@ The curve, all on the same board:
 | Level | Fruit kinds | Goals | Leaves | Moves |
 |---|---|---|---|---|
 | 1 | 4 | 9 of one fruit | — | 12 |
-| 5 | 5 | 13 of two fruit | 4 | 17 |
-| 10 | 6 | 17 of three fruit | 6 | 29 |
-| 14+ | 6 | 20 of three fruit | 6 | 34 |
+| 3 | 5 | 11 of two fruit | 4 | 14 |
+| 8 | 6 | 16 of three fruit | 8 | 27 |
+| 16+ | 6 | 24 of three fruit | 8 | 35 |
 
-Both the goal size and the leaf count plateau around level 14 — a toddler game
+Both the goal size and the leaf count plateau around level 16 — a toddler game
 should not get harder forever. Past that the variety comes from which fruit is
 asked for and which shape the leaves make.
 
 Plus **Free Play** — no goal, no move count, endless.
 
-The move budget is a safety net, not the challenge: it's 1.75× the measured
+The move budget is a safety net, not the challenge: it's 1.5× the measured
 number of moves the objective actually takes, so every level is finishable
-without playing well. **Par** is the challenge — 62% of the budget for three
-stars, 85% for two. Measured on the hardest (plateau) level: a bot that just
-follows the pointing finger wins in 22 of 34 moves, which is two stars. Three
-stars needs real play.
+without playing well, and the "+5 moves" offer still sits behind that. **Par**
+is the challenge — 62% of the budget for three stars, 85% for two. Measured on
+the plateau levels, a bot that just follows the pointing finger and never
+touches a tool wins level 16 in 24 of 35 moves and level 20 in 25 — two stars
+both times. Three stars needs real play, or a well-spent tool.
 
 **Graphics.** Every fruit is one glossy sweet with a specular highlight and real
 depth. There used to be a different geometric backdrop per fruit — circle,
@@ -135,6 +160,7 @@ own layer keyed to cells, not tiles, because tiles fall and cells don't.
 
 State lives under `match3-` localStorage keys: `match3-stars` (per level),
 `match3-total` (points, kept forever), `match3-max` (highest level unlocked),
+`match3-tools` (helper tool stock),
 `match3-sound`, `match3-vibe`, and `match3-save` for mid-level resume. Levels
 are deep-linkable (`#lvl-2`, `#free`) but you can't skip past what you've
 unlocked. `prefers-reduced-motion` disables the decorative animation
