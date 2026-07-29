@@ -35,10 +35,13 @@ tiles cleared.
 Each one has to answer three questions at a glance — what am I, what will I
 clear, and how do I go off:
 
-- The **⭐ star** wears four arrows that pump outward, so "this blasts in four
-  directions" reads without words. The **💣 bomb** simply draws the circle it
-  is going to take out. Their fruit stays visible, because they can still be
-  matched normally.
+- A booster looks like *charged fruit*, not fruit with UI stuck on it. The
+  **⭐ star** is lit at the four edges and clear through the middle, so it reads
+  as charged along both axes; the **💣 bomb** wears a halo pulsing outward.
+  Both markings are light, and both sit *behind* the fruit so the fruit stays
+  the identity — it can still be matched normally. (Flat white arrows and a
+  white dashed circle were the first attempt; they read as debug overlay, and a
+  solid glowing cross was worse because it buried the fruit.)
 - **Selecting one lights up every tile it would take** — the star's whole row
   and column, the rainbow's whole colour. You find out what it does *before*
   spending it, and the footnote switches to "Tap it again to set it off!".
