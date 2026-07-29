@@ -507,49 +507,87 @@
   .tile.duck .face { animation:duckBob 1.5s ease-in-out infinite; }
   @keyframes duckBob { 0%,100%{transform:translateY(0) rotate(-4deg)} 50%{transform:translateY(-8%) rotate(4deg)} }
 
-  /* Ice is drawn entirely in CSS — no emoji. A 🧊 glyph is a pale block, and on
-     a pale blue tile the whole thing read as a white square with no sense of
-     depth. Built as a frosted crystal instead, with two states that differ in
-     THICKNESS, not just in decoration. */
   /* ---- frost: a layer OVER the fruit, in two thicknesses ----
-     Drawn on .crown so the fruit and its own tile colour stay visible through
-     it. An opaque blue block with an 🧊 glyph read as a white square with no
-     depth and hid what you were about to win. */
-  /* No backdrop-filter. iOS Safari needs the -webkit- prefix for it and its
-     blur washes the colour out on a small bright screen, which is what made
-     frozen fruit read as flat white on an iPhone. The frost is a saturated
-     translucent BLUE instead, with white kept to the edges only. */
+     Drawn on .crown, which sits above .face, so the fruit stays visible through
+     it: you can always see what you are about to win.
+
+     ARCHITECTURE, because two earlier attempts here both failed the same way.
+     A stack of translucent gradients takes its final colour from whatever is
+     underneath, and underneath is one of six saturated tile colours. The same
+     frost then came out grey on a blueberry, lavender on grapes and khaki on a
+     banana — six different results, none of which read as "ice", and no amount
+     of tuning alphas fixes that because the input varies. Nor is blur available
+     to unify them: backdrop-filter needs the -webkit- prefix on iOS Safari and
+     its wash is what made frozen fruit look flat white on an iPhone.
+
+     So the frost is built as a RIM plus a WINDOW. The rim is nearly opaque, so
+     its colour is fixed no matter what it covers, and it carries the whole
+     identity of the material — that is the part your eye reads as ice. The
+     window in the middle is only lightly veiled, so the fruit shows through
+     sharp and in its own colour. Thickness is then a real, legible variable:
+     how far the rim intrudes and how much the window is veiled. Both states are
+     obviously the same substance, which the old white-X-over-grey-wash pair
+     never were. */
   .tile.ice .crown { display:block; border-radius:30%; }
+
+  /* The collar is BLUE and the white is a specular edge on top of it, one thin
+     ring wide. Stacked inset shadows paint front-to-back, so a narrow white
+     spread listed first sits over a wider blue spread and the two read as a lit
+     edge on a blue body. Doing it the other way round — a wide near-white rim —
+     is how the frost came out looking bleached on a phone. */
+
+  /* Thick: a heavy collar, fruit veiled but readable behind it. */
   .tile.ice2 .crown {
-    background:linear-gradient(158deg, rgba(126,203,244,.52), rgba(56,150,209,.6) 55%, rgba(28,110,170,.66));
-    box-shadow:
-      inset 0 0 0 calc(var(--cell)*.05) rgba(226,246,255,.55),
-      inset 0 calc(var(--cell)*.055) 0 rgba(255,255,255,.22),
-      inset 0 calc(var(--cell)*-.085) 0 rgba(6,52,92,.45);
-  }
-  /* facets, so it reads as a solid slab and not a blue wash */
-  .tile.ice2 .crown::before {
-    content:''; position:absolute; inset:0; border-radius:30%;
     background:
-      linear-gradient(146deg, rgba(255,255,255,.55) 0 19%, transparent 19%),
-      linear-gradient(-34deg, rgba(190,232,252,.3) 0 12%, transparent 12%),
-      linear-gradient(206deg, rgba(6,52,92,.3) 0 22%, transparent 22%);
+      radial-gradient(112% 112% at 50% 40%,
+        rgba(198,238,255,.2) 0 28%,
+        rgba(116,194,240,.62) 58%,
+        rgba(48,142,206,.94)  100%);
+    box-shadow:
+      inset 0 0 0 calc(var(--cell)*.024) rgba(240,252,255,.92),
+      inset 0 0 0 calc(var(--cell)*.085) rgba(60,155,214,.9),
+      inset 0 0 calc(var(--cell)*.13) calc(var(--cell)*.085) rgba(126,203,244,.5),
+      inset 0 calc(var(--cell)*-.07) calc(var(--cell)*.09) rgba(12,74,128,.45),
+      0 0 calc(var(--cell)*.07) rgba(130,210,255,.55);
   }
-  /* One layer left: thinner AND smaller, so the fruit reads clearly through it
-     and you can see it is nearly free. */
+  /* Thin: the collar has retreated to a narrow edge and the window is nearly
+     clear, so "one more match" is something you can see rather than count. */
   .tile.ice1 .crown {
-    inset:7%;
-    background:linear-gradient(158deg, rgba(140,208,246,.3), rgba(70,160,214,.34));
+    inset:5%;
+    background:
+      radial-gradient(110% 110% at 50% 40%,
+        rgba(214,244,255,.07) 0 44%,
+        rgba(126,199,241,.34) 72%,
+        rgba(70,163,219,.7)   100%);
     box-shadow:
-      inset 0 0 0 calc(var(--cell)*.022) rgba(226,246,255,.6),
-      inset 0 calc(var(--cell)*-.035) 0 rgba(6,52,92,.2);
+      inset 0 0 0 calc(var(--cell)*.014) rgba(240,252,255,.85),
+      inset 0 0 0 calc(var(--cell)*.042) rgba(70,163,219,.72),
+      inset 0 calc(var(--cell)*-.04) calc(var(--cell)*.06) rgba(12,74,128,.28);
   }
-  .tile.ice1 .crown::before {
+
+  /* Facets. Corner wedges, not lines across the middle: a crystal catches the
+     light on its bevelled faces, and the previous three crossing white lines
+     landed as a struck-through "cancelled" mark straight over the fruit. */
+  .tile.ice .crown::before {
     content:''; position:absolute; inset:0; border-radius:30%;
     background:
-      linear-gradient(62deg,  transparent 45.5%, rgba(255,255,255,.98) 48%, transparent 50.5%),
-      linear-gradient(-34deg, transparent 42%,   rgba(255,255,255,.9)  44.5%, transparent 47%),
-      linear-gradient(12deg,  transparent 62%,   rgba(255,255,255,.8)  64.2%, transparent 66.5%);
+      linear-gradient(141deg, rgba(255,255,255,.62) 0 11%, transparent 11.4%),
+      linear-gradient(321deg, rgba(214,243,255,.3)  0 8%,  transparent 8.4%);
+  }
+  .tile.ice1 .crown::before { background:
+      linear-gradient(141deg, rgba(255,255,255,.5)  0 8%, transparent 8.4%),
+      linear-gradient(321deg, rgba(214,243,255,.22) 0 5%, transparent 5.4%); }
+
+  /* A single fracture running in from one corner and dying out — masked so it
+     fades rather than terminating in mid-air. Only the thin state gets it: a
+     crack is the tell that this block is one hit from gone. */
+  .tile.ice1 .crown::after {
+    content:''; position:absolute; inset:0; border-radius:30%;
+    background:
+      linear-gradient(69deg,  transparent 47.2%, rgba(255,255,255,.85) 48.6%, transparent 50%),
+      linear-gradient(-21deg, transparent 55%,   rgba(255,255,255,.6)  56.4%, transparent 57.8%);
+    -webkit-mask-image:radial-gradient(circle at 74% 26%, #000 0 40%, transparent 68%);
+    mask-image:radial-gradient(circle at 74% 26%, #000 0 40%, transparent 68%);
   }
 
   /* "tap again and THIS is what goes" — shown while a booster is selected */
@@ -2296,7 +2334,12 @@ async function clearCells(keys, cascade, from, zapFrom, suckTo, chain) {
   if (!REDUCED) {
     keys.forEach(key => {
       const t = grid[Math.floor(key / C)][key % C];
-      if (t) t.el.classList.add('charge');
+      // Only the fruit that are actually going. The pop loop below early-returns
+      // for frost and blockers, so charging them both told a lie — the flash
+      // means "this one is about to burst" — and leaked, because the removal
+      // lives past that return. A frozen tile kept brightness(2.1) scale(1.22)
+      // for the rest of the level, since paint() has no reason to strip it.
+      if (t && !t.block && !t.ice) t.el.classList.add('charge');
     });
     await sleep(150);
   }
@@ -2912,8 +2955,29 @@ async function trySwap(a, b) {
   await settle();
 }
 
+// Every one of these classes belongs to an animation that runs DURING a
+// cascade, and every removal is conditional on some code path reaching it — an
+// early return, a rejected promise, a tile that turned out not to pop. When one
+// is missed the tile keeps the class forever, because paint() only knows about
+// the classes that describe what a tile IS, not what it is doing. That is how a
+// frozen fruit ended up stuck scaled-up and bleached until a reload. Sweeping
+// them at rest costs one querySelectorAll per move and makes the whole family
+// of leaks self-healing instead of permanent.
+// Deliberately NOT swept: `born`, `land` and `push` all pair their add with an
+// unconditional timer and may still be mid-flight here; `sel`, `aim` and
+// `nudge` are meant to persist while the board is idle.
+const FX_TRANSIENT = ['charge', 'suck', 'swapping', 'firing', 'mixing', 'dropin', 'sweepout'];
+function fxSweep() {
+  board.querySelectorAll('.tile.' + FX_TRANSIENT.join(',.tile.')).forEach(el => {
+    el.classList.remove(...FX_TRANSIENT);
+    el.style.transitionDuration = '';
+    el.style.transitionTimingFunction = '';
+  });
+}
+
 async function settle() {
   if (!anyMove()) await reshuffle();
+  fxSweep();
   busy = false;
   paintHud();
   if (checkWin()) return;
@@ -3044,10 +3108,15 @@ function goalChip(g) {
   const bg = g.t === 'leaf' ? 'linear-gradient(160deg,#d6f5b0,#7cc94e)'
            : g.t === 'score' ? 'linear-gradient(160deg,#ffe08a,#f5a524)'
            : g.t === 'drop' ? 'linear-gradient(160deg,#fff2c4,#ffd469)'
-           : g.t === 'ice' ? 'linear-gradient(158deg,#eaf8ff,#b6e2f8 42%,#79c2e8)'
+           // Same rim-and-window build as the block on the board, but with the
+           // window pulled in tight. At 24px a wide clear centre leaves nothing
+           // but a pale blob — there is no fruit behind the chip for it to be a
+           // window ONTO, so the collar has to carry the whole read.
+           : g.t === 'ice' ? 'radial-gradient(115% 115% at 46% 32%,#f2fcff 0 14%,#8fd2f5 44%,#3f9ad8 100%)'
            : 'linear-gradient(160deg,#cfe4ff,#7aa8ff)';
   const extra = g.t === 'ice'
-    ? ';box-shadow:inset 0 0 0 2px rgba(255,255,255,.85), inset 0 -3px 0 rgba(26,92,138,.3)' : '';
+    ? ';box-shadow:inset 0 0 0 1px rgba(245,253,255,.95), inset 0 0 0 3px rgba(78,166,220,.75),'
+      + ' inset 0 -3px 4px rgba(12,74,128,.4)' : '';
   return '<span class="mini"><span class="shape" style="border-radius:26%;background:' + bg + extra
        + '"></span><span class="face">' + face + '</span></span>';
 }

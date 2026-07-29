@@ -145,11 +145,40 @@ blocks creep in from level 12 as a growing minority. Uniform double frost was
 tedious. A thick block reads as a heavy frosted slab; a single layer is
 thinner, inset smaller and visibly fractured, with the fruit clear underneath.
 
-The frost is a saturated translucent **blue**, with white kept to the edges,
-and it uses no `backdrop-filter` — iOS Safari needs the `-webkit-` prefix for
-that and its blur washed the colour out on a small bright screen, which is what
-made frozen fruit read as flat white on an iPhone. Chip the last layer and the fruit is simply
-yours, sitting right there ready to match.
+### Why the frost is built as a rim and a window
+
+Two earlier attempts at the frost both failed the same way on a real phone, and
+the reason was architectural rather than a matter of taste. A stack of
+translucent gradients takes its final colour from whatever sits underneath, and
+underneath is one of six saturated tile colours — so the same frost came out
+grey over a blueberry, lavender over grapes and khaki over a banana. Six
+different results, none reading as ice, and no amount of alpha-tuning fixes
+that when the input is what varies. Blur can't unify them either:
+`backdrop-filter` needs the `-webkit-` prefix on iOS Safari, and its wash is
+what made frozen fruit look flat white on an iPhone.
+
+So the frost is a **rim** plus a **window**. The rim is nearly opaque, which
+makes its colour fixed no matter what it covers, and it carries the entire
+identity of the material. The window is only lightly veiled, so the fruit shows
+through sharp and in its own colour. Thickness then becomes a real variable: how
+far the rim intrudes, and how much the window is veiled. Both states are
+obviously the same substance — which a white X over a grey wash never was.
+
+The rim is **blue**, with white as a specular edge one thin ring wide on top of
+it. Stacked `inset` box-shadows paint front-to-back, so a narrow white spread
+listed before a wider blue spread reads as a lit edge on a blue body. Building
+it the other way round — a wide near-white rim — is how the frost came out
+looking bleached. Facets are corner wedges rather than lines across the middle,
+because three crossing white lines landed as a struck-through "cancelled" mark
+straight over the fruit. The single fracture on the thin state is masked so it
+fades out instead of stopping in mid-air.
+
+The goal chip uses the same build with the window pulled in tight: at 24px
+there's no fruit behind it for the window to be a window *onto*, so the collar
+has to carry the whole read.
+
+Chip the last layer and the fruit is simply yours, sitting right there ready to
+match.
 
 The duckling is the one true blocker — not fruit, never poppable — and uses a
 kind index the matcher already skips.
@@ -266,6 +295,22 @@ would all have dumped onto the screen at once on return.
 
 Covers live in their own layer keyed to cells, not tiles, because tiles fall and
 cells don't.
+
+**Transient FX classes are swept at rest.** A tile carries two kinds of class:
+what it *is* (`ice2`, `sp1`, `duck`), which `paint()` owns and rebuilds, and
+what it is *doing* (`charge`, `suck`, `swapping`, `firing`, `mixing`, `dropin`,
+`sweepout`), which is added by one step of a cascade and removed by a later one.
+Every one of those removals is conditional on some code path reaching it, so any
+early return strips a tile's future and leaves the class on it permanently —
+`paint()` will never take it off, because it doesn't know the class exists. That
+is how frozen fruit ended up stuck scaled-up and bleached until a reload: the
+pre-pop flash was added to every matched cell, and the loop that removes it
+returns early for frost and blockers. Both halves are fixed — the flash is only
+put on fruit that will actually pop, and `fxSweep()` clears the whole family
+whenever the board comes to rest. One `querySelectorAll` per move buys a
+self-healing invariant instead of a permanent artifact. `born`, `land` and
+`push` are deliberately excluded (their timers are unconditional and may still
+be mid-flight), as are `sel`, `aim` and `nudge` (meant to persist while idle).
 
 State lives under `match3-` localStorage keys: `match3-stars` (per level),
 `match3-total` (points, kept forever), `match3-max` (highest level unlocked),
