@@ -122,45 +122,41 @@ miserable tail where the last leaf took longer than the whole rest of the
 level. The idle hint now prefers a swap that sweeps a leaf, which is what
 actually steers you to the last stubborn one.
 
-**Levels never run out.** One board size everywhere — the big 7×7, because
-that's the one with room for chains and boosters to do something. Levels are
-generated from their number rather than authored, so there's always another
-one, and Level 34 is the same board every time you replay it. Beating a level
-unlocks the next; the menu keeps every level you've reached, with its stars,
-and a **total score that never resets**.
+**Levels never run out.** Beating one unlocks the next; the menu keeps every
+level you've reached, with its stars, and a **total score that never resets**.
 
-**Every level has a shape.** The single biggest reason levels felt identical
-was that every level was the same rectangle — so there was no spatial thinking
-at all, only "find any match". Boards now come in six silhouettes: `full`,
-`diamond`, `bowl`, `arch`, `plus` and `wedge`. It gives each level an identity
-you can see instantly, and it changes how it plays — narrow columns cascade
-vertically, a pinched waist funnels everything through the middle, a wedge
-makes one side deeper than the other.
+**A big board, and special tiles on it.** The board is **8×8** and fills as much
+of the screen as the chrome allows — a bigger board means more room for chains
+and bigger blasts. Cutting cells out of the board to make silhouettes was tried
+and rejected: a clipped board is a *smaller* board, and small is the opposite of
+fun. Levels get their identity from what's **on** the board instead:
 
-Each shape is defined as **one contiguous vertical span per column**. That's a
-deliberate constraint, not a limitation: it means gravity stays a simple
-per-column fall with no flowing diagonally around corners, which is where
-board-shape bugs live. The board itself is transparent and its silhouette comes
-from a layer of cell backings, so a hole is genuinely absent rather than a gap
-painted onto a rectangle. Shape rotates independently of the goal rotation, so
-the two don't repeat in lockstep.
-
-**Five kinds of level, in rotation**, so no two in a row ask the same thing:
-
-| | Asks for |
+| | |
 |---|---|
-| 🍓 | collect three fruit |
-| 🍃 | collect two fruit **and** sweep the leaves |
-| ✨ | **make boosters** (any kind) and collect a fruit |
-| 🏆 | **reach a score** |
-| 💣 | sweep the leaves **and** make boosters |
+| 🍃 **leaves** | cover a fruit; sweep them by popping the fruit under them |
+| 🧊 **ice** | can't be matched; takes two matches *beside* it to shatter |
+| 🐤 **duckling** | can't be matched; falls with everything else and is home when it reaches the floor, so you have to clear its column out from under it |
 
-Which one you get is a pure function of the level number, so Level 34 is always
-the same level. A sample of the opening run:
+Ice and ducklings are the same idea underneath — a thing on the board that is
+not fruit and can never be popped — and differ only in how you get rid of it.
+Both use a kind index the matcher already skips, so no matching code had to
+learn they exist.
+
+**Levels are generated, and there is no end to them.** Six kinds of objective —
+collect a fruit, sweep leaves, break ice, bring a duckling home, make boosters,
+reach a score — are drawn from a menu that unlocks gradually, so a new idea
+always arrives on its own. Twenty-six distinct goal mixes appear in the first
+sixty levels.
+
+They're drawn from a **seeded** stream, not `Math.random`, and the seed is the
+level number. That distinction matters: a level is genuinely varied, but Level
+34 deals the same board every time, so "Again" replays what you just failed and
+the stars you earned mean something. Rolling fresh on every visit would quietly
+break both. A sample of the opening run:
 
 ```
-1: 9🍌            2: 10🍇 10🍏      3: 8,100🏆       4: 5🍃 2✨
-5: 13🍓 13🍌 13🍇  6: 14🍓 14🍌 7🍃   7: 3✨ 15🍌       8: 12,600🏆
+1: 9🍏         2: 10🍓 10🍇     3: 11🍇 11🍓    4: 12🍌 9,000🏆
+5: 13🍇 13🍓 13🍊  6: 14🍏 14🫐 7🍃  8: 1🐤 16🫐 16🍇  9: 17🍓 1🐤 6🧊
 ```
 
 Goal sizes and the leaf count plateau around level 16 — a toddler game should
@@ -171,6 +167,15 @@ The booster goal counts **any** booster on purpose. Asking specifically for
 bombs meant asking a three-year-old to engineer an L-shape deliberately;
 measured, that produced one bomb in 27 moves against a goal of three — an
 unfinishable level.
+
+There is only ever **one** duckling, for a related reason. A duckling descends
+only when its own column clears beneath it, and the final row is one specific
+cell that comes up about once in eleven moves — so the last duckling has a long
+tail. Two of them lost more runs than they won even with the hint steering hard
+toward them. The hint scores every candidate move by how much it advances what
+the level still wants (a duckling's column, a block of ice, a leaf), which is
+what makes specific-cell objectives progress at all; and the 🔨 hammer is a
+direct answer to a stubborn last row.
 
 Plus **Free Play** — no goal, no move count, endless.
 

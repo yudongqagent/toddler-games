@@ -491,6 +491,37 @@
            drop-shadow(0 calc(var(--cell)*.022) calc(var(--cell)*.028) rgba(60,20,50,.4));
   }
 
+  /* ---- special tiles: neither of these is fruit and neither can be matched,
+     so both are visually set apart from the sweets ---- */
+  .tile.blk .shape { border-radius:30%; }
+  .tile.blk .shape::after { display:none; }        /* no candy gloss on these */
+  .tile.blk .face { font-size:calc(var(--cell)*.56); }
+
+  .tile.duck .shape {
+    background:linear-gradient(160deg,#fff2c4,#ffd469) !important;
+    box-shadow:inset 0 0 0 calc(var(--cell)*.035) rgba(255,255,255,.85),
+               inset 0 calc(var(--cell)*-.08) 0 rgba(150,90,0,.2),
+               0 0 calc(var(--cell)*.13) rgba(255,205,80,.75);
+  }
+  /* a duckling bobs, so you can tell at a glance it wants to go somewhere */
+  .tile.duck .face { animation:duckBob 1.5s ease-in-out infinite; }
+  @keyframes duckBob { 0%,100%{transform:translateY(0) rotate(-4deg)} 50%{transform:translateY(-8%) rotate(4deg)} }
+
+  .tile.ice .shape {
+    background:linear-gradient(160deg, rgba(214,244,255,.95), rgba(150,214,245,.95)) !important;
+    box-shadow:inset 0 0 0 calc(var(--cell)*.04) rgba(255,255,255,.9),
+               inset 0 calc(var(--cell)*-.07) 0 rgba(40,110,150,.25),
+               0 0 calc(var(--cell)*.1) rgba(170,225,255,.8);
+  }
+  /* one hit in: visibly cracked, so the second hit is obviously worth making */
+  .tile.ice1 .shape::before {
+    content:''; position:absolute; inset:0; border-radius:30%;
+    background:
+      linear-gradient(58deg,  transparent 46%, rgba(255,255,255,.95) 48%, transparent 52%),
+      linear-gradient(-42deg, transparent 44%, rgba(255,255,255,.8) 46%, transparent 50%);
+  }
+  .tile.ice1 .face { opacity:.75; }
+
   /* "tap again and THIS is what goes" — shown while a booster is selected */
   .tile.aim .inner { animation:aimPulse .75s ease-in-out infinite; }
   @keyframes aimPulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.11)} }
@@ -899,41 +930,44 @@ const SP_NONE = 0, SP_STAR = 1, SP_RAIN = 2, SP_BOMB = 3;
    kind out of `kinds` takes about per*kinds/6.2 moves, and leaves come off at
    about one per move. Budget is 1.6x the binding constraint — a safety net wide
    enough that a child swapping at random still finishes.                      */
-const ROWS = 7, COLS = 7;
+// A bigger board is simply a better board: more room for chains, bigger blasts,
+// more chances that a move does something you didn't plan. 8x8 it is, and it
+// fills as much of the screen as the goal chips and tool bar allow.
+const ROWS = 8, COLS = 8;
 
-/* ---------------- board shapes ----------------
-   The single biggest reason every level felt the same was that every level was
-   the same rectangle. A silhouette gives a level an identity you can see at a
-   glance AND changes how it plays: narrow columns cascade vertically, a pinched
-   waist funnels everything through the middle, a wedge makes one side deeper.
-
-   Every shape is defined as ONE CONTIGUOUS VERTICAL SPAN PER COLUMN. That is a
-   deliberate constraint: it means gravity stays a simple per-column fall with no
-   flowing around corners, which is where board-shape bugs live. */
-const SHAPES = ['full', 'diamond', 'bowl', 'arch', 'plus', 'wedge'];
-function spanFor(shape, c) {
-  const d = Math.abs(c - (COLS - 1) / 2);
-  const k = Math.max(0, Math.round(d) - 1);
-  switch (shape) {
-    case 'diamond': return [k, ROWS - 1 - k];              // corners cut both ends
-    case 'bowl':    return [k, ROWS - 1];                  // cut the top corners
-    case 'arch':    return [0, ROWS - 1 - k];              // cut the bottom corners
-    case 'plus':    return d <= 1 ? [0, ROWS - 1] : [2, ROWS - 3];
-    case 'wedge':   return [0, ROWS - 1 - Math.floor(c / 2)];
-    default:        return [0, ROWS - 1];
-  }
-}
+/* Cutting cells out of the board was tried and rejected: a clipped board is a
+   SMALLER board, and small is the opposite of fun here. Levels get their
+   identity from what's ON the board instead. The per-column span machinery is
+   kept because gravity is written against it and it's well tested — every
+   column simply runs the full height. */
+function spanFor(_shape, _c) { return [0, ROWS - 1]; }
 // All four measured from real play, and all four are what the move budget is
 // derived from — see cost() in levelFor.
 const TILES_PER_MOVE    = 6.2;   // fruit cleared per move, naive play
 const COVERS_PER_MOVE   = 0.45;  // leaves come off far slower than fruit
 const BOOSTERS_PER_MOVE = 0.25;  // ~8 boosters per 30 moves, measured
 const POINTS_PER_MOVE   = 900;   // ~15.5k over 14 moves, measured, kept pessimistic
+const DROPS_PER_MOVE    = 0.045; // measured, and it is genuinely this slow
+const ICE_PER_MOVE      = 0.5;   // ice only breaks from a match right beside it
 const LEVEL_EMOJI = ['🍓','🍌','🍇','🍏','🍊','🫐','🍃','🌿','🌈','⭐','💣','🎀'];
 // Centre-weighted only. Ring and scatter patterns looked nicer but stranded
 // leaves on cold edge cells that almost never get matched, so the last two
 // took longer than the whole rest of the level — a miserable tail for a child.
 const COVER_PATTERNS = ['diamond', 'block'];
+
+// A small deterministic PRNG. Levels are generated from a seed made of the
+// level number, which is the important distinction from just calling Math.random:
+// a level is genuinely varied, but Level 34 deals the SAME board every time, so
+// "Again" replays what you just failed at and the stars you earned mean
+// something. Rolling fresh on every visit would quietly break both.
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
 
 function levelFor(n) {
   // Ramps faster than it used to, and the helper tools are what pays for it.
@@ -951,31 +985,62 @@ function levelFor(n) {
   // without turning the level into a hunt for the last stubborn one.
   const leaves = Math.min(8, 1 + n);
 
-  // n % kinds, not (n*3) % kinds — the latter only ever lands on two values for
-  // six fruit, so every other level asked for exactly the same three.
-  const start = n % kinds;
-  const fruit = i => ({ t: 'fruit', k: (start + i) % kinds, need: per });
+  // Everything below is drawn from a stream seeded by the level number, so the
+  // mix is genuinely varied instead of a visible five-step rotation — and still
+  // identical every time you play Level n.
+  const rng = mulberry32((n * 2654435761) >>> 0);
+  const pick = a => a[Math.floor(rng() * a.length)];
+  const shuffled = a => { const x = a.slice();
+    for (let i = x.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [x[i], x[j]] = [x[j], x[i]]; }
+    return x; };
+
+  const order = shuffled(Array.from({ length: kinds }, (_, i) => i));
+  const fruit = i => ({ t: 'fruit', k: order[i % kinds], need: per });
   const leaf  = () => ({ t: 'leaf',  need: leaves });
   // ANY booster counts. Asking specifically for bombs meant asking a three-
   // year-old to engineer an L-shape on purpose; measured, that was 1 bomb in
   // 27 moves against a goal of 3, i.e. unfinishable.
-  const boost = need => ({ t: 'boost', need });
-  const score = need => ({ t: 'score', need });
+  const boost = () => ({ t: 'boost', need: Math.min(6, 2 + Math.floor(n / 5)) });
+  // Priced in moves, not in points — a flat "2500 + n*450" was worth about four
+  // moves against a twelve move budget, i.e. already won.
+  const score = () => ({ t: 'score', need: Math.round(POINTS_PER_MOVE * Math.min(20, 6 + n) / 100) * 100 });
+  // ONE duckling per level, and priced at 0.045 per move, which looks harsh
+  // until you measure it: a duckling only descends when its OWN column clears
+  // beneath it, and the final row is a specific single cell that comes up
+  // about once in eleven moves. Two of them lost more level-9 runs than they
+  // won even with the hint steering hard toward them. One is a clear, focused
+  // errand; two is a hunt.
+  const drop  = () => ({ t: 'drop',  need: 1 });
+  const ice   = () => ({ t: 'ice',   need: Math.min(10, 2 + Math.floor(n / 2)) });
 
-  // Five flavours in rotation, so no two levels in a row ask the same thing.
-  // Which one you get is a pure function of the level number.
-  const goals =
-      n === 1 ? [fruit(0)]
-    : n === 2 ? [fruit(0), fruit(1)]
-    : [
-        () => [fruit(0), fruit(1), fruit(2)].slice(0, goalCount),
-        () => [fruit(0), fruit(1)].slice(0, goalCount).concat([leaf()]),
-        () => [boost(Math.min(6, 2 + Math.floor(n / 5))), fruit(0)],
-        // Priced in moves, not in points — a flat "2500 + n*450" was worth
-        // about four moves against a twelve move budget, i.e. already won.
-        () => [score(Math.round(POINTS_PER_MOVE * Math.min(20, 6 + n) / 100) * 100)],
-        () => [leaf(), boost(Math.min(5, 2 + Math.floor(n / 7)))],
-      ][n % 5]();
+  // Objective kinds unlock gradually so a new idea always arrives alone.
+  const menu = ['fruit', 'fruit'];
+  if (n >= 3)  menu.push('leaf');
+  if (n >= 4)  menu.push('score');
+  if (n >= 5)  menu.push('boost');
+  if (n >= 6)  menu.push('drop');
+  if (n >= 8)  menu.push('ice');
+
+  let goals;
+  if (n === 1) goals = [fruit(0)];
+  else if (n === 2) goals = [fruit(0), fruit(1)];
+  else {
+    // Pick distinct objective kinds (fruit may repeat, with different fruit).
+    const chosen = [];
+    for (let i = 0; i < goalCount; i++) {
+      let t, guard = 0;
+      do { t = pick(menu); } while (t !== 'fruit' && chosen.includes(t) && guard++ < 24);
+      chosen.push(t);
+    }
+    let fi = 0;
+    goals = chosen.map(t =>
+        t === 'fruit' ? fruit(fi++)
+      : t === 'leaf'  ? leaf()
+      : t === 'score' ? score()
+      : t === 'boost' ? boost()
+      : t === 'drop'  ? drop()
+      : ice());
+  }
 
   // Every goal type gets costed in moves from measured throughput, and the
   // budget follows whichever is slowest — otherwise a "make 4 bombs" level
@@ -985,6 +1050,8 @@ function levelFor(n) {
     : g.t === 'leaf'  ? g.need / COVERS_PER_MOVE
     : g.t === 'boost' ? g.need / BOOSTERS_PER_MOVE
     : g.t === 'score' ? g.need / POINTS_PER_MOVE
+    : g.t === 'drop'  ? g.need / DROPS_PER_MOVE
+    : g.t === 'ice'   ? g.need / ICE_PER_MOVE
     : 0;
   // 1.5x the binding constraint — tighter than it was, which is most of what
   // makes these levels harder. Still a safety net, and the "+5 moves" offer is
@@ -996,11 +1063,9 @@ function levelFor(n) {
     emoji: LEVEL_EMOJI[(n - 1) % LEVEL_EMOJI.length],
     rows: ROWS, cols: COLS, kinds, moves, goals,
     covers: (goals.find(g => g.t === 'leaf') || {}).need || 0,
-    pattern: COVER_PATTERNS[(n - 1) % COVER_PATTERNS.length],
-    // Level 1 and 2 are the plain rectangle so the very first boards are as
-    // simple as possible; after that the silhouette rotates independently of
-    // the goal rotation, so shape and objective don't repeat in lockstep.
-    shape: n < 3 ? 'full' : SHAPES[(n + 2) % SHAPES.length],
+    ducks:  (goals.find(g => g.t === 'drop') || {}).need || 0,
+    ice:    (goals.find(g => g.t === 'ice')  || {}).need || 0,
+    pattern: pick(COVER_PATTERNS),
   };
 }
 const FREE = { name:'Free Play', emoji:'🎈', rows:ROWS, cols:COLS, kinds:5, moves:0, goals:[], covers:0, shape:'full' };
@@ -1067,8 +1132,10 @@ function saveGame() {
   try {
     localStorage.setItem('match3-save', JSON.stringify({
       lv: levelNo, score, movesLeft, used: movesUsed, helped: usedHelp,
-      got: goalGot, made: boostMade,
+      got: goalGot, made: boostMade, home: ducksHome,
       cov: covers.map(row => row.slice()),
+      blk: (() => { const o = []; for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) {
+              const t = grid[r][c]; if (t && t.block) o.push([r, c, t.block, t.hits || 0]); } return o; })(),
       grid: grid.map(row => row.map(t => t ? [t.k, t.sp] : null)),
     }));
   } catch (e) {}
@@ -1178,6 +1245,7 @@ let score = 0, movesLeft = 0, movesUsed = 0, usedHelp = false;
 let goalGot = [];            // parallel to L.goals (fruit counts)
 let boostMade = {};          // boosters created this level, by kind
 let covers = [], coversLeft = 0;
+let ducksHome = 0, iceLeft = 0;
 let busy = false, sel = null, over = false;
 let armed = null, toolPick = null;   // which helper tool is primed, and its first pick
 let idleTimer = null, nudged = [], handEl = null;
@@ -1218,7 +1286,21 @@ function makeTile(k, r, c, sp = SP_NONE) {
 }
 function paint(t) {
   const el = t.el;
-  el.classList.remove('sp1', 'sp2', 'sp3');
+  el.classList.remove('sp1', 'sp2', 'sp3', 'blk', 'duck', 'ice', 'ice1');
+  if (t.block) {
+    t.shape.className = 'shape';
+    t.shape.style.background = '';
+    el.classList.add('blk', t.block);
+    if (t.block === 'ice') {
+      t.face.textContent = '🧊';
+      if (t.hits <= 1) el.classList.add('ice1');       // cracked
+      el.setAttribute('aria-label', 'ice block');
+    } else {
+      t.face.textContent = '🐤';
+      el.setAttribute('aria-label', 'duckling');
+    }
+    return;
+  }
   if (t.sp === SP_RAIN) {
     t.shape.className = 'shape';
     t.shape.style.background = '';
@@ -1244,13 +1326,36 @@ function place(t, r, c, instant) {
 }
 function isRain(t) { return t && t.sp === SP_RAIN; }
 
+/* ---------------- special tiles ----------------
+   Two kinds of thing sit on the board that are NOT fruit, share one rule —
+   they can never be matched and can never be popped — and differ in how you
+   get rid of them:
+
+     🐤 duckling  falls with everything else and leaves at the bottom row, so
+                  you have to empty the column underneath it
+     🧊 ice       sits there until a match happens right next to it
+
+   Both use k = BLOCK_K, which runsOn already skips, so no matching code had to
+   learn about them. */
+const BLOCK_K = -2;
+const isBlock = t => !!t && t.block;
+function makeBlock(kind, r, c) {
+  const t = makeTile(0, r, c);
+  t.k = BLOCK_K; t.block = kind;
+  if (kind === 'ice') t.hits = 2;
+  paint(t);
+  return t;
+}
+
 /* ---------------- layout ---------------- */
 function layout() {
   if (!L) return;
+  // Give the board as much of the screen as the chrome allows — it's the thing
+  // you're actually looking at, and a bigger board is a better board.
   const land = window.innerWidth > window.innerHeight && window.innerHeight <= 560;
-  const availW = land ? window.innerWidth * 0.52 : window.innerWidth * 0.94;
-  const availH = land ? window.innerHeight * 0.88 : window.innerHeight * 0.60;
-  const cell = Math.max(34, Math.floor(Math.min(availW / C, availH / R, 96)));
+  const availW = land ? window.innerWidth * 0.56 : window.innerWidth * 0.99;
+  const availH = land ? window.innerHeight * 0.94 : window.innerHeight * 0.66;
+  const cell = Math.max(30, Math.floor(Math.min(availW / C, availH / R, 96)));
   board.style.setProperty('--cell', cell + 'px');
   board.style.setProperty('--rows', R);
   board.style.setProperty('--cols', C);
@@ -1340,13 +1445,13 @@ function groups() {
 // clears a leaf wins — otherwise the last stubborn leaf can outlast the whole
 // budget, since nothing else on the board steers you towards it.
 function hintMove() {
-  let fallback = null;
+  let fallback = null, best = -1;
   for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) {
     for (const [dr, dc] of [[0, 1], [1, 0]]) {
       const r2 = r + dr, c2 = c + dc;
       if (r2 >= R || c2 >= C) continue;
       const a = grid[r][c], b = grid[r2][c2];
-      if (!a || !b) continue;
+      if (!a || !b || a.block || b.block) continue;
       // Only a rainbow (or two boosters together) goes off regardless. A star
       // or bomb swapped against a plain fruit still has to make a match, so it
       // must be tested like any other swap — pointing the finger at one that
@@ -1357,13 +1462,26 @@ function hintMove() {
       }
       grid[r][c] = b; grid[r2][c2] = a;
       const gs = groups();
-      let sweeps = false;
-      for (const g of gs) for (const [gr, gc] of g.cells) if (covers[gr] && covers[gr][gc]) { sweeps = true; break; }
-      grid[r][c] = a; grid[r2][c2] = b;
-      if (gs.length) {
-        if (sweeps) return [[r, c], [r2, c2]];
-        fallback = fallback || [[r, c], [r2, c2]];
+      // Score the move by how much it advances whatever this level still wants.
+      // Without this the finger points at any old match, and objectives that
+      // need a SPECIFIC cell cleared — a duckling's column, a block of ice —
+      // essentially never progress: measured, one duckling home in 25 moves.
+      let sc = 0;
+      for (const g of gs) for (const [gr, gc] of g.cells) {
+        if (covers[gr] && covers[gr][gc]) sc += 3;
+        for (let up = gr - 1; up >= 0; up--) {           // a duckling above this cell
+          const d = grid[up][gc];
+          if (d && d.block === 'duck') { sc += 5; break; }
+          if (d && d.block) break;
+        }
+        for (const [dr, dc] of [[0,1],[0,-1],[1,0],[-1,0]]) {
+          const nb = grid[gr + dr] && grid[gr + dr][gc + dc];
+          if (nb && nb.block === 'ice') sc += 3;
+        }
+        sc += 0.1;
       }
+      grid[r][c] = a; grid[r2][c2] = b;
+      if (gs.length && sc > best) { best = sc; fallback = [[r, c], [r2, c2]]; }
     }
   }
   return fallback;
@@ -1433,6 +1551,60 @@ function paintCovers() {
     host.appendChild(d);
   }
 }
+// Ice takes two hits from matches beside it, then shatters. `iceHitThisClear`
+// keeps one clear from counting as four hits just because four of its fruit
+// happened to touch the same block.
+let iceHitThisClear = new Set();
+function hitIce(r, c) {
+  const t = grid[r] && grid[r][c];
+  if (!t || t.block !== 'ice') return;
+  const key = r * C + c;
+  if (iceHitThisClear.has(key)) return;
+  iceHitThisClear.add(key);
+  t.hits--;
+  if (t.hits > 0) { paint(t); sfx('leaf'); fxSparks(r, c, '#cfefff', 8, .7); return; }
+  iceLeft--;
+  grid[r][c] = null;
+  fxSparks(r, c, '#dff3ff', 18, 1.3); fxShards(r, c, '#bfe6ff', 8); fxRing(r, c, 2, 'rgba(220,245,255,.95)', 460);
+  sfx('pop', 1, []);
+  const el = t.el;
+  el.classList.add('pop');
+  setTimeout(() => el.remove(), 470);
+  paintGoals(true);
+}
+
+// Blockers are stored alongside the grid, since they are not fruit and can't be
+// rebuilt from a kind alone.
+function restoreBlocks(blk) {
+  iceLeft = 0;                 // ducksHome comes from the save, don't reset it
+  if (!Array.isArray(blk)) return;
+  blk.forEach(([r, c, kind, hits]) => {
+    if (!cellOk(r, c) || !grid[r][c]) return;
+    grid[r][c].el.remove();
+    const t = makeBlock(kind, r, c);
+    if (kind === 'ice') { t.hits = hits; iceLeft++; paint(t); }
+    grid[r][c] = t;
+  });
+}
+
+// A duckling that reaches the floor of its column is home.
+function collectDucks() {
+  let got = 0;
+  for (let c = 0; c < C; c++) {
+    const t = grid[colBot[c]][c];
+    if (t && t.block === 'duck') {
+      grid[colBot[c]][c] = null;
+      ducksHome++; got++;
+      fxSparks(t.r, t.c, '#ffe08a', 20, 1.4); fxRing(t.r, t.c, 2.4, 'rgba(255,230,150,.95)', 520);
+      const el = t.el;
+      el.classList.add('pop');
+      setTimeout(() => el.remove(), 470);
+    }
+  }
+  if (got) { sfx('goal'); buzz(30); paintGoals(true); toast('🐤 ' + (got > 1 ? 'Safe!' : 'Home!')); }
+  return got;
+}
+
 function restoreCovers(cov) {
   if (!L.covers) { makeCovers(0); return; }
   const ok = Array.isArray(cov) && cov.length === R && cov.every(row => Array.isArray(row) && row.length === C);
@@ -1458,6 +1630,43 @@ function paintCells() {
     html += '<div class="cellbg" style="--cr:' + r + ';--cc:' + c + '"></div>';
   host.innerHTML = html;
 }
+// Ducklings start high (they have to travel) and ice starts low and central
+// (it has to be dug out). Both replace a fruit rather than adding a cell.
+function placeBlocks(nDucks, nIce, rng) {
+  ducksHome = 0; iceLeft = 0;
+  const swap = (r, c, kind) => {
+    const old = grid[r][c];
+    if (!old || old.block) return false;
+    // Never on a leaf. A blocker is never popped, and a leaf is only swept by
+    // popping the fruit standing on it — so a leaf under ice could never be
+    // cleared at all, and the level's leaf goal would be unwinnable.
+    if (covers[r] && covers[r][c]) return false;
+    old.el.remove();
+    grid[r][c] = makeBlock(kind, r, c);
+    return true;
+  };
+  const cols = Array.from({ length: C }, (_, i) => i);
+  for (let i = cols.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [cols[i], cols[j]] = [cols[j], cols[i]]; }
+  let placed = 0;
+  for (const c of cols) {
+    if (placed >= nDucks) break;
+    // Start mid-board. Measured: from the top a duckling needs about five
+    // separate clears in its own column and the last one never arrived — one
+    // home in 25 moves. Three rows of travel is a journey you can finish.
+    if (swap(colBot[c] - 3 - Math.floor(rng() * 2), c, 'duck')) placed++;
+  }
+  const mid = (R - 1) / 2, midc = (C - 1) / 2;
+  const spots = [];
+  for (let r = 0; r < R; r++) for (let c = 0; c < C; c++)
+    spots.push([Math.abs(r - mid - 1) + Math.abs(c - midc) + rng() * 1.5, r, c]);
+  spots.sort((a, b) => a[0] - b[0]);
+  let ic = 0;
+  for (const [, r, c] of spots) {
+    if (ic >= nIce) break;
+    if (swap(r, c, 'ice')) { ic++; iceLeft++; }
+  }
+}
+
 function setShape(shape) {
   colTop = []; colBot = [];
   for (let c = 0; c < C; c++) { const [t, b] = spanFor(shape, c); colTop[c] = t; colBot[c] = b; }
@@ -1487,7 +1696,11 @@ function restoreBoard(saved) {
   for (let r = 0; r < R; r++) { grid[r] = []; for (let c = 0; c < C; c++) grid[r][c] = null; }
   for (let c = 0; c < C; c++) for (let r = colTop[c]; r <= colBot[c]; r++) {
     const s = saved[r] && saved[r][c];
-    grid[r][c] = s ? makeTile(s[0], r, c, s[1]) : makeTile(rnd(KN), r, c);
+    // A blocker was stored with k = BLOCK_K, which is not an index into KINDS —
+    // feeding it straight to makeTile threw and aborted the rest of level
+    // setup. Lay a placeholder fruit; restoreBlocks puts the real thing back.
+    const k = (!s || s[0] === BLOCK_K) ? rnd(KN) : s[0];
+    grid[r][c] = makeTile(k, r, c, s ? s[1] : SP_NONE);
   }
 }
 
@@ -2003,6 +2216,7 @@ async function clearCells(keys, cascade, from, zapFrom, suckTo, chain) {
   score += gained;
   let goalHits = 0, coverHits = 0, notes = [];
   const flyBudget = { n: 0 };
+  iceHitThisClear = new Set();
   let order = null, step = 0, lastDelay = 0;
   if (zapFrom) {
     const d = k => Math.hypot(Math.floor(k / C) - zapFrom[0], (k % C) - zapFrom[1]);
@@ -2036,6 +2250,9 @@ async function clearCells(keys, cascade, from, zapFrom, suckTo, chain) {
     const r = Math.floor(key / C), c = key % C;
     const t = grid[r][c];
     if (!t) return;
+    // A blocker is never popped, by a match or by a blast. Ice leaves by being
+    // hit from beside it, a duckling by reaching the floor.
+    if (t.block) return;
     // credit the goal
     if (t.sp !== SP_RAIN) {
       const gi = L.goals.findIndex(g => g.t === 'fruit' && g.k === t.k);
@@ -2046,6 +2263,9 @@ async function clearCells(keys, cascade, from, zapFrom, suckTo, chain) {
     }
     if (sweepCover(r, c)) coverHits++;
     if (t.k >= 0) notes.push(KINDS[t.k].note);
+    // Ice next to a clear takes a hit. Done before the pop so a fruit that is
+    // itself about to vanish still counts as "a match happened here".
+    for (const [dr, dc] of [[0,1],[0,-1],[1,0],[-1,0]]) hitIce(r + dr, c + dc);
     // Pops travel outward from wherever this clear started — the tile you moved,
     // or the booster that went off — so the burst reads as a consequence of it.
     const delay = order ? order.get(key) * step
@@ -2146,6 +2366,9 @@ async function gravity() {
   const bottoms = new Set();
   landed.forEach(t => { if (!bottoms.has(t.c) && (t.r === R - 1 || (grid[t.r + 1] && grid[t.r + 1][t.c] && !landed.includes(grid[t.r + 1][t.c])))) { bottoms.add(t.c); dust(t.r, t.c); } });
   await sleep(REDUCED ? 10 : 110);
+  // Anything that reached the floor this fall is home. Checked after the fall
+  // settles so a duckling that lands is collected on the same beat it arrives.
+  if (collectDucks()) await sleep(REDUCED ? 10 : 320);
 }
 
 // Toddlers can't read these, so each one carries an emoji that says the same
@@ -2312,7 +2535,7 @@ async function reshuffle(silent) {
   if (!silent) { toast('🌀 Let\'s mix!'); sfx('mix'); }
   const flat = [];
   for (let r = 0; r < R; r++) for (let c = 0; c < C; c++)
-    if (grid[r][c] && grid[r][c].sp === SP_NONE) flat.push(grid[r][c]);
+    if (grid[r][c] && grid[r][c].sp === SP_NONE && !grid[r][c].block) flat.push(grid[r][c]);
   for (let tries = 0; tries < 80; tries++) {
     const ks = flat.map(t => t.k);
     for (let i = ks.length - 1; i > 0; i--) { const j = rnd(i + 1); [ks[i], ks[j]] = [ks[j], ks[i]]; }
@@ -2647,6 +2870,9 @@ board.addEventListener('pointerdown', ev => {
   if (!el) return;
   const t = tileFromEl(el);
   if (!t) return;
+  // A blocker isn't yours to move. Tapping it does nothing rather than
+  // selecting something that can never make a match.
+  if (t.block && !armed) { sfx('nope'); return; }
   if (armed === 'hammer') { useHammer(t); return; }
   if (armed === 'swap') {
     if (!toolPick) { toolPick = t; t.el.classList.add('sel'); sfx('tap'); setFoot('Now tap the one next to it 🔄'); return; }
@@ -2745,9 +2971,13 @@ function goalChip(g) {
   if (g.t === 'fruit') return miniTile(g.k);
   const face = g.t === 'leaf' ? '🍃'
              : g.t === 'score' ? '🏆'
+             : g.t === 'drop' ? '🐤'
+             : g.t === 'ice' ? '🧊'
              : '✨';
   const bg = g.t === 'leaf' ? 'linear-gradient(160deg,#d6f5b0,#7cc94e)'
            : g.t === 'score' ? 'linear-gradient(160deg,#ffe08a,#f5a524)'
+           : g.t === 'drop' ? 'linear-gradient(160deg,#fff2c4,#ffd469)'
+           : g.t === 'ice' ? 'linear-gradient(160deg,#d6f4ff,#96d6f5)'
            : 'linear-gradient(160deg,#cfe4ff,#7aa8ff)';
   return '<span class="mini"><span class="shape" style="border-radius:26%;background:' + bg
        + '"></span><span class="face">' + face + '</span></span>';
@@ -2758,12 +2988,16 @@ function goalSummary(lv) {
       g.t === 'fruit' ? g.need + KINDS[g.k].emoji
     : g.t === 'leaf'  ? g.need + '🍃'
     : g.t === 'score' ? g.need.toLocaleString() + '🏆'
+    : g.t === 'drop'  ? g.need + '🐤'
+    : g.t === 'ice'   ? g.need + '🧊'
     : g.need + '✨');
 }
 function goalLabel(g) {
   return g.t === 'fruit' ? 'collect ' + g.need + ' ' + KINDS[g.k].name
        : g.t === 'leaf'  ? 'sweep ' + g.need + ' leaves'
        : g.t === 'score' ? 'score ' + g.need + ' points'
+       : g.t === 'drop'  ? 'bring ' + g.need + ' ducklings down'
+       : g.t === 'ice'   ? 'break ' + g.need + ' ice blocks'
        : 'make ' + g.need + ' boosters';
 }
 // How far along a goal is, and what it needs.
@@ -2771,6 +3005,8 @@ function goalProgress(g, i) {
   if (g.t === 'leaf')  return Math.max(0, g.need - coversLeft);
   if (g.t === 'score') return Math.min(g.need, score);
   if (g.t === 'boost') return Object.values(boostMade).reduce((a, b) => a + b, 0);
+  if (g.t === 'drop')  return ducksHome;
+  if (g.t === 'ice')   return g.need - iceLeft;
   return goalGot[i] || 0;
 }
 function paintGoals(animate) {
@@ -2945,13 +3181,14 @@ function start(idx, resume, quiet) {
   R = L.rows; C = L.cols; KN = L.kinds;
   score = 0; movesLeft = L.moves; movesUsed = 0; usedHelp = false; over = false; busy = false; sel = null;
   goalGot = L.goals.map(() => 0);
-  boostMade = {};
+  boostMade = {}; ducksHome = 0; iceLeft = 0;
   sinceBooster = 0;
 
   if (resume) {
     score = resume.score; movesLeft = resume.movesLeft; movesUsed = resume.used;
     usedHelp = !!resume.helped; goalGot = resume.got.slice();
     boostMade = resume.made || {};
+    ducksHome = resume.home || 0;
   }
 
   $('menu').classList.add('hidden');
@@ -2972,10 +3209,15 @@ function start(idx, resume, quiet) {
     restoreCovers(resume.cov);
     // Saves are only ever written from a settled board, so a run here means a
     // stale or hand-edited save — deal a fresh board rather than gift a match.
-    if (runsOn(grid).length) { buildBoard(); makeCovers(L.covers || 0, L.pattern); }
+    if (runsOn(grid).length) {
+      buildBoard();
+      makeCovers(L.covers || 0, L.pattern);
+      placeBlocks(L.ducks || 0, L.ice || 0, mulberry32(((levelNo || 1) * 40503) >>> 0));
+    } else restoreBlocks(resume.blk);
   } else {
     buildBoard();
     makeCovers(L.covers || 0, L.pattern);
+    placeBlocks(L.ducks || 0, L.ice || 0, mulberry32(((levelNo || 1) * 40503) >>> 0));
   }
   paintGoals(false);
   paintHud();
