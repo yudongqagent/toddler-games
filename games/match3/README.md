@@ -42,11 +42,19 @@ clear, and how do I go off:
 - **Selecting one lights up every tile it would take** — the star's whole row
   and column, the rainbow's whole colour. You find out what it does *before*
   spending it, and the footnote switches to "Tap it again to set it off!".
-- **Firing it is animated.** A bar of light sweeps the row and the column (a
-  ring washes outward for the rainbow), and the fruit pop in waves travelling
-  out from the centre rather than all vanishing at once. Boosters set off by
-  other boosters draw their own beams, so a chain reaction reads as a chain
-  reaction instead of the board erasing itself.
+- **Firing it is animated.** The star throws four tapered blades of light — a
+  wide underglow, a warm body and a hot white core, narrowing to a point, with
+  a bloom riding each advancing tip and embers shedding off it. (A flat capsule
+  of even width was what made this read as a UI divider rather than energy.) A
+  ring washes outward for the rainbow, and the fruit pop in waves travelling
+  out from the centre rather than all vanishing at once.
+- **Chains propagate in time.** A booster set off by another booster is a
+  sequence of events, not one event, so the chain is walked breadth-first and
+  every link knows its depth: link 0 goes off now, link 1 a beat later, link 2
+  a beat after that. Each fruit also knows which booster claimed it and at what
+  depth, so the destruction rolls outward with the chain instead of the whole
+  board clearing on the first frame. Measured on a three-link chain: 13 fruit
+  popping, then 17, then 21, then 23.
 - Creating one is a single motion, not two. The matched fruit **rush into the
   cell the booster is forming in** and shrink out as they arrive, and the
   booster is born *while they're still travelling* — measured, the fruit start
