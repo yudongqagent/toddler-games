@@ -134,13 +134,19 @@ fun. Levels get their identity from what's **on** the board instead:
 | | |
 |---|---|
 | 🍃 **leaves** | cover a fruit; sweep them by popping the fruit under them |
-| 🧊 **ice** | can't be matched; takes two matches *beside* it to shatter |
+| 🧊 **frost** | freezes a fruit in place; two matches *beside* it chip it away and hand the fruit back |
 | 🐤 **duckling** | can't be matched; falls with everything else and is home when it reaches the floor, so you have to clear its column out from under it |
 
-Ice and ducklings are the same idea underneath — a thing on the board that is
-not fruit and can never be popped — and differ only in how you get rid of it.
-Both use a kind index the matcher already skips, so no matching code had to
-learn they exist.
+Frost is a **layer on a fruit**, not a tile of its own. That matters three ways:
+the board never loses a cell to it, you can see which fruit you're about to
+free, and it can't render as a blank white square — which is exactly what an
+opaque blue block with an 🧊 glyph did. Two layers thick reads as a heavy
+frosted slab; one layer is thinner, smaller and visibly fractured, with the
+fruit's colour clear underneath. Chip the last layer and the fruit is simply
+yours, sitting right there ready to match.
+
+The duckling is the one true blocker — not fruit, never poppable — and uses a
+kind index the matcher already skips.
 
 **Levels are generated, and there is no end to them.** Six kinds of objective —
 collect a fruit, sweep leaves, break ice, bring a duckling home, make boosters,

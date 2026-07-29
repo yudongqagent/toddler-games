@@ -507,20 +507,49 @@
   .tile.duck .face { animation:duckBob 1.5s ease-in-out infinite; }
   @keyframes duckBob { 0%,100%{transform:translateY(0) rotate(-4deg)} 50%{transform:translateY(-8%) rotate(4deg)} }
 
-  .tile.ice .shape {
-    background:linear-gradient(160deg, rgba(214,244,255,.95), rgba(150,214,245,.95)) !important;
-    box-shadow:inset 0 0 0 calc(var(--cell)*.04) rgba(255,255,255,.9),
-               inset 0 calc(var(--cell)*-.07) 0 rgba(40,110,150,.25),
-               0 0 calc(var(--cell)*.1) rgba(170,225,255,.8);
+  /* Ice is drawn entirely in CSS — no emoji. A 🧊 glyph is a pale block, and on
+     a pale blue tile the whole thing read as a white square with no sense of
+     depth. Built as a frosted crystal instead, with two states that differ in
+     THICKNESS, not just in decoration. */
+  /* ---- frost: a layer OVER the fruit, in two thicknesses ----
+     Drawn on .crown so the fruit and its own tile colour stay visible through
+     it. An opaque blue block with an 🧊 glyph read as a white square with no
+     depth and hid what you were about to win. */
+  .tile.ice .crown {
+    display:block; border-radius:30%;
+    backdrop-filter:blur(1.5px);
   }
-  /* one hit in: visibly cracked, so the second hit is obviously worth making */
-  .tile.ice1 .shape::before {
+  .tile.ice2 .crown {
+    background:linear-gradient(158deg, rgba(206,238,255,.6), rgba(120,193,231,.56) 55%, rgba(68,156,206,.6));
+    box-shadow:
+      inset 0 0 0 calc(var(--cell)*.055) rgba(255,255,255,.8),
+      inset 0 calc(var(--cell)*.07) 0 rgba(255,255,255,.5),
+      inset 0 calc(var(--cell)*-.09) 0 rgba(12,72,115,.35);
+  }
+  /* facets, so it reads as a solid slab and not a blue wash */
+  .tile.ice2 .crown::before {
     content:''; position:absolute; inset:0; border-radius:30%;
     background:
-      linear-gradient(58deg,  transparent 46%, rgba(255,255,255,.95) 48%, transparent 52%),
-      linear-gradient(-42deg, transparent 44%, rgba(255,255,255,.8) 46%, transparent 50%);
+      linear-gradient(146deg, rgba(255,255,255,.7) 0 19%, transparent 19%),
+      linear-gradient(-34deg, rgba(255,255,255,.3) 0 12%, transparent 12%),
+      linear-gradient(206deg, rgba(10,66,108,.22) 0 22%, transparent 22%);
   }
-  .tile.ice1 .face { opacity:.75; }
+  /* One layer left: thinner AND smaller, so the fruit reads clearly through it
+     and you can see it is nearly free. */
+  .tile.ice1 .crown {
+    inset:6%;
+    background:linear-gradient(158deg, rgba(233,248,255,.3), rgba(150,209,238,.28));
+    box-shadow:
+      inset 0 0 0 calc(var(--cell)*.02) rgba(255,255,255,.75),
+      inset 0 calc(var(--cell)*-.035) 0 rgba(12,72,115,.16);
+  }
+  .tile.ice1 .crown::before {
+    content:''; position:absolute; inset:0; border-radius:30%;
+    background:
+      linear-gradient(62deg,  transparent 45.5%, rgba(255,255,255,.98) 48%, transparent 50.5%),
+      linear-gradient(-34deg, transparent 42%,   rgba(255,255,255,.9)  44.5%, transparent 47%),
+      linear-gradient(12deg,  transparent 62%,   rgba(255,255,255,.8)  64.2%, transparent 66.5%);
+  }
 
   /* "tap again and THIS is what goes" — shown while a booster is selected */
   .tile.aim .inner { animation:aimPulse .75s ease-in-out infinite; }
@@ -1135,7 +1164,9 @@ function saveGame() {
       got: goalGot, made: boostMade, home: ducksHome,
       cov: covers.map(row => row.slice()),
       blk: (() => { const o = []; for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) {
-              const t = grid[r][c]; if (t && t.block) o.push([r, c, t.block, t.hits || 0]); } return o; })(),
+              const t = grid[r][c];
+              if (t && t.block) o.push([r, c, t.block, 0]);
+              else if (t && t.ice) o.push([r, c, 'ice', t.ice]); } return o; })(),
       grid: grid.map(row => row.map(t => t ? [t.k, t.sp] : null)),
     }));
   } catch (e) {}
@@ -1286,19 +1317,13 @@ function makeTile(k, r, c, sp = SP_NONE) {
 }
 function paint(t) {
   const el = t.el;
-  el.classList.remove('sp1', 'sp2', 'sp3', 'blk', 'duck', 'ice', 'ice1');
-  if (t.block) {
+  el.classList.remove('sp1', 'sp2', 'sp3', 'blk', 'duck', 'ice', 'ice1', 'ice2');
+  if (t.block === 'duck') {
     t.shape.className = 'shape';
     t.shape.style.background = '';
-    el.classList.add('blk', t.block);
-    if (t.block === 'ice') {
-      t.face.textContent = '🧊';
-      if (t.hits <= 1) el.classList.add('ice1');       // cracked
-      el.setAttribute('aria-label', 'ice block');
-    } else {
-      t.face.textContent = '🐤';
-      el.setAttribute('aria-label', 'duckling');
-    }
+    el.classList.add('blk', 'duck');
+    t.face.textContent = '🐤';
+    el.setAttribute('aria-label', 'duckling');
     return;
   }
   if (t.sp === SP_RAIN) {
@@ -1315,6 +1340,12 @@ function paint(t) {
     if (t.sp === SP_STAR)      { el.classList.add('sp1'); el.setAttribute('aria-label', K.name + ' star'); }
     else if (t.sp === SP_BOMB) { el.classList.add('sp3'); el.setAttribute('aria-label', K.name + ' bomb'); }
     else el.setAttribute('aria-label', K.name);
+  }
+  // Frost sits OVER the fruit rather than replacing it: you can see what you're
+  // going to free, and it can never read as a blank white square.
+  if (t.ice > 0) {
+    el.classList.add('ice', t.ice > 1 ? 'ice2' : 'ice1');
+    el.setAttribute('aria-label', KINDS[t.k].name + (t.ice > 1 ? ' under thick ice' : ' under cracked ice'));
   }
 }
 function place(t, r, c, instant) {
@@ -1333,16 +1364,18 @@ function isRain(t) { return t && t.sp === SP_RAIN; }
 
      🐤 duckling  falls with everything else and leaves at the bottom row, so
                   you have to empty the column underneath it
-     🧊 ice       sits there until a match happens right next to it
 
-   Both use k = BLOCK_K, which runsOn already skips, so no matching code had to
-   learn about them. */
+   It uses k = BLOCK_K, which runsOn already skips.
+
+   Frozen fruit is deliberately NOT one of these. Ice is a layer ON a fruit
+   (t.ice = how many layers are left), so the board never loses a cell to it,
+   you can see which fruit you're about to free, and it can't render as a blank
+   white square. Chip the last layer off and the fruit is simply yours. */
 const BLOCK_K = -2;
 const isBlock = t => !!t && t.block;
 function makeBlock(kind, r, c) {
   const t = makeTile(0, r, c);
   t.k = BLOCK_K; t.block = kind;
-  if (kind === 'ice') t.hits = 2;
   paint(t);
   return t;
 }
@@ -1366,6 +1399,12 @@ window.addEventListener('orientationchange', () => setTimeout(layout, 120));
 
 /* ---------------- board generation ---------------- */
 const rnd = n => Math.floor(Math.random() * n);
+// The opening deal is seeded by the level number, so Level 34 lays out the same
+// board every time and "Again" really does replay what you just failed. Only
+// the OPENING deal: refills during play stay properly random, or a level would
+// be a fixed script you could memorise rather than a puzzle.
+let levelRng = Math.random;
+const rndL = n => Math.floor(levelRng() * n);
 // Fruit accelerates as it falls rather than easing in and out — floaty tiles
 // were the single biggest thing making the board feel unphysical.
 const FALL_EASE = 'cubic-bezier(.38,0,.72,.36)';
@@ -1396,7 +1435,7 @@ function runsOn(g) {
       const t = g[r][c];
       if (!t || t.k < 0) { c++; continue; }
       let e = c + 1;
-      while (e < C && g[r][e] && g[r][e].k === t.k) e++;
+      while (e < C && g[r][e] && !g[r][e].ice && g[r][e].k === t.k) e++;
       if (e - c >= 3) { const cells = []; for (let i = c; i < e; i++) cells.push([r, i]); out.push({ k: t.k, cells, dir: 'h' }); }
       c = e;
     }
@@ -1407,7 +1446,7 @@ function runsOn(g) {
       const t = g[r][c];
       if (!t || t.k < 0) { r++; continue; }
       let e = r + 1;
-      while (e < R && g[e][c] && g[e][c].k === t.k) e++;
+      while (e < R && g[e][c] && !g[e][c].ice && g[e][c].k === t.k) e++;
       if (e - r >= 3) { const cells = []; for (let i = r; i < e; i++) cells.push([i, c]); out.push({ k: t.k, cells, dir: 'v' }); }
       r = e;
     }
@@ -1451,7 +1490,7 @@ function hintMove() {
       const r2 = r + dr, c2 = c + dc;
       if (r2 >= R || c2 >= C) continue;
       const a = grid[r][c], b = grid[r2][c2];
-      if (!a || !b || a.block || b.block) continue;
+      if (!a || !b || a.block || b.block || a.ice || b.ice) continue;
       // Only a rainbow (or two boosters together) goes off regardless. A star
       // or bomb swapped against a plain fruit still has to make a match, so it
       // must be tested like any other swap — pointing the finger at one that
@@ -1476,7 +1515,7 @@ function hintMove() {
         }
         for (const [dr, dc] of [[0,1],[0,-1],[1,0],[-1,0]]) {
           const nb = grid[gr + dr] && grid[gr + dr][gc + dc];
-          if (nb && nb.block === 'ice') sc += 3;
+          if (nb && nb.ice) sc += 3;
         }
         sc += 0.1;
       }
@@ -1489,10 +1528,13 @@ function hintMove() {
 
 function anyMove() {
   for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) {
-    if (!grid[r][c]) continue;                       // a hole in the board
+    const a0 = grid[r][c];
+    if (!a0 || a0.block || a0.ice) continue;         // hole, blocker or frozen
     for (const [dr, dc] of [[0, 1], [1, 0]]) {
       const r2 = r + dr, c2 = c + dc;
-      if (r2 >= R || c2 >= C || !grid[r2][c2]) continue;
+      if (r2 >= R || c2 >= C) continue;
+      const b0 = grid[r2][c2];
+      if (!b0 || b0.block || b0.ice) continue;
       const a = grid[r][c], b = grid[r2][c2];
       if (isRain(a) || isRain(b)) return [[r, c], [r2, c2]];
       grid[r][c] = b; grid[r2][c2] = a;
@@ -1557,19 +1599,20 @@ function paintCovers() {
 let iceHitThisClear = new Set();
 function hitIce(r, c) {
   const t = grid[r] && grid[r][c];
-  if (!t || t.block !== 'ice') return;
+  if (!t || !t.ice) return;
   const key = r * C + c;
   if (iceHitThisClear.has(key)) return;
   iceHitThisClear.add(key);
-  t.hits--;
-  if (t.hits > 0) { paint(t); sfx('leaf'); fxSparks(r, c, '#cfefff', 8, .7); return; }
+  t.ice--;
+  paint(t);
+  if (t.ice > 0) { sfx('leaf'); fxSparks(r, c, '#cfefff', 9, .8); return; }
+  // Last layer gone: the fruit underneath is free, and stays on the board.
   iceLeft--;
-  grid[r][c] = null;
-  fxSparks(r, c, '#dff3ff', 18, 1.3); fxShards(r, c, '#bfe6ff', 8); fxRing(r, c, 2, 'rgba(220,245,255,.95)', 460);
+  fxSparks(r, c, '#dff3ff', 20, 1.4); fxShards(r, c, '#bfe6ff', 9);
+  fxRing(r, c, 2.2, 'rgba(220,245,255,.95)', 480);
   sfx('pop', 1, []);
-  const el = t.el;
-  el.classList.add('pop');
-  setTimeout(() => el.remove(), 470);
+  t.el.classList.remove('born'); void t.el.offsetWidth; t.el.classList.add('born');
+  setTimeout(() => t.el.classList.remove('born'), 340);
   paintGoals(true);
 }
 
@@ -1578,12 +1621,11 @@ function hitIce(r, c) {
 function restoreBlocks(blk) {
   iceLeft = 0;                 // ducksHome comes from the save, don't reset it
   if (!Array.isArray(blk)) return;
-  blk.forEach(([r, c, kind, hits]) => {
+  blk.forEach(([r, c, kind, lvl]) => {
     if (!cellOk(r, c) || !grid[r][c]) return;
+    if (kind === 'ice') { grid[r][c].ice = lvl; iceLeft++; paint(grid[r][c]); return; }
     grid[r][c].el.remove();
-    const t = makeBlock(kind, r, c);
-    if (kind === 'ice') { t.hits = hits; iceLeft++; paint(t); }
-    grid[r][c] = t;
+    grid[r][c] = makeBlock(kind, r, c);
   });
 }
 
@@ -1663,7 +1705,12 @@ function placeBlocks(nDucks, nIce, rng) {
   let ic = 0;
   for (const [, r, c] of spots) {
     if (ic >= nIce) break;
-    if (swap(r, c, 'ice')) { ic++; iceLeft++; }
+    const t = grid[r][c];
+    // Freeze a fruit in place rather than replacing it — the board keeps every
+    // cell, and breaking the frost hands the player a fruit back.
+    if (!t || t.block || t.ice || (covers[r] && covers[r][c])) continue;
+    t.ice = 2; paint(t);
+    ic++; iceLeft++;
   }
 }
 
@@ -1684,7 +1731,7 @@ function buildBoard() {
     if (l1 && l2 && l1.k === l2.k) banned.add(l1.k);
     const u1 = grid[r - 1] && grid[r - 1][c], u2 = grid[r - 2] && grid[r - 2][c];
     if (u1 && u2 && u1.k === u2.k) banned.add(u1.k);
-    let k, guard = 0; do { k = rnd(KN); } while (banned.has(k) && guard++ < 40);
+    let k, guard = 0; do { k = rndL(KN); } while (banned.has(k) && guard++ < 40);
     grid[r][c] = makeTile(k, r, c);
   }
   if (!anyMove()) buildBoard();
@@ -2250,9 +2297,9 @@ async function clearCells(keys, cascade, from, zapFrom, suckTo, chain) {
     const r = Math.floor(key / C), c = key % C;
     const t = grid[r][c];
     if (!t) return;
-    // A blocker is never popped, by a match or by a blast. Ice leaves by being
-    // hit from beside it, a duckling by reaching the floor.
-    if (t.block) return;
+    // Neither a blocker nor frozen fruit is ever popped. Frost is chipped from
+    // beside it; a duckling leaves by reaching the floor.
+    if (t.block || t.ice) return;
     // credit the goal
     if (t.sp !== SP_RAIN) {
       const gi = L.goals.findIndex(g => g.t === 'fruit' && g.k === t.k);
@@ -2535,7 +2582,7 @@ async function reshuffle(silent) {
   if (!silent) { toast('🌀 Let\'s mix!'); sfx('mix'); }
   const flat = [];
   for (let r = 0; r < R; r++) for (let c = 0; c < C; c++)
-    if (grid[r][c] && grid[r][c].sp === SP_NONE && !grid[r][c].block) flat.push(grid[r][c]);
+    if (grid[r][c] && grid[r][c].sp === SP_NONE && !grid[r][c].block && !grid[r][c].ice) flat.push(grid[r][c]);
   for (let tries = 0; tries < 80; tries++) {
     const ks = flat.map(t => t.k);
     for (let i = ks.length - 1; i > 0; i--) { const j = rnd(i + 1); [ks[i], ks[j]] = [ks[j], ks[i]]; }
@@ -2722,6 +2769,7 @@ async function useMix() {
 
 async function trySwap(a, b) {
   if (busy || over) return;
+  if (!a || !b || a.block || b.block || a.ice || b.ice) return;
   busy = true;
   select(null);
   clearNudge();
@@ -2872,7 +2920,7 @@ board.addEventListener('pointerdown', ev => {
   if (!t) return;
   // A blocker isn't yours to move. Tapping it does nothing rather than
   // selecting something that can never make a match.
-  if (t.block && !armed) { sfx('nope'); return; }
+  if ((t.block || t.ice) && !armed) { sfx('nope'); return; }
   if (armed === 'hammer') { useHammer(t); return; }
   if (armed === 'swap') {
     if (!toolPick) { toolPick = t; t.el.classList.add('sel'); sfx('tap'); setFoot('Now tap the one next to it 🔄'); return; }
@@ -2898,7 +2946,11 @@ board.addEventListener('pointermove', ev => {
   const [dr, dc] = Math.abs(dx) > Math.abs(dy) ? [0, Math.sign(dx)] : [Math.sign(dy), 0];
   const r2 = drag.t.r + dr, c2 = drag.t.c + dc;
   if (r2 < 0 || r2 >= R || c2 < 0 || c2 >= C) return;
-  trySwap(drag.t, grid[r2][c2]);
+  const target = grid[r2][c2];
+  // The tap path refused blockers and frozen fruit; the DRAG path did not, so
+  // you could swipe a fruit straight into a block of ice.
+  if (!target || target.block || target.ice) { sfx('nope'); return; }
+  trySwap(drag.t, target);
 });
 board.addEventListener('pointerup', () => { drag = null; });
 board.addEventListener('pointercancel', () => { drag = null; });
@@ -2969,17 +3021,21 @@ let goalSig = '';
 // One chip per goal, whatever kind it is.
 function goalChip(g) {
   if (g.t === 'fruit') return miniTile(g.k);
+  // The ice chip is a miniature of the block itself, not a 🧊 glyph — the chip
+  // should look like the thing you're being asked to break.
   const face = g.t === 'leaf' ? '🍃'
              : g.t === 'score' ? '🏆'
              : g.t === 'drop' ? '🐤'
-             : g.t === 'ice' ? '🧊'
+             : g.t === 'ice' ? ''
              : '✨';
   const bg = g.t === 'leaf' ? 'linear-gradient(160deg,#d6f5b0,#7cc94e)'
            : g.t === 'score' ? 'linear-gradient(160deg,#ffe08a,#f5a524)'
            : g.t === 'drop' ? 'linear-gradient(160deg,#fff2c4,#ffd469)'
-           : g.t === 'ice' ? 'linear-gradient(160deg,#d6f4ff,#96d6f5)'
+           : g.t === 'ice' ? 'linear-gradient(158deg,#eaf8ff,#b6e2f8 42%,#79c2e8)'
            : 'linear-gradient(160deg,#cfe4ff,#7aa8ff)';
-  return '<span class="mini"><span class="shape" style="border-radius:26%;background:' + bg
+  const extra = g.t === 'ice'
+    ? ';box-shadow:inset 0 0 0 2px rgba(255,255,255,.85), inset 0 -3px 0 rgba(26,92,138,.3)' : '';
+  return '<span class="mini"><span class="shape" style="border-radius:26%;background:' + bg + extra
        + '"></span><span class="face">' + face + '</span></span>';
 }
 // Short "12🍓 6🍃" style summary, used on the level card and the menu.
@@ -3202,6 +3258,8 @@ function start(idx, resume, quiet) {
     : 'Tap a fruit, then the one next to it.';
   setFoot(null);
 
+  // Free Play should feel fresh every time; a numbered level must not.
+  levelRng = freePlay ? Math.random : mulberry32(((idx * 2246822519) ^ 0x9E3779B9) >>> 0);
   setShape(L.shape || 'full');   // must precede any board build — it defines the cells
   layout();
   if (resume) {
