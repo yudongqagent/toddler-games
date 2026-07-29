@@ -296,24 +296,26 @@
     25%  { box-shadow:inset 0 0 0 3px rgba(255,255,255,.9), 0 0 34px 8px rgba(255,245,200,.85); }
     100% { box-shadow:inset 0 2px 10px rgba(120,40,80,.18), 0 8px 22px rgba(120,40,80,.2); }
   }
+  /* The board itself is transparent — its shape comes from the cell backings,
+     so a hole is genuinely absent instead of a gap painted on a rectangle. */
   #board {
     position:relative;
     width:calc(var(--cols) * var(--cell));
     height:calc(var(--rows) * var(--cell));
-    background:rgba(255,255,255,.22);
-    border-radius:clamp(16px,4vw,26px);
-    box-shadow:inset 0 2px 10px rgba(120,40,80,.18), 0 8px 22px rgba(120,40,80,.2);
     padding:0;
-    overflow:hidden;
   }
-  /* faint checkerboard so the grid reads even between tiles */
-  #board::before {
-    content:''; position:absolute; inset:0; opacity:.13; pointer-events:none;
-    background-image:
-      linear-gradient(45deg, #fff 25%, transparent 25%, transparent 75%, #fff 75%),
-      linear-gradient(45deg, #fff 25%, transparent 25%, transparent 75%, #fff 75%);
-    background-size:calc(var(--cell)*2) calc(var(--cell)*2);
-    background-position:0 0, var(--cell) var(--cell);
+  #cells { position:absolute; inset:0; z-index:0; pointer-events:none; }
+  .cellbg {
+    position:absolute; left:0; top:0;
+    width:var(--cell); height:var(--cell);
+    transform:translate3d(calc(var(--cc) * var(--cell)), calc(var(--cr) * var(--cell)), 0);
+    padding:calc(var(--cell) * .035);
+  }
+  .cellbg::after {
+    content:''; display:block; width:100%; height:100%;
+    border-radius:26%;
+    background:rgba(255,255,255,.20);
+    box-shadow:inset 0 2px 6px rgba(120,40,80,.16);
   }
 
   .tile {
@@ -795,7 +797,7 @@
       <button class="tool" data-t="mix"><span class="ic">🌀</span><span class="ct"></span></button>
     </div>
   </div>
-  <div id="board-wrap"><canvas id="fx"></canvas><div id="board"><div id="covers"></div></div></div>
+  <div id="board-wrap"><canvas id="fx"></canvas><div id="board"><div id="cells"></div><div id="covers"></div></div></div>
   <div id="levelcard"><div class="lc-in"><div class="lc-n"></div><div class="lc-goals"></div></div></div>
   <p class="footnote" id="foot">Tap a fruit, then tap the one next to it.</p>
 </div>
@@ -898,6 +900,29 @@ const SP_NONE = 0, SP_STAR = 1, SP_RAIN = 2, SP_BOMB = 3;
    about one per move. Budget is 1.6x the binding constraint — a safety net wide
    enough that a child swapping at random still finishes.                      */
 const ROWS = 7, COLS = 7;
+
+/* ---------------- board shapes ----------------
+   The single biggest reason every level felt the same was that every level was
+   the same rectangle. A silhouette gives a level an identity you can see at a
+   glance AND changes how it plays: narrow columns cascade vertically, a pinched
+   waist funnels everything through the middle, a wedge makes one side deeper.
+
+   Every shape is defined as ONE CONTIGUOUS VERTICAL SPAN PER COLUMN. That is a
+   deliberate constraint: it means gravity stays a simple per-column fall with no
+   flowing around corners, which is where board-shape bugs live. */
+const SHAPES = ['full', 'diamond', 'bowl', 'arch', 'plus', 'wedge'];
+function spanFor(shape, c) {
+  const d = Math.abs(c - (COLS - 1) / 2);
+  const k = Math.max(0, Math.round(d) - 1);
+  switch (shape) {
+    case 'diamond': return [k, ROWS - 1 - k];              // corners cut both ends
+    case 'bowl':    return [k, ROWS - 1];                  // cut the top corners
+    case 'arch':    return [0, ROWS - 1 - k];              // cut the bottom corners
+    case 'plus':    return d <= 1 ? [0, ROWS - 1] : [2, ROWS - 3];
+    case 'wedge':   return [0, ROWS - 1 - Math.floor(c / 2)];
+    default:        return [0, ROWS - 1];
+  }
+}
 // All four measured from real play, and all four are what the move budget is
 // derived from — see cost() in levelFor.
 const TILES_PER_MOVE    = 6.2;   // fruit cleared per move, naive play
@@ -972,9 +997,13 @@ function levelFor(n) {
     rows: ROWS, cols: COLS, kinds, moves, goals,
     covers: (goals.find(g => g.t === 'leaf') || {}).need || 0,
     pattern: COVER_PATTERNS[(n - 1) % COVER_PATTERNS.length],
+    // Level 1 and 2 are the plain rectangle so the very first boards are as
+    // simple as possible; after that the silhouette rotates independently of
+    // the goal rotation, so shape and objective don't repeat in lockstep.
+    shape: n < 3 ? 'full' : SHAPES[(n + 2) % SHAPES.length],
   };
 }
-const FREE = { name:'Free Play', emoji:'🎈', rows:ROWS, cols:COLS, kinds:5, moves:0, goals:[], covers:0 };
+const FREE = { name:'Free Play', emoji:'🎈', rows:ROWS, cols:COLS, kinds:5, moves:0, goals:[], covers:0, shape:'full' };
 // 3 stars if you finish inside par, 2 inside the stretch, 1 for finishing at all.
 // Tuned against measured play: budgets stay generous enough that every level is
 // finishable by a child swapping more or less at random, but at 0.75 that same
@@ -1140,6 +1169,11 @@ function buzz(ms) { if (vibeOn && navigator.vibrate) try { navigator.vibrate(ms)
 let L = null, levelNo = 0, freePlay = false;
 let R = 0, C = 0, KN = 4;
 let grid = [];               // grid[r][c] = tile | null
+// The board's silhouette: rows [colTop[c] .. colBot[c]] exist in column c, the rest
+// are holes. A null in `grid` means either "cleared right now" or "not part of
+// this board" — cellOk is the authority on which.
+let colTop = [], colBot = [];
+const cellOk = (r, c) => c >= 0 && c < C && r >= colTop[c] && r <= colBot[c];
 let score = 0, movesLeft = 0, movesUsed = 0, usedHelp = false;
 let goalGot = [];            // parallel to L.goals (fruit counts)
 let boostMade = {};          // boosters created this level, by kind
@@ -1337,12 +1371,12 @@ function hintMove() {
 
 function anyMove() {
   for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) {
-    if (isRain(grid[r][c])) return [[r, c], [r, c + 1 < C ? c + 1 : c - 1]];
+    if (!grid[r][c]) continue;                       // a hole in the board
     for (const [dr, dc] of [[0, 1], [1, 0]]) {
       const r2 = r + dr, c2 = c + dc;
-      if (r2 >= R || c2 >= C) continue;
-      if (isRain(grid[r2][c2])) return [[r, c], [r2, c2]];
+      if (r2 >= R || c2 >= C || !grid[r2][c2]) continue;
       const a = grid[r][c], b = grid[r2][c2];
+      if (isRain(a) || isRain(b)) return [[r, c], [r2, c2]];
       grid[r][c] = b; grid[r2][c2] = a;
       const hit = runsOn(grid).length > 0;
       grid[r][c] = a; grid[r2][c2] = b;
@@ -1379,9 +1413,10 @@ function makeCovers(n, pattern) {
     return man;                                     // diamond
   };
   const cells = [];
-  for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) cells.push([rank(r, c), r, c]);
+  // Only cells that exist on this board — a leaf on a hole could never be swept.
+  for (let c = 0; c < C; c++) for (let r = colTop[c]; r <= colBot[c]; r++) cells.push([rank(r, c), r, c]);
   cells.sort((a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2]);
-  cells.slice(0, Math.min(n, R * C)).forEach(([, r, c]) => { covers[r][c] = 1; coversLeft++; });
+  cells.slice(0, Math.min(n, cells.length)).forEach(([, r, c]) => { covers[r][c] = 1; coversLeft++; });
   paintCovers();
 }
 function paintCovers() {
@@ -1414,16 +1449,33 @@ function sweepCover(r, c) {
   return true;
 }
 
+// The board's silhouette gets its own layer of cell backings, so a hole is
+// genuinely absent rather than a gap painted onto a rectangle.
+function paintCells() {
+  const host = $('cells');
+  let html = '';
+  for (let c = 0; c < C; c++) for (let r = colTop[c]; r <= colBot[c]; r++)
+    html += '<div class="cellbg" style="--cr:' + r + ';--cc:' + c + '"></div>';
+  host.innerHTML = html;
+}
+function setShape(shape) {
+  colTop = []; colBot = [];
+  for (let c = 0; c < C; c++) { const [t, b] = spanFor(shape, c); colTop[c] = t; colBot[c] = b; }
+  paintCells();
+}
+
 function buildBoard() {
   clearTiles();
   grid = [];
   for (let r = 0; r < R; r++) { grid[r] = []; for (let c = 0; c < C; c++) grid[r][c] = null; }
   // Deal a board with no free matches — the first pop should be the player's.
-  for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) {
+  for (let c = 0; c < C; c++) for (let r = colTop[c]; r <= colBot[c]; r++) {
     const banned = new Set();
-    if (c >= 2 && grid[r][c - 1].k === grid[r][c - 2].k) banned.add(grid[r][c - 1].k);
-    if (r >= 2 && grid[r - 1][c].k === grid[r - 2][c].k) banned.add(grid[r - 1][c].k);
-    let k; do { k = rnd(KN); } while (banned.has(k));
+    const l1 = grid[r][c - 1], l2 = grid[r][c - 2];
+    if (l1 && l2 && l1.k === l2.k) banned.add(l1.k);
+    const u1 = grid[r - 1] && grid[r - 1][c], u2 = grid[r - 2] && grid[r - 2][c];
+    if (u1 && u2 && u1.k === u2.k) banned.add(u1.k);
+    let k, guard = 0; do { k = rnd(KN); } while (banned.has(k) && guard++ < 40);
     grid[r][c] = makeTile(k, r, c);
   }
   if (!anyMove()) buildBoard();
@@ -1432,12 +1484,10 @@ function buildBoard() {
 function restoreBoard(saved) {
   clearTiles();
   grid = [];
-  for (let r = 0; r < R; r++) {
-    grid[r] = [];
-    for (let c = 0; c < C; c++) {
-      const s = saved[r] && saved[r][c];
-      grid[r][c] = s ? makeTile(s[0], r, c, s[1]) : makeTile(rnd(KN), r, c);
-    }
+  for (let r = 0; r < R; r++) { grid[r] = []; for (let c = 0; c < C; c++) grid[r][c] = null; }
+  for (let c = 0; c < C; c++) for (let r = colTop[c]; r <= colBot[c]; r++) {
+    const s = saved[r] && saved[r][c];
+    grid[r][c] = s ? makeTile(s[0], r, c, s[1]) : makeTile(rnd(KN), r, c);
   }
 }
 
@@ -1667,6 +1717,48 @@ function fxBolt(fr, fc, tr, tc) {
     g.strokeStyle = 'rgba(255,255,255,.98)'; g.lineWidth = a.cell * .08 * fade; drawPath();
   });
 }
+// A bomb clears a SQUARE, so its wave is a square. A circle was telling you
+// the wrong shape.
+function fxSquare(r, c, span, colour, dur) {
+  const { x, y, cell } = fxAt(r, c);
+  const half = span * cell * .5;
+  fxPush(dur || 520, (g, p) => {
+    const h = Math.max(1, half * easeOut(p));
+    g.globalAlpha = (1 - p) * .95;
+    g.strokeStyle = colour || '#fff';
+    g.lineWidth = Math.max(1, cell * .15 * (1 - p));
+    g.lineJoin = 'round';
+    const rad = Math.min(h * .5, cell * .38);
+    g.beginPath();
+    if (g.roundRect) g.roundRect(x - h, y - h, h * 2, h * 2, rad);
+    else g.rect(x - h, y - h, h * 2, h * 2);
+    g.stroke();
+  });
+}
+// Star + bomb clears a cross THREE lanes wide, but it was drawing the ordinary
+// one-lane cross — the visual was describing a different move than the one the
+// game actually made. The lanes now widen outward from the centre so it reads
+// as one growing cross rather than twelve separate beams fired at once.
+function fxMegaCross(r, c) {
+  fxFlash(r, c, 4.5, 'rgba(255,240,170,');
+  fxRing(r, c, 3.4, 'rgba(255,240,180,.9)', 580);
+  fxSparks(r, c, '#ffe6a0', 20, 1.7);
+  const lane = off => {
+    if (r + off >= 0 && r + off < R) { fxBeam(r + off, c, 0, 1); fxBeam(r + off, c, 0, -1); }
+    if (c + off >= 0 && c + off < C) { fxBeam(r, c + off, 1, 0); fxBeam(r, c + off, -1, 0); }
+  };
+  lane(0);
+  if (!REDUCED) { setTimeout(() => { lane(-1); lane(1); }, 95); } else { lane(-1); lane(1); }
+}
+// The bomb's own blast: square wave, twin outlines, real debris.
+function bombBlast(r, c, span) {
+  fxFlash(r, c, Math.min(span, 5), 'rgba(255,205,130,');
+  fxSquare(r, c, span, 'rgba(255,255,255,.95)', 540);
+  fxSquare(r, c, span * .68, 'rgba(255,190,95,.85)', 430);
+  fxSparks(r, c, '#ffd48a', span > 3 ? 24 : 16, span > 3 ? 1.9 : 1.5);
+  fxShards(r, c, '#ffbe6b', span > 3 ? 10 : 7);
+}
+
 // Sparks running INWARD — the grammar of something being assembled.
 function fxImplode(r, c, colour) {
   const { x, y, cell } = fxAt(r, c);
@@ -1873,7 +1965,7 @@ function expand(set) {
       // The visual and the sound fire when the chain actually arrives here.
       const go = () => {
         if (sp === SP_STAR) starBeams(at[0], at[1]);
-        else if (sp === SP_BOMB) shockwave(at[0], at[1], 2 * (rad || 1) + 1);
+        else if (sp === SP_BOMB) bombBlast(at[0], at[1], 2 * (rad || 1) + 1);
         else shockwave(at[0], at[1]);
         sfx('blast', Math.min(d, 4));
         buzz(d ? 16 : 30);
@@ -2005,8 +2097,10 @@ async function clearCells(keys, cascade, from, zapFrom, suckTo, chain) {
 async function gravity() {
   let maxDrop = 0, landed = [];
   for (let c = 0; c < C; c++) {
-    let write = R - 1;
-    for (let r = R - 1; r >= 0; r--) {
+    // Fall only within this column's span — the holes above and below it are
+    // not part of the board.
+    let write = colBot[c];
+    for (let r = colBot[c]; r >= colTop[c]; r--) {
       const t = grid[r][c];
       if (!t) continue;
       if (write !== r) {
@@ -2022,7 +2116,7 @@ async function gravity() {
     }
     // refill from above the ceiling
     let above = 1;
-    for (let r = write; r >= 0; r--) {
+    for (let r = write; r >= colTop[c]; r--) {
       // Born above the ceiling, then walked down to its slot in the same tick —
       // makeTile has already flushed layout, so the transition still animates,
       // and the model never sees a tile parked at a negative row.
@@ -2217,7 +2311,8 @@ function shake() {
 async function reshuffle(silent) {
   if (!silent) { toast('🌀 Let\'s mix!'); sfx('mix'); }
   const flat = [];
-  for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) if (grid[r][c].sp === SP_NONE) flat.push(grid[r][c]);
+  for (let r = 0; r < R; r++) for (let c = 0; c < C; c++)
+    if (grid[r][c] && grid[r][c].sp === SP_NONE) flat.push(grid[r][c]);
   for (let tries = 0; tries < 80; tries++) {
     const ks = flat.map(t => t.k);
     for (let i = ks.length - 1; i > 0; i--) { const j = rnd(i + 1); [ks[i], ks[j]] = [ks[j], ks[i]]; }
@@ -2286,8 +2381,7 @@ async function activate(t) {
     await resolve(null);
     return settle();
   } else if (t.sp === SP_BOMB) {
-    blastCells(t.r, t.c, SP_BOMB, t.k, keys, t.radius);
-    shockwave(at[0], at[1], 2 * (t.radius || 1) + 1);
+    bombBlast(at[0], at[1], 2 * (t.radius || 1) + 1);
   } else {
     blastCells(t.r, t.c, SP_STAR, t.k, keys);
     starBeams(at[0], at[1]);
@@ -2482,7 +2576,7 @@ async function trySwap(a, b) {
       }
       bomb.fired = star.fired = true;
       toast('⭐ MEGA CROSS!');
-      starBeams(star.r, star.c);
+      fxMegaCross(star.r, star.c);
     } else {
       toast('⭐ DOUBLE!');                    // star + star: both crosses fire
     }
@@ -2871,6 +2965,7 @@ function start(idx, resume, quiet) {
     : 'Tap a fruit, then the one next to it.';
   setFoot(null);
 
+  setShape(L.shape || 'full');   // must precede any board build — it defines the cells
   layout();
   if (resume) {
     restoreBoard(resume.grid);

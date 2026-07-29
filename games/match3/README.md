@@ -26,7 +26,12 @@ the blast, so what a booster does is guessable rather than memorised:
 
 Swap two boosters together and they combine — a bomb pair makes one much
 bigger blast, star + bomb makes a three-wide cross, and a rainbow turns every
-fruit of a colour into the other booster and sets them all off at once. That
+fruit of a colour into the other booster and sets them all off at once. The
+combined blasts draw what they actually do: star + bomb throws **three lanes of
+light each way**, widening outward from the centre lane so it reads as one
+growing cross (it used to clear a three-wide cross while drawing a one-wide
+one — the visual was describing a different move than the game made), and a
+bomb's wave is a **square**, because a square is what a bomb clears. That
 last one converts them **one at a time**, nearest first, each getting its own
 bolt, so you watch the rainbow seed the whole board before any of it goes off.
 Measured on a real board: 12 fruit converted, 13 bombs detonating, 45 of 49
@@ -123,6 +128,22 @@ generated from their number rather than authored, so there's always another
 one, and Level 34 is the same board every time you replay it. Beating a level
 unlocks the next; the menu keeps every level you've reached, with its stars,
 and a **total score that never resets**.
+
+**Every level has a shape.** The single biggest reason levels felt identical
+was that every level was the same rectangle — so there was no spatial thinking
+at all, only "find any match". Boards now come in six silhouettes: `full`,
+`diamond`, `bowl`, `arch`, `plus` and `wedge`. It gives each level an identity
+you can see instantly, and it changes how it plays — narrow columns cascade
+vertically, a pinched waist funnels everything through the middle, a wedge
+makes one side deeper than the other.
+
+Each shape is defined as **one contiguous vertical span per column**. That's a
+deliberate constraint, not a limitation: it means gravity stays a simple
+per-column fall with no flowing diagonally around corners, which is where
+board-shape bugs live. The board itself is transparent and its silhouette comes
+from a layer of cell backings, so a hole is genuinely absent rather than a gap
+painted onto a rectangle. Shape rotates independently of the goal rotation, so
+the two don't repeat in lockstep.
 
 **Five kinds of level, in rotation**, so no two in a row ask the same thing:
 
