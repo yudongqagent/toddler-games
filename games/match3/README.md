@@ -140,9 +140,15 @@ fun. Levels get their identity from what's **on** the board instead:
 Frost is a **layer on a fruit**, not a tile of its own. That matters three ways:
 the board never loses a cell to it, you can see which fruit you're about to
 free, and it can't render as a blank white square — which is exactly what an
-opaque blue block with an 🧊 glyph did. Two layers thick reads as a heavy
-frosted slab; one layer is thinner, smaller and visibly fractured, with the
-fruit's colour clear underneath. Chip the last layer and the fruit is simply
+opaque blue block with an 🧊 glyph did. Most frost is a **single layer** you can free in one match; thick two-layer
+blocks creep in from level 12 as a growing minority. Uniform double frost was
+tedious. A thick block reads as a heavy frosted slab; a single layer is
+thinner, inset smaller and visibly fractured, with the fruit clear underneath.
+
+The frost is a saturated translucent **blue**, with white kept to the edges,
+and it uses no `backdrop-filter` — iOS Safari needs the `-webkit-` prefix for
+that and its blur washed the colour out on a small bright screen, which is what
+made frozen fruit read as flat white on an iPhone. Chip the last layer and the fruit is simply
 yours, sitting right there ready to match.
 
 The duckling is the one true blocker — not fruit, never poppable — and uses a
