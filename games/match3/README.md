@@ -425,6 +425,53 @@ audience can't read.
 One self-contained `index.html` — vanilla HTML/CSS/JS, zero dependencies, no
 build step. Sound is synthesized with WebAudio (no audio files).
 
+### Sound
+
+Every voice used to connect straight to `ctx.destination`. That is fine for one
+beep and wrong for this game: a five-deep cascade fires twenty voices inside a
+second, they sum past 1.0, and a phone speaker turns that into crackle exactly
+when the game is at its most exciting. Voices now run through a master gain into
+a **limiter** — hard ratio, 3ms attack, so peaks are caught and nothing below the
+threshold is touched. Measured, a six-deep cascade drives it to −2.9 dB of gain
+reduction, and ordinary play to −2.4: a big moment now gets *louder* rather than
+dirtier.
+
+Everything also has a little room around it, from a **short synthetic reverb**
+(noise with an exponential decay, generated once at startup) on a send, so each
+sound picks how wet it is — pops stay close and dry, blasts bloom. That send is
+most of the difference between a designed soundscape and a pile of beeps.
+
+Sounds are built from four parts: a **click** for the physical contact, a pitched
+**body**, a **noise** layer for texture, and the reverb send for size. What
+separates one from another is which parts are present and in what proportion,
+which is why they sit together rather than competing. The body uses two
+oscillators a few cents apart so it has width instead of sounding like a test
+tone, and its attack is 2ms rather than 12ms — that edge on the front is most of
+what makes a pop read as a pop rather than as a note.
+
+**The cascade ladder is the most satisfying thing in the genre**, and it was the
+most undercooked thing here. Each step of a chain comes back higher than the
+last; the old one capped after three steps and jumped a half-octave at a time, so
+it ran out of ladder exactly when the cascade got impressive. It now climbs ten
+steps of the pentatonic scale, and from the third step on it puts a low thump
+underneath as well. Everything in the game is in C major pentatonic, so any two
+sounds that happen to overlap are consonant — which matters more here than in
+most games, because cascades routinely play six things at once.
+
+A few sounds were rebuilt around what they actually depict rather than what was
+easy to synthesise. The swap is one upward swish instead of two beeps, because it
+is one thing travelling. The rainbow's wind-up is a continuous rise instead of a
+staircase of pings. The blast is layered — sub thump for the chest, noise burst
+for the air, falling saw for the body — because one oscillator can never sound
+like an explosion. Winning is a real six-note phrase over a bass note rather than
+a run up the scale. Gifts get a bell with a proper inharmonic partial; coconuts
+get a woody snap built from high-Q noise, which is what makes it read as
+something splitting rather than something exploding. The "wrong move" sound stays
+deliberately soft and low: a wrong move costs nothing here, so it has to say
+"not that one", never buzz at a child.
+
+Cost is about 20 oscillators and 8 noise buffers per move, all short-lived.
+
 **Hybrid renderer.** Tiles are absolutely-positioned divs moved with CSS
 transforms — GPU-composited, and they stay real elements so the board is
 readable to a screen reader. Every *effect* (sparks, shards, rings, blooms,

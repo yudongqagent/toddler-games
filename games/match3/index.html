@@ -10,6 +10,27 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍓</text></svg>">
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+  /* ---------- shared outer shell (identical in every game) ----------------
+     Safe-area insets go through variables so the whole app reads them from
+     one place — and so they can be overridden to rehearse a notch/Dynamic
+     Island on a device that doesn't have one. */
+  :root {
+    --sat:env(safe-area-inset-top, 0px);
+    --sar:env(safe-area-inset-right, 0px);
+    --sab:env(safe-area-inset-bottom, 0px);
+    --sal:env(safe-area-inset-left, 0px);
+    --chrome:clamp(44px,10vw,54px);   /* corner button size */
+    --cgap:10px;                      /* its margin from the safe edge */
+    --chrome-row:calc(var(--sat) + var(--chrome) + var(--cgap) * 2);
+  }
+  /* The gradient lives on <html>, not <body>: the root background is painted
+     over the whole canvas, so it reaches under the home indicator instead of
+     stopping at the body box and leaving a white strip when installed. */
+  html {
+    background:linear-gradient(160deg,#ffb37a 0%,#ff8fa8 45%,#c98bff 100%);
+    background-attachment:fixed;
+  }
   html, body {
     height:100%; overflow:hidden;
     touch-action:manipulation;
@@ -17,10 +38,27 @@
     font-family:-apple-system-rounded, "SF Pro Rounded", -apple-system, "Segoe UI", "Comic Sans MS", sans-serif;
   }
   body {
-    background:linear-gradient(160deg,#ffb37a 0%,#ff8fa8 45%,#c98bff 100%);
+    background:none;
     display:flex; flex-direction:column; align-items:center;
-    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   }
+
+  /* back top-left, settings top-right — the same two buttons, in the same
+     place, on every screen of every game */
+  .chrome-btn {
+    position:fixed; z-index:60;
+    top:calc(var(--sat) + var(--cgap));
+    width:var(--chrome); height:var(--chrome);
+    border:none; cursor:pointer; border-radius:50%;
+    background:#ffffffee; color:#ff6f91;
+    display:flex; align-items:center; justify-content:center;
+    font-size:calc(var(--chrome) * .46); font-weight:800; font-family:inherit;
+    box-shadow:0 4px 0 rgba(0,0,0,.15), inset 0 2px 0 rgba(255,255,255,.9);
+    transition:transform .1s;
+  }
+  .chrome-btn:active { transform:translateY(3px); box-shadow:0 1px 0 rgba(0,0,0,.15); }
+  .chrome-back { left:calc(var(--sal) + var(--cgap)); }
+  .chrome-set  { right:calc(var(--sar) + var(--cgap)); }
+  .chrome-btn[hidden] { display:none; }
 
   .bub {
     position:fixed; border-radius:50%; z-index:0; pointer-events:none;
@@ -1376,65 +1414,265 @@ function validSave(sv, i) {
 /* ---------------- sound (WebAudio, no assets) ---------------- */
 let soundOn = localStorage.getItem('match3-sound') !== 'off';
 let vibeOn  = localStorage.getItem('match3-vibe')  !== 'off';
-let actx = null;
+/* ---------------- sound ----------------
+   Everything is synthesised — no audio files, so the whole game stays one file
+   that works offline.
+
+   THE BUS. Every voice used to connect straight to ctx.destination, which is
+   fine for one beep and wrong for this game: a five-deep cascade fires twenty
+   voices inside a second, they sum past 1.0, and a phone speaker turns that into
+   crackle exactly when the game is at its most exciting. Voices now go through a
+   master gain into a limiter, so a big moment gets LOUDER rather than dirtier.
+
+   Everything also has a little room around it. A short synthetic reverb — noise
+   with an exponential decay, generated once — is most of the difference between
+   sounds that read as a designed soundscape and sounds that read as beeps. It is
+   on a send, so each voice picks how wet it is: pops stay close and dry, big
+   blasts bloom.
+
+   Everything is in C major pentatonic, so no two sounds that happen to overlap
+   can ever be dissonant. That matters more here than in most games, because
+   cascades routinely play six things at once. */
+let actx = null, busDry = null, busWet = null, master = null, limiter = null;
 function ac() {
-  if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+  if (!actx) {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    master = actx.createGain(); master.gain.value = .9;
+    // A limiter, not a compressor: hard ratio, fast attack, so peaks are caught
+    // and nothing below the threshold is squashed.
+    const lim = actx.createDynamicsCompressor();
+    lim.threshold.value = -8; lim.knee.value = 0; lim.ratio.value = 20;
+    lim.attack.value = .003; lim.release.value = .25;
+    master.connect(lim); lim.connect(actx.destination);
+    limiter = lim;                       // exposed so its gain reduction is measurable
+
+    busDry = actx.createGain(); busDry.gain.value = 1;
+    busDry.connect(master);
+
+    const rev = actx.createConvolver();
+    const len = Math.floor(actx.sampleRate * .9);
+    const ir = actx.createBuffer(2, len, actx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = ir.getChannelData(ch);
+      for (let i = 0; i < len; i++) {
+        // Slight pre-delay by starting quiet, then an exponential tail.
+        const t = i / len;
+        d[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, 2.6) * Math.min(1, t * 40);
+      }
+    }
+    rev.buffer = ir;
+    busWet = actx.createGain(); busWet.gain.value = .34;
+    busWet.connect(rev); rev.connect(master);
+  }
   if (actx.state === 'suspended') actx.resume();
   return actx;
 }
-function tone(freq, t0, dur, type = 'triangle', vol = .16) {
-  const ctx = ac(), o = ctx.createOscillator(), g = ctx.createGain();
-  o.type = type; o.frequency.value = freq;
-  g.gain.setValueAtTime(0, ctx.currentTime + t0);
-  g.gain.linearRampToValueAtTime(vol, ctx.currentTime + t0 + .012);
-  g.gain.exponentialRampToValueAtTime(.001, ctx.currentTime + t0 + dur);
-  o.connect(g); g.connect(ctx.destination);
-  o.start(ctx.currentTime + t0); o.stop(ctx.currentTime + t0 + dur + .05);
+// Route one voice to the dry bus and, optionally, to the reverb send.
+function out(node, send) {
+  node.connect(busDry);
+  if (send) { const s = ac().createGain(); s.gain.value = send; node.connect(s); s.connect(busWet); }
 }
-function noise(t0, dur, vol = .1, hz = 1400) {
-  const ctx = ac(), n = Math.floor(ctx.sampleRate * dur);
+/* A pitched voice. Two oscillators a few cents apart give it width and stop it
+   sounding like a test tone, and the attack is 2ms rather than 12ms so there is
+   an audible edge on the front — that edge is most of what makes a pop read as a
+   pop rather than as a note. `bend` slides the pitch over the note, which is what
+   turns a tone into a "boing", a "zap" or a "thud" depending on the direction. */
+function blip(freq, t0, dur, o = {}) {
+  const ctx = ac(), T = ctx.currentTime + t0;
+  const vol = o.vol == null ? .16 : o.vol;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(.0001, T);
+  g.gain.exponentialRampToValueAtTime(Math.max(.0002, vol), T + (o.attack || .002));
+  g.gain.exponentialRampToValueAtTime(.0001, T + dur);
+  const oscs = [];
+  for (const cents of (o.detune == null ? [-5, 5] : [0])) {
+    const osc = ctx.createOscillator();
+    osc.type = o.type || 'triangle';
+    osc.detune.value = cents + (o.detune || 0);
+    osc.frequency.setValueAtTime(freq, T);
+    if (o.bend) osc.frequency.exponentialRampToValueAtTime(Math.max(20, freq * o.bend), T + dur);
+    osc.connect(g); osc.start(T); osc.stop(T + dur + .05);
+    oscs.push(osc);
+  }
+  out(g, o.send);
+}
+// Filtered noise. `q` high enough makes it ring, which is how you get a woody
+// crack out of the same generator that makes a soft "shh".
+function noise(t0, dur, vol = .1, hz = 1400, o = {}) {
+  const ctx = ac(), n = Math.max(1, Math.floor(ctx.sampleRate * dur));
   const buf = ctx.createBuffer(1, n, ctx.sampleRate), d = buf.getChannelData(0);
-  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+  const curve = o.curve || 1;
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, curve);
   const src = ctx.createBufferSource(); src.buffer = buf;
-  const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = hz;
+  const f = ctx.createBiquadFilter();
+  f.type = o.type || 'bandpass'; f.frequency.value = hz; f.Q.value = o.q || 1;
+  if (o.hz2) f.frequency.exponentialRampToValueAtTime(o.hz2, ctx.currentTime + t0 + dur);
   const g = ctx.createGain(); g.gain.value = vol;
-  src.connect(f); f.connect(g); g.connect(ctx.destination);
+  src.connect(f); f.connect(g);
+  out(g, o.send);
   src.start(ctx.currentTime + t0);
+}
+// The transient. Two milliseconds of bright noise, which the ear hears as the
+// physical contact rather than as a sound of its own.
+function click(t0, vol = .09, hz = 3000) { noise(t0, .015, vol, hz, { q: .7, curve: 2.2 }); }
+// A body thump with the pitch falling away — impacts, landings, blasts.
+function thud(t0, freq = 150, dur = .18, vol = .22, send) {
+  blip(freq, t0, dur, { type: 'sine', vol, bend: .45, detune: 0, send });
 }
 // Major pentatonic — every cascade step lands on a consonant note.
 const PENTA = [1, 9/8, 5/4, 3/2, 5/3, 2, 9/4, 5/2, 3];
+// The cascade ladder, and the single most satisfying thing in the genre: each
+// step of a chain comes back a little higher than the last. The old one capped
+// after three steps and jumped a half-octave at a time, so it ran out of ladder
+// exactly when the cascade got impressive. Ten steps up the pentatonic scale
+// instead, which keeps climbing for as long as the board keeps giving.
+const rung = n => PENTA[Math.min(n, PENTA.length - 1)];
+// A touch of pitch variance so the hundredth pop of a session doesn't land on
+// exactly the same frequency as the first.
+const hum = () => 1 + (Math.random() - .5) * .012;
+/* Every sound is built from the same four parts — a click for the contact, a
+   pitched body, a noise layer for texture, and a reverb send for size. What
+   separates them is which parts are present and in what proportion, which is why
+   they sit together instead of competing. */
 function sfx(name, n = 0, notes) {
   if (!soundOn) return;
   try {
-    if (name === 'tap')   tone(560, 0, .07, 'triangle', .1);
-    if (name === 'swap')  { tone(430, 0, .07, 'sine', .1); tone(560, .05, .09, 'sine', .1); }
-    if (name === 'nope')  { tone(250, 0, .1, 'sine', .09); tone(205, .08, .13, 'sine', .09); }
-    if (name === 'pop') {
-      // The cascade sets the octave; the fruit sets the note. Clearing three
-      // bananas always sounds like bananas, one octave up per chain step.
-      const oct = Math.pow(2, Math.min(n, 3) / 2);
-      const uniq = [...new Set(notes || [])].slice(0, 4);
-      if (uniq.length) {
-        uniq.forEach((note, i) => tone(523 * PENTA[note] * oct, i * .035, .16, 'triangle', .13));
-      } else {
-        tone(523 * oct, 0, .1, 'triangle', .15);
-      }
-      noise(0, .07, .05, 2200);
+    const C4 = 523.25;
+
+    if (name === 'tap') { click(0, .05, 2600); blip(880 * hum(), 0, .07, { vol: .07, send: .1 }); }
+
+    // A short upward swish rather than two beeps: this is a movement, so it
+    // should sound like one thing travelling, not two things happening.
+    if (name === 'swap') {
+      noise(0, .13, .05, 900, { hz2: 2600, q: 1.6, send: .12 });
+      blip(660 * hum(), .02, .12, { vol: .06, bend: 1.32, send: .12 });
     }
-    if (name === 'land')  noise(0, .05, .035, 700);
-    if (name === 'leaf')  { noise(0, .16, .07, 3200); tone(300, 0, .1, 'sine', .05); }
-    if (name === 'make')  [784, 988, 1319, 1568].forEach((f, i) => tone(f, i * .06, .18, 'triangle', .13));
-    if (name === 'lucky') [523, 784, 1047, 1319, 1568].forEach((f, i) => tone(f, i * .05, .22, 'triangle', .14));
-    if (name === 'level') { [392, 523, 659, 784].forEach((f, i) => tone(f, i * .09, .34, 'triangle', .13)); noise(.05, .3, .03, 1200); }
-    // the orb spinning up, then a bright ping per fruit it takes
-    if (name === 'windup') { for (let i = 0; i < 9; i++) tone(300 + i * 95, i * .038, .1, 'triangle', .07); }
-    if (name === 'swing')  { noise(0, .13, .07, 700); tone(180, .1, .12, 'sine', .1); }
-    if (name === 'zap') { tone(1500 + Math.random() * 700, 0, .07, 'triangle', .09); noise(0, .05, .04, 4200); }
-    if (name === 'blast') { noise(0, .3, .1, 900); [660, 520, 400].forEach((f, i) => tone(f, i * .05, .2, 'sawtooth', .07)); }
-    if (name === 'goal')  { tone(880, 0, .09, 'sine', .12); tone(1319, .07, .14, 'sine', .1); }
-    if (name === 'mix')   { for (let i = 0; i < 6; i++) tone(400 + i * 90, i * .04, .1, 'sine', .07); }
-    if (name === 'win')   [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, i * .12, .28, 'triangle', .16));
-    if (name === 'star')  tone(880 * Math.pow(2, n / 12 * 4), 0, .3, 'triangle', .16);
+
+    // Deliberately soft and low. A wrong move costs nothing here, so the sound
+    // has to read as "not that one", never as a buzzer.
+    if (name === 'nope') {
+      blip(300, 0, .1, { type: 'sine', vol: .07, send: .1 });
+      blip(232, .07, .16, { type: 'sine', vol: .07, send: .12 });
+    }
+
+    if (name === 'pop') {
+      // The fruit picks the note, the cascade picks how far up the scale it
+      // sits, so clearing three bananas always sounds like bananas — just
+      // brighter the deeper the chain runs.
+      const step = rung(n);
+      const uniq = [...new Set(notes || [])].slice(0, 4);
+      click(0, .06 + Math.min(n, 6) * .012, 3200);
+      const send = .12 + Math.min(n, 8) * .035;
+      if (uniq.length) {
+        uniq.forEach((note, i) => blip(C4 * PENTA[note] * step * hum(), i * .032, .19,
+          { vol: .12, bend: 1.01, send }));
+      } else {
+        blip(C4 * step * hum(), 0, .15, { vol: .13, send });
+      }
+      noise(0, .09, .045, 2400, { q: .8, send });
+      // A chain that has run a few deep earns some weight underneath it.
+      if (n >= 2) thud(0, 110 + n * 12, .16, .1 + Math.min(n, 6) * .015, .2);
+    }
+
+    // Fruit arriving. Soft, low, and quiet — it happens constantly, so it has to
+    // sit under everything else rather than beside it.
+    if (name === 'land') { noise(0, .07, .028, 480, { q: .9, curve: 1.6 }); thud(0, 130, .1, .05); }
+
+    if (name === 'leaf') {
+      noise(0, .2, .06, 2600, { hz2: 5200, q: .8, send: .3 });
+      blip(392 * hum(), .01, .16, { type: 'sine', vol: .05, send: .25 });
+    }
+
+    // A booster being born: a rising figure that lands on the octave, with a
+    // shimmer over the top. It should sound like a reward, not like a match.
+    if (name === 'make') {
+      [0, 2, 4, 5].forEach((i, k) => blip(C4 * PENTA[i] * 1.5, k * .055, .3,
+        { vol: .12, send: .3 }));
+      blip(C4 * 4, .16, .5, { type: 'sine', vol: .05, send: .5 });
+      click(0, .05, 4000);
+    }
+    if (name === 'lucky') {
+      [0, 2, 4, 5, 7].forEach((i, k) => blip(C4 * PENTA[i] * 1.5, k * .05, .34,
+        { vol: .13, send: .34 }));
+      blip(C4 * 6, .2, .6, { type: 'sine', vol: .05, send: .55 });
+    }
+
+    // Gift opening — bright, bell-like, unmistakably a present.
+    if (name === 'gift') {
+      [0, 4, 7].forEach((i, k) => {
+        const f = C4 * PENTA[i] * 2;
+        blip(f, k * .05, .5, { type: 'sine', vol: .11, send: .45 });
+        blip(f * 2.76, k * .05, .3, { type: 'sine', vol: .03, send: .5 });   // bell partial
+      });
+      click(0, .06, 5000);
+    }
+    // Coconut cracking — a woody snap. High-Q noise is what makes it read as
+    // something splitting rather than something exploding.
+    if (name === 'crack') {
+      click(0, .13, 2200);
+      noise(0, .12, .13, 380, { q: 7, curve: 2.4, send: .2 });
+      noise(.02, .22, .07, 1500, { hz2: 500, q: 2.5, send: .25 });
+      thud(0, 90, .18, .14, .2);
+    }
+
+    if (name === 'level') {
+      [0, 2, 4, 5].forEach((i, k) => blip(C4 * PENTA[i], k * .09, .45, { vol: .12, send: .4 }));
+      noise(.05, .35, .025, 1400, { hz2: 4000, send: .4 });
+    }
+
+    // The orb winding up: one continuous rise, not a staircase of pings.
+    if (name === 'windup') {
+      blip(220, 0, .42, { type: 'sawtooth', vol: .07, bend: 5.2, send: .3 });
+      noise(0, .42, .05, 500, { hz2: 6000, q: 1.2, send: .35 });
+    }
+
+    if (name === 'swing') { noise(0, .14, .07, 1200, { hz2: 300, q: 1.4 }); thud(.1, 190, .14, .12, .15); }
+
+    if (name === 'zap') {
+      blip((1400 + Math.random() * 900), 0, .09, { type: 'sine', vol: .08, bend: .55, send: .3 });
+      click(0, .05, 5200);
+    }
+
+    // The big one. Sub thump for the chest, a noise burst for the air, and a
+    // falling saw for the body — layered, because one oscillator can never
+    // sound like an explosion.
+    if (name === 'blast') {
+      const deep = Math.min(n, 4);
+      thud(0, 150 - deep * 12, .38, .26, .3);
+      noise(0, .38, .11, 1100, { hz2: 260, q: .7, curve: 1.5, send: .4 });
+      [0, 2, 4].forEach((i, k) => blip(C4 * PENTA[i] / 2, k * .045, .3,
+        { type: 'sawtooth', vol: .06, bend: .7, send: .35 }));
+      click(0, .1, 2600);
+    }
+
+    if (name === 'goal') {
+      const f = C4 * 2;
+      blip(f, 0, .4, { type: 'sine', vol: .11, send: .4 });
+      blip(f * 2.76, 0, .22, { type: 'sine', vol: .035, send: .45 });
+      blip(f * 1.5, .07, .45, { type: 'sine', vol: .07, send: .45 });
+    }
+
+    if (name === 'mix') {
+      noise(0, .5, .06, 400, { hz2: 5000, q: 1.2, send: .35 });
+      for (let i = 0; i < 6; i++) blip(C4 * PENTA[i] * hum(), i * .05, .22, { vol: .06, send: .3 });
+    }
+
+    // A real phrase with a bass note under it, rather than a run up the scale.
+    if (name === 'win') {
+      [[0,0],[2,.11],[4,.22],[7,.33],[5,.46],[7,.58]].forEach(([i, t]) =>
+        blip(C4 * PENTA[i], t, .5, { vol: .14, send: .45 }));
+      blip(C4 / 2, 0, .9, { type: 'sine', vol: .1, send: .3 });
+      blip(C4 * PENTA[4] / 2, .46, .8, { type: 'sine', vol: .09, send: .3 });
+      noise(0, .5, .02, 2000, { hz2: 6000, send: .5 });
+    }
+
+    // One star, then the next a step higher.
+    if (name === 'star') {
+      const f = C4 * PENTA[n * 2] * 2;
+      blip(f, 0, .55, { type: 'sine', vol: .15, send: .5 });
+      blip(f * 2.76, 0, .3, { type: 'sine', vol: .04, send: .5 });
+      click(0, .05, 6000);
+    }
   } catch (e) {}
 }
 function buzz(ms) { if (vibeOn && navigator.vibrate) try { navigator.vibrate(ms); } catch (e) {} }
@@ -1882,7 +2120,7 @@ function hitBlock(r, c, blast) {
   t.hits--;
   if (t.hits > 0) {
     paint(t);
-    sfx('leaf');
+    sfx(t.block === 'nut' ? 'crack' : 'tap');
     fxSparks(r, c, t.block === 'nut' ? '#c89a63' : '#ffd0ea', 10, .9);
     return;
   }
@@ -1899,7 +2137,7 @@ function hitBlock(r, c, blast) {
     paint(t);
     converge(r, c, t.k);
     fxSparks(r, c, '#ffe6a0', 22, 1.5); fxRing(r, c, 2.4, 'rgba(255,220,150,.95)', 520);
-    sfx('make'); buzz(30);
+    sfx('gift'); buzz(30);
     t.el.classList.remove('born'); void t.el.offsetWidth; t.el.classList.add('born');
     setTimeout(() => t.el.classList.remove('born'), 340);
     toast('🎁 A booster!');
@@ -1907,7 +2145,7 @@ function hitBlock(r, c, blast) {
     nutsCracked++;
     fxSparks(r, c, '#c89a63', 22, 1.5); fxShards(r, c, '#8a5a2b', 10);
     fxRing(r, c, 2.2, 'rgba(220,180,130,.9)', 480);
-    sfx('pop', 1, []);
+    sfx('crack');
     const el = t.el;
     el.classList.add('pop');
     setTimeout(() => el.remove(), 470);
