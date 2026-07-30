@@ -10,6 +10,27 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐶</text></svg>">
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+  /* ---------- shared outer shell (identical in every game) ----------------
+     Safe-area insets go through variables so the whole app reads them from
+     one place — and so they can be overridden to rehearse a notch/Dynamic
+     Island on a device that doesn't have one. */
+  :root {
+    --sat:env(safe-area-inset-top, 0px);
+    --sar:env(safe-area-inset-right, 0px);
+    --sab:env(safe-area-inset-bottom, 0px);
+    --sal:env(safe-area-inset-left, 0px);
+    --chrome:clamp(44px,10vw,54px);   /* corner button size */
+    --cgap:10px;                      /* its margin from the safe edge */
+    --chrome-row:calc(var(--sat) + var(--chrome) + var(--cgap) * 2);
+  }
+  /* The gradient lives on <html>, not <body>: the root background is painted
+     over the whole canvas, so it reaches under the home indicator instead of
+     stopping at the body box and leaving a white strip when installed. */
+  html {
+    background:linear-gradient(160deg,#9d87ff 0%,#74c3ff 45%,#7df5b9 100%);
+    background-attachment:fixed;
+  }
   html, body {
     height:100%;
     overflow:hidden;
@@ -19,9 +40,33 @@
     font-family:-apple-system-rounded, "SF Pro Rounded", -apple-system, "Segoe UI", "Comic Sans MS", sans-serif;
   }
   body {
-    background:linear-gradient(160deg,#9d87ff 0%,#74c3ff 45%,#7df5b9 100%);
+    background:none;
     display:flex; flex-direction:column; align-items:center;
-    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+
+  /* back top-left, settings top-right — the same two buttons, in the same
+     place, on every screen of every game */
+  .chrome-btn {
+    position:fixed; z-index:60;
+    top:calc(var(--sat) + var(--cgap));
+    width:var(--chrome); height:var(--chrome);
+    border:none; cursor:pointer; border-radius:50%;
+    background:#ffffffee; color:#7c5cff;
+    display:flex; align-items:center; justify-content:center;
+    font-size:calc(var(--chrome) * .46); font-weight:800; font-family:inherit;
+    box-shadow:0 4px 0 rgba(0,0,0,.15), inset 0 2px 0 rgba(255,255,255,.9);
+    transition:transform .1s;
+  }
+  .chrome-btn:active { transform:translateY(3px); box-shadow:0 1px 0 rgba(0,0,0,.15); }
+  .chrome-back { left:calc(var(--sal) + var(--cgap)); }
+  .chrome-set  { right:calc(var(--sar) + var(--cgap)); }
+  .chrome-btn[hidden] { display:none; }
+  /* A custom property built from env() can't be read back resolved, so park
+     the four insets on a probe's padding — computed padding IS in pixels. */
+  #safe-probe {
+    position:fixed; left:0; top:0; width:0; height:0;
+    visibility:hidden; pointer-events:none;
+    padding:var(--sat) var(--sar) var(--sab) var(--sal);
   }
 
   /* soft drifting bubbles behind everything */
@@ -36,7 +81,10 @@
     position:absolute; inset:0; z-index:1;
     display:flex; flex-direction:column; align-items:center; justify-content:center;
     gap:min(2.5vh,18px);
-    padding:max(10px, env(safe-area-inset-top)) 12px max(10px, env(safe-area-inset-bottom));
+    /* every screen sits below the chrome row, so the corner buttons never
+       land on content and the Dynamic Island never lands on either */
+    padding:var(--chrome-row) max(12px, var(--sar))
+            max(10px, var(--sab)) max(12px, var(--sal));
     transition:opacity .25s, transform .25s;
   }
   .screen.hidden { opacity:0; pointer-events:none; transform:scale(.96); }
@@ -111,22 +159,12 @@
   .legend-btn .emoji { filter:drop-shadow(0 3px 4px rgba(0,0,0,.4)); }
 
   /* way back out to the arcade — every game has one, styled the same */
-  .arcade-link {
-    border:none; cursor:pointer; font-family:inherit; font-weight:800;
-    font-size:clamp(13px,3.4vw,16px);
-    padding:9px 18px; border-radius:999px;
-    background:rgba(255,255,255,.35); color:#fff;
-    display:flex; align-items:center; gap:7px;
-    transition:transform .1s, background .15s;
-  }
-  .arcade-link:active { transform:scale(.95); background:rgba(255,255,255,.5); }
-  .arcade-link svg.ic { width:1.1em; height:1.1em; }
-  .arcade-link svg.ic path { stroke:#fff; }
-
   /* ---------- GAME ---------- */
   #game { justify-content:space-between; }
   .topbar {
-    width:min(94vw, 640px);
+    /* 100% of the screen's already-inset content box, not of the raw viewport,
+       so the topbar can't reach under a side inset */
+    width:100%; max-width:640px;
     display:flex; align-items:center; justify-content:space-between;
     gap:8px;
   }
@@ -328,7 +366,7 @@
 
   /* hint walkthrough card (user-paced: Next / Got it / close) */
   #hint-bubble {
-    position:fixed; left:50%; top:calc(env(safe-area-inset-top) + 74px);
+    position:fixed; left:50%; top:calc(var(--sat) + 74px);
     transform:translateX(-50%) scale(.8);
     z-index:48;
     background:#fff; border-radius:20px;
@@ -449,7 +487,13 @@
       "board prog";
     align-content:center; justify-content:center;
     column-gap:clamp(10px,2.2vw,26px); row-gap:8px;
-    padding:8px max(8px,env(safe-area-inset-right)) 8px max(8px,env(safe-area-inset-left));
+    /* Landscape pays for the back button sideways, not from the top: the board
+       is height-limited here, so taking a chrome row off the top would shrink
+       it ~20%, while taking the same width off the left costs almost nothing.
+       The settings button already sits above the panel, where .tb-spacer
+       reserves for it. */
+    padding:max(8px,var(--sat)) max(8px,var(--sar)) max(8px,var(--sab))
+            calc(var(--sal) + var(--chrome) + var(--cgap) * 2);
   }
   html.land #board-area { display:contents; }
   html.land #board { grid-area:board; align-self:center; }
@@ -460,7 +504,9 @@
   html.land #pwrap { grid-area:prog; align-self:end; width:auto !important; }
   /* the panel is narrow — trim the chrome so the keypad keeps the room */
   html.land .round-btn { width:46px; height:46px; font-size:21px; }
-  html.land .tb-spacer { width:46px; }
+  /* the settings button overhangs the panel by its own width plus its gap —
+     the topbar has to keep that much clear or the title runs under it */
+  html.land .tb-spacer { width:calc(var(--chrome) + var(--cgap)); }
   html.land #mascot { font-size:clamp(20px,3vw,30px); }
   html.land #level-label { font-size:clamp(15px,2.4vw,22px); }
   /* no room above or below the board — float the card over the panel instead */
@@ -468,19 +514,7 @@
   html.land #hint-bubble::after { display:none; }
 
   /* ---------- SETTINGS (always-visible button + panel) ---------- */
-  .fab {
-    position:fixed; z-index:40;
-    top:max(10px, env(safe-area-inset-top)); right:max(10px, env(safe-area-inset-right));
-    width:clamp(44px,10vw,54px); height:clamp(44px,10vw,54px);
-    border-radius:50%; border:none; cursor:pointer;
-    background:#ffffffee;
-    box-shadow:0 4px 0 rgba(0,0,0,.15), inset 0 2px 0 rgba(255,255,255,.9);
-    display:flex; align-items:center; justify-content:center;
-    font-size:clamp(20px,5vw,26px);
-    transition:transform .1s;
-  }
-  .fab:active { transform:translateY(3px); box-shadow:0 1px 0 rgba(0,0,0,.15); }
-  .fab svg.ic { animation:spin 9s linear infinite; }
+  .chrome-set svg.ic { animation:spin 9s linear infinite; }
   @keyframes spin { to{transform:rotate(360deg)} }
 
   .modal {
@@ -661,13 +695,11 @@
       <span class="emoji" id="emoji4"></span><span class="name" id="name4"></span><span class="desc" id="desc4"></span><span class="stars" id="stars4"></span>
     </button>
   </div>
-  <button class="arcade-link" id="arcade-btn">All games</button>
 </div>
 
 <div id="game" class="screen hidden">
   <div class="topbar">
     <div class="tb-group">
-      <button class="round-btn" id="back-btn" aria-label="Back to menu">🏠</button>
       <button class="round-btn" id="hint-btn" aria-label="Hint">💡</button>
     </div>
     <div id="level-wrap">
@@ -683,7 +715,9 @@
   <div id="tray"></div>
 </div>
 
-<button id="settings-btn" class="fab" aria-label="Settings"></button>
+<div id="safe-probe" aria-hidden="true"></div>
+<button id="chrome-back" class="chrome-btn chrome-back" aria-label="Back"></button>
+<button id="settings-btn" class="chrome-btn chrome-set" aria-label="Settings"></button>
 
 <div id="settings" class="modal">
   <div class="settings-card">
@@ -797,6 +831,7 @@ const PRAISES = ['Yay!','Nice!','Wow!','Super!','Cool!','Great!'];
 const IC='<svg xmlns="http://www.w3.org/2000/svg" class="ic" viewBox="0 0 24 24" width="1em" height="1em"';
 const ICONS={
   home:IC+' fill="none" stroke="#7c5cff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 11 12 4l8.5 7"/><path d="M6 9.5V20h12V9.5"/><path d="M10 20v-5h4v5"/></svg>',
+  back:IC+' fill="none" stroke="#7c5cff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5 8 12l6.5 7"/></svg>',
   bulb:IC+'><path d="M12 2.5a6.5 6.5 0 0 0-4 11.6c.9.7 1.5 1.5 1.5 2.4h5c0-.9.6-1.7 1.5-2.4a6.5 6.5 0 0 0-4-11.6z" fill="#ffd34d" stroke="#e0a80f" stroke-width="1.6"/><path d="M9.8 19.5h4.4M10.6 22h2.8" stroke="#8a6d00" stroke-width="1.8" stroke-linecap="round"/></svg>',
   sound:IC+' fill="none" stroke="#7c5cff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h3.5L13 19V5L7.5 9.5H4z" fill="#7c5cff" stroke="none"/><path d="M16 9a4.5 4.5 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/></svg>',
   mute:IC+' fill="none" stroke="#7c5cff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h3.5L13 19V5L7.5 9.5H4z" fill="#7c5cff" stroke="none"/><path d="M16.5 9.5l5 5m0-5l-5 5"/></svg>',
@@ -1561,6 +1596,12 @@ function renderMenu(){
    then has to fit the board into ~60% of a short height, which shrinks it to
    a postage stamp and pushes the tray off the bottom edge. We simply build
    both and keep whichever gives the child a bigger board. */
+// The four safe-area insets, in pixels, read off the probe's resolved padding.
+function safeInsets(){
+  const s=getComputedStyle($('safe-probe'));
+  return { t:parseFloat(s.paddingTop)||0,  r:parseFloat(s.paddingRight)||0,
+           b:parseFloat(s.paddingBottom)||0, l:parseFloat(s.paddingLeft)||0 };
+}
 function layoutSizes(){
   const n=L.n;
   const vw=Math.min(window.innerWidth, document.documentElement.clientWidth||1e9);
@@ -1574,12 +1615,32 @@ function layoutSizes(){
   const boardWFor=c=>c*n+sx*bgap+(n+sx-1)*gap+16;
   const tgap=Math.min(vw*0.02, 12);
   const nBtn=n+1;                        // +1 for the eraser
+  // What the outer shell has already claimed: the safe-area insets, and the
+  // chrome row/column the back button sits in. Stacked pays for the chrome off
+  // the top; side-by-side pays for it off the left, where it costs far less.
+  const ins=safeInsets(), cw=$('chrome-back').offsetWidth||0;
+  const topReserve  = ins.t + cw + 20;
+  const leftReserve = ins.l + cw + 20;
+  const sideW = vw - leftReserve - Math.max(8, ins.r);
+  const sideH = vh - Math.max(8, ins.t) - Math.max(8, ins.b) - 6;
 
-  // stacked: board must leave room for topbar + progress + tray below it
+  // Stacked: the board gets whatever is left after the chrome row, the topbar,
+  // the tray and the gaps have taken theirs. This used to be a fraction of the
+  // viewport height, which was tuned before the chrome row existed — on a small
+  // phone with a notch it handed the board more than there was and pushed the
+  // tray off the bottom. Everything below is known here, so just subtract it.
   const stackRows = n>6 && vw<560 ? 2 : 1;
-  const stackCell=cellFor(Math.min(vw*0.94, vh*(stackRows===2?0.54:0.6), 620));
+  const stackCols = Math.ceil(nBtn/stackRows);
+  const stackW = vw - Math.max(12, ins.l) - Math.max(12, ins.r);   // .screen padding
+  const stackTs = Math.min(Math.floor((stackW-16-tgap*(stackCols-1))/stackCols), 84);
+  const trayH = stackRows*stackTs + (stackRows-1)*tgap + 16;   // +16 = tray padding
+  const topbarH = Math.min(58, Math.max(46, vw*0.11));         // the round buttons
+  const g1 = Math.min(18, vh*0.025), g2 = Math.min(14, vh*0.02);
+  const stackAvail = vh - topReserve - Math.max(10, ins.b)
+                   - topbarH - trayH - 16 - (2*g1 + g2);       // 16 = progress bar
+  const stackCell=cellFor(Math.min(stackW, stackAvail, 620));
   // side-by-side: board takes the height, the panel takes a slice of the width
-  const sideCell=cellFor(Math.min(vh-22, vw-PANEL_MIN, 620));   // -22 = page padding
+  const sideCell=cellFor(Math.min(sideH, sideW-PANEL_MIN, 620));
   const side = vw>vh && sideCell>stackCell;
 
   let cell, cols, ts;
@@ -1590,8 +1651,8 @@ function layoutSizes(){
     // page padding, the column gap and the tray's own padding — miss any of
     // it and the grid overflows, shoving the board off the left edge.
     const colGap=Math.min(26,Math.max(10,vw*0.022));
-    const restW=vw-boardWFor(cell)-(32+colGap);
-    const restH=vh-PANEL_CHROME;
+    const restW=sideW-boardWFor(cell)-(32+colGap);
+    const restH=vh-Math.max(8,ins.t)-Math.max(8,ins.b)-PANEL_CHROME;
     // Pick the keypad shape. Big buttons matter most (small fingers), but a
     // shape is also better for spanning the panel instead of hugging one edge,
     // worse for a ragged last row, and worse for standing taller than it is
@@ -1610,7 +1671,7 @@ function layoutSizes(){
   } else {
     cell=stackCell;
     cols=Math.ceil(nBtn/stackRows);
-    ts=Math.min(Math.floor((vw*0.94-16-tgap*(cols-1))/cols), 84);
+    ts=Math.min(Math.floor((stackW-16-tgap*(cols-1))/cols), 84);
   }
   document.documentElement.classList.toggle('land', side);
   document.documentElement.style.setProperty('--tray-size', ts+'px');
@@ -2996,7 +3057,13 @@ document.querySelectorAll('.level-btn').forEach(b=>{
 });
 $('style-animal').addEventListener('click',()=>setStyle('animal'));
 $('style-classic').addEventListener('click',()=>setStyle('classic'));
-$('back-btn').addEventListener('click',()=>{ sfx('tap'); goMenu(); });
+// One back button for the whole app: it steps up a level, so from anywhere
+// you reach the game picker — mid-puzzle that's board -> levels -> all games.
+$('chrome-back').addEventListener('click',()=>{
+  sfx('tap');
+  if($('game').classList.contains('hidden')) location.href='../../';
+  else goMenu();
+});
 $('menu-btn').addEventListener('click',()=>{ sfx('tap'); goMenu(); });
 $('hint-btn').addEventListener('click',onHint);
 $('hint-next').addEventListener('click',hintNext);
@@ -3029,9 +3096,7 @@ if(typeof navigator.vibrate!=='function') $('row-vibe').style.display='none';
 
 /* icon chrome (SVG, no raw emoji) */
 $('settings-btn').innerHTML=ICONS.gear;
-$('arcade-btn').innerHTML=ICONS.home+' All games';
-$('arcade-btn').addEventListener('click',()=>{ sfx('tap'); location.href='../../'; });
-$('back-btn').innerHTML=ICONS.home;
+$('chrome-back').innerHTML=ICONS.back;
 $('hint-btn').innerHTML=ICONS.bulb;
 $('menu-btn').innerHTML=ICONS.home+' Menu';
 $('again-btn').innerHTML=ICONS.again+' Play again';

@@ -59,6 +59,13 @@
   .chrome-back { left:calc(var(--sal) + var(--cgap)); }
   .chrome-set  { right:calc(var(--sar) + var(--cgap)); }
   .chrome-btn[hidden] { display:none; }
+  /* A custom property built from env() can't be read back resolved, so park
+     the four insets on a probe's padding — computed padding IS in pixels. */
+  #safe-probe {
+    position:fixed; left:0; top:0; width:0; height:0;
+    visibility:hidden; pointer-events:none;
+    padding:var(--sat) var(--sar) var(--sab) var(--sal);
+  }
 
   .bub {
     position:fixed; border-radius:50%; z-index:0; pointer-events:none;
@@ -71,10 +78,22 @@
     position:absolute; inset:0; z-index:1;
     display:flex; flex-direction:column; align-items:center; justify-content:center;
     gap:min(2.4vh,16px);
-    padding:max(10px, env(safe-area-inset-top)) 12px max(10px, env(safe-area-inset-bottom));
+    /* every screen sits below the chrome row, so the corner buttons never
+       land on content and the Dynamic Island never lands on either */
+    padding:var(--chrome-row) max(12px, var(--sar))
+            max(10px, var(--sab)) max(12px, var(--sal));
     transition:opacity .32s cubic-bezier(.4,0,.2,1), transform .32s cubic-bezier(.4,0,.2,1);
   }
   .screen.hidden { opacity:0; pointer-events:none; transform:scale(.92) translateY(16px); }
+  /* A short landscape screen has no vertical room to spare — the board, the
+     topbar, the goals and the pinned tool bar already fill it. So pay for the
+     back button out of the left margin instead of off the top. */
+  @media (orientation:landscape) and (max-height:560px) {
+    .screen {
+      padding:max(8px,var(--sat)) max(12px,var(--sar)) max(8px,var(--sab))
+              calc(var(--sal) + var(--chrome) + var(--cgap) * 2);
+    }
+  }
 
   /* ---------------- MENU ---------------- */
   #menu { overflow-y:auto; justify-content:flex-start; }
@@ -159,15 +178,6 @@
   }
   .lvl-chip.cur .n { color:#7a3300; }
 
-  .menu-links { display:flex; gap:10px; }
-  .chip-link {
-    border:none; cursor:pointer; font-family:inherit; font-weight:800;
-    font-size:clamp(13px,3.4vw,16px);
-    padding:9px 18px; border-radius:999px;
-    background:rgba(255,255,255,.35); color:#fff;
-    display:flex; align-items:center; gap:6px;
-  }
-  .chip-link:active { transform:scale(.95); }
 
   /* ---------------- GAME ---------------- */
   /* room at the foot for the pinned tool bar */
@@ -263,7 +273,7 @@
   .tools {
     position:fixed; z-index:30;
     left:50%; transform:translateX(-50%);
-    bottom:max(10px, env(safe-area-inset-bottom));
+    bottom:max(10px, var(--sab));
     display:flex; gap:min(3.5vw,16px); justify-content:center;
     padding:9px 14px; border-radius:26px;
     background:rgba(255,255,255,.24);
@@ -997,17 +1007,12 @@
     <span class="emoji">🎈</span><span class="name">Free Play</span>
     <span class="desc">No goals, no counting — just pop!</span>
   </button>
-  <div class="menu-links">
-    <button class="chip-link" id="home-btn">🏠 All games</button>
-    <button class="chip-link" id="set-btn">⚙️ Settings</button>
-  </div>
 </div>
 
 <!-- ---------------- GAME ---------------- -->
 <div class="screen hidden" id="game">
   <div class="side">
     <div class="topbar">
-      <button class="icon-btn" id="back-btn" aria-label="Back to levels">‹</button>
       <div class="title-wrap">
         <div class="lv" id="lv-name">Berry Patch</div>
         <div class="sc" id="score">0 points</div>
@@ -1064,6 +1069,10 @@
     <button class="big-btn alt" id="resume-new">↺ New game</button>
   </div>
 </div>
+
+<div id="safe-probe" aria-hidden="true"></div>
+<button id="chrome-back" class="chrome-btn chrome-back" aria-label="Back">‹</button>
+<button id="set-btn" class="chrome-btn chrome-set" aria-label="Settings">⚙</button>
 
 <div class="overlay" id="settings">
   <div class="panel">
@@ -1147,7 +1156,7 @@ const DROPS_PER_MOVE    = 0.045; // measured, and it is genuinely this slow
 const ICE_PER_MOVE      = 0.5;
 // Gifts open from a match beside them, like frost, but there are only ever one
 // or two on a board so they arrive far more slowly than ice does.
-const GIFTS_PER_MOVE    = 0.13;
+const GIFTS_PER_MOVE    = 0.28;
 // A coconut only listens to a booster going off over it, and boosters land at
 // 0.25/move, so this is the rarest thing on the board by some distance.
 const NUTS_PER_MOVE     = 0.04;
@@ -1226,7 +1235,10 @@ function levelFor(n) {
   const ice   = () => ({ t: 'ice',   need: Math.min(10, 2 + Math.floor(n / 2)) });
   // The late-game set. Deliberately small numbers: each one is a scarce event,
   // and the budget is priced off measured throughput rather than off hope.
-  const gift  = () => ({ t: 'gift',  need: 1 + (n >= 45 ? 1 : 0) });
+  // One knock opens a gift now, so a single one is not an objective — it is a
+  // thing that happens on move two. The goal is opening SEVERAL, which is also
+  // truer to what a gift is: a treat you go collecting.
+  const gift  = () => ({ t: 'gift',  need: 4 + (n >= 45 ? 1 : 0) + (n >= 80 ? 1 : 0) });
   const nut   = () => ({ t: 'nut',   need: 1 });
   const combo = () => ({ t: 'combo', need: 1 });
   const chain = () => ({ t: 'chain', need: Math.min(4, 2 + Math.floor((n - 50) / 25)) });
@@ -1298,7 +1310,12 @@ function levelFor(n) {
     // One spare of each beyond what the goal asks for, so a level is never lost
     // to a single unlucky placement — and so they show up as scenery on levels
     // that did not ask for them at all, once you are deep enough to know them.
-    gifts:  ((goals.find(g => g.t === 'gift') || {}).need || 0) + (n >= 20 ? 1 : 0),
+    // Two spare beyond the ask, since gifts are finite — nothing respawns them,
+    // so the goal can never exceed what is placed. They are cheap to have around
+    // now that one is swappable and opens on a single knock.
+    // Two to start with; the rest arrive as the level runs.
+    gifts:  (goals.find(g => g.t === 'gift') ? 2 : (n >= 20 ? 1 : 0)),
+    giftDrip: goals.find(g => g.t === 'gift') ? 0.035 : 0,
     // Three coconuts when the level asks for one, so a blast landing near ANY of
     // them counts. Measured with two on the board it took 31 moves of a 38-move
     // budget to crack one — finishable, but a long errand for a three-year-old,
@@ -1574,10 +1591,6 @@ function sfx(name, n = 0, notes) {
       if (n >= 2) thud(0, 110 + n * 12, .16, .1 + Math.min(n, 6) * .015, .2);
     }
 
-    // Fruit arriving. Soft, low, and quiet — it happens constantly, so it has to
-    // sit under everything else rather than beside it.
-    if (name === 'land') { noise(0, .07, .028, 480, { q: .9, curve: 1.6 }); thud(0, 130, .1, .05); }
-
     if (name === 'leaf') {
       noise(0, .2, .06, 2600, { hz2: 5200, q: .8, send: .3 });
       blip(392 * hum(), .01, .16, { type: 'sine', vol: .05, send: .25 });
@@ -1739,7 +1752,7 @@ function paint(t) {
     t.shape.className = 'shape';
     t.shape.style.background = '';
     el.classList.add('blk', t.block);
-    if (t.hits === 1) el.classList.add('hit1');
+    if (t.hits && t.hits < BLOCKS[t.block].hits) el.classList.add('hit1');
     t.face.textContent = BLOCKS[t.block].emoji;
     el.setAttribute('aria-label', BLOCKS[t.block].say(t));
     return;
@@ -1813,9 +1826,8 @@ const isBlock = t => !!t && t.block;
 const BLOCKS = {
   duck: { emoji:'🐤', hits:0, blastOnly:false, move:true,
           say:() => 'duckling, can be moved but not matched' },
-  gift: { emoji:'🎁', hits:2, blastOnly:false, move:false,
-          say:t => 'gift box, ' + t.hits + ' more ' + (t.hits === 1 ? 'hit' : 'hits')
-                 + ' to open it — match beside it' },
+  gift: { emoji:'🎁', hits:1, blastOnly:false, move:true,
+          say:() => 'gift box, match beside it to open it — it can also be moved' },
   nut:  { emoji:'🥥', hits:2, blastOnly:true,  move:false,
           say:t => 'coconut, ' + t.hits + ' more ' + (t.hits === 1 ? 'hit' : 'hits')
                  + ' — only a blast cracks it' },
@@ -1832,17 +1844,49 @@ function makeBlock(kind, r, c) {
 }
 
 /* ---------------- layout ---------------- */
+// The four safe-area insets, in pixels, read off the probe's resolved padding.
+function safeInsets() {
+  const s = getComputedStyle($('safe-probe'));
+  return { t: parseFloat(s.paddingTop) || 0,    r: parseFloat(s.paddingRight) || 0,
+           b: parseFloat(s.paddingBottom) || 0, l: parseFloat(s.paddingLeft) || 0 };
+}
 function layout() {
   if (!L) return;
   // Give the board as much of the screen as the chrome allows — it's the thing
   // you're actually looking at, and a bigger board is a better board.
+  const ins = safeInsets();
   const land = window.innerWidth > window.innerHeight && window.innerHeight <= 560;
-  const availW = land ? window.innerWidth * 0.56 : window.innerWidth * 0.99;
-  const availH = land ? window.innerHeight * 0.94 : window.innerHeight * 0.66;
-  const cell = Math.max(30, Math.floor(Math.min(availW / C, availH / R, 96)));
-  board.style.setProperty('--cell', cell + 'px');
-  board.style.setProperty('--rows', R);
-  board.style.setProperty('--cols', C);
+  const wideW = window.innerWidth - Math.max(12, ins.l) - Math.max(12, ins.r);
+  const availW = wideW * (land ? 0.56 : 0.99);
+  const availH = land
+    ? (window.innerHeight - Math.max(8, ins.t) - Math.max(8, ins.b)) * 0.94
+    : window.innerHeight * 0.66;
+  let cell = Math.max(30, Math.floor(Math.min(availW / C, availH / R, 96)));
+  const apply = c => {
+    board.style.setProperty('--cell', c + 'px');
+    board.style.setProperty('--rows', R);
+    board.style.setProperty('--cols', C);
+  };
+  apply(cell);
+  // The chrome row, the topbar and the goal chips all draw from the same
+  // column. Rather than guess their heights, lay out once and hand back
+  // whatever overflowed — a board running under the corner buttons is worse
+  // than a slightly smaller one. Measure the in-flow children: the tool bar is
+  // pinned, and .side holds only the topbar, so neither alone tells the story.
+  const g = $('game');
+  for (let i = 0; g && i < 5 && cell > 30; i++) {
+    const flow = [...g.children].filter(el =>
+      getComputedStyle(el).position !== 'fixed' && el.getBoundingClientRect().height > 0);
+    if (!flow.length) break;
+    const rects = flow.map(el => el.getBoundingClientRect());
+    const contentH = Math.max(...rects.map(r => r.bottom)) - Math.min(...rects.map(r => r.top));
+    const gs = getComputedStyle(g);
+    const box = g.clientHeight - parseFloat(gs.paddingTop) - parseFloat(gs.paddingBottom);
+    const over = contentH - box;
+    if (over <= 0.5) break;
+    cell = Math.max(30, cell - Math.ceil(over / R));
+    apply(cell);
+  }
   fxResize();
 }
 window.addEventListener('resize', layout);
@@ -2889,6 +2933,16 @@ async function clearCells(keys, cascade, from, zapFrom, suckTo, chain) {
   const flyBudget = { n: 0 };
   iceHitThisClear = new Set();
   blockHitThisClear = new Set();
+  // Which of these cells were blocks when the clear began. This has to be a
+  // snapshot: a gift opens into a BOOSTER, and if a neighbour of it happens to
+  // be processed first — which a blast makes likely, since it sweeps the gift
+  // and its neighbours together — then by the time the loop reaches the gift's
+  // own cell it is no longer a block, falls through to the ordinary pop path,
+  // and the booster the player just earned is destroyed by the very blast that
+  // freed it. Measured before the fix: a star over a gift opened it and left
+  // zero boosters on the board.
+  const wasBlock = new Set();
+  keys.forEach(k => { const b = grid[Math.floor(k / C)][k % C]; if (b && b.block) wasBlock.add(k); });
   let order = null, step = 0, lastDelay = 0;
   if (zapFrom) {
     const d = k => Math.hypot(Math.floor(k / C) - zapFrom[0], (k % C) - zapFrom[1]);
@@ -2930,11 +2984,11 @@ async function clearCells(keys, cascade, from, zapFrom, suckTo, chain) {
     // Neither a blocker nor frozen fruit is ever popped. A duckling leaves by
     // reaching the floor; frost takes a hit and hands the fruit back once the
     // last layer goes.
-    if (t.block) {
+    if (t.block || wasBlock.has(key)) {
       // A block only lands in `keys` because a booster's blast swept it in, and
       // srcOf holds exactly the cells a booster claimed — so this is the honest
       // test for "was it blasted", and the one thing a coconut listens to.
-      if (chain && chain.srcOf.has(key)) hitBlock(r, c, true);
+      if (t.block && chain && chain.srcOf.has(key)) hitBlock(r, c, true);
       return;
     }
     // Chipped explicitly rather than left to the adjacency rule below, which
@@ -3035,6 +3089,15 @@ async function gravity() {
       // makeTile has already flushed layout, so the transition still animates,
       // and the model never sees a tile parked at a negative row.
       const t = makeTile(refillKind(r, c), -above, c);
+      // A gift opens from a single knock, so a boardful of them is opened by the
+      // first cascade — measured, four gifts and a goal of two finished on move
+      // ONE. They arrive over the course of the level instead, which makes
+      // "open five gifts" a real errand while each individual gift stays the
+      // quick treat it is meant to be. Capped so the board never fills with them.
+      if (L.giftDrip && Math.random() < L.giftDrip
+          && grid.flat().filter(x => x && x.block === 'gift').length < 3) {
+        t.block = 'gift'; t.k = BLOCK_K; t.hits = BLOCKS.gift.hits; paint(t);
+      }
       grid[r][c] = t;
       const dist = r + above;
       maxDrop = Math.max(maxDrop, dist);
@@ -3048,7 +3111,6 @@ async function gravity() {
   if (!landed.length) return;
   const dur = REDUCED ? 30 : Math.min(430, 130 + maxDrop * 55);
   await sleep(dur);
-  sfx('land');
   landed.forEach(t => {
     t.el.style.transitionDuration = '';
     t.el.style.transitionTimingFunction = '';
@@ -3234,7 +3296,6 @@ async function playIntro(showCard) {
   // longest delay is the far corner of the wave, plus the animation itself
   await sleep(((R - 1) + (C - 1)) * 42 + 520);
   tiles.forEach(t => t.el.classList.remove('dropin'));
-  sfx('land');
   busy = false;
 }
 
@@ -4191,11 +4252,15 @@ function applyRoute() {
 window.addEventListener('hashchange', applyRoute);
 
 /* ---------------- buttons ---------------- */
-$('back-btn').onclick  = () => { saveGame(); location.hash = ''; };
+// One back button for the whole app: it steps up a level, so from anywhere
+// you reach the game picker — mid-level that's board -> levels -> all games.
+$('chrome-back').onclick = () => {
+  if ($('game').classList.contains('hidden')) { location.href = '../../'; return; }
+  saveGame(); location.hash = '';
+};
 $('menu-btn').onclick  = () => { location.hash = ''; };
 $('again-btn').onclick = () => { clearSave(); start(freePlay ? 'free' : levelNo); };
 $('next-btn').onclick  = () => { clearSave(); location.hash = '#lvl-' + (levelNo + 1); };
-$('home-btn').onclick  = () => { location.href = '../../'; };
 $('more-btn').onclick  = () => {
   usedHelp = true; movesLeft += 5;
   $('more').classList.remove('show');

@@ -10,6 +10,27 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎈</text></svg>">
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+  /* ---------- shared outer shell (identical in every game) ----------------
+     Safe-area insets go through variables so the whole app reads them from
+     one place — and so they can be overridden to rehearse a notch/Dynamic
+     Island on a device that doesn't have one. */
+  :root {
+    --sat:env(safe-area-inset-top, 0px);
+    --sar:env(safe-area-inset-right, 0px);
+    --sab:env(safe-area-inset-bottom, 0px);
+    --sal:env(safe-area-inset-left, 0px);
+    --chrome:clamp(44px,10vw,54px);   /* corner button size */
+    --cgap:10px;                      /* its margin from the safe edge */
+    --chrome-row:calc(var(--sat) + var(--chrome) + var(--cgap) * 2);
+  }
+  /* The gradient lives on <html>, not <body>: the root background is painted
+     over the whole canvas, so it reaches under the home indicator instead of
+     stopping at the body box and leaving a white strip when installed. */
+  html {
+    background:linear-gradient(160deg,#9d87ff 0%,#74c3ff 45%,#7df5b9 100%);
+    background-attachment:fixed;
+  }
   html, body {
     min-height:100%;
     touch-action:manipulation;
@@ -18,12 +39,29 @@
   }
   body {
     min-height:100dvh;
-    background:linear-gradient(160deg,#9d87ff 0%,#74c3ff 45%,#7df5b9 100%);
-    background-attachment:fixed;
+    background:none;
     display:flex; flex-direction:column; align-items:center; justify-content:center;
-    padding:max(14px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
-            max(18px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+    padding:var(--chrome-row) max(12px, var(--sar))
+            max(18px, var(--sab)) max(12px, var(--sal));
   }
+
+  /* back top-left, settings top-right — the same two buttons, in the same
+     place, on every screen of every game */
+  .chrome-btn {
+    position:fixed; z-index:60;
+    top:calc(var(--sat) + var(--cgap));
+    width:var(--chrome); height:var(--chrome);
+    border:none; cursor:pointer; border-radius:50%;
+    background:#ffffffee; color:#7c5cff;
+    display:flex; align-items:center; justify-content:center;
+    font-size:calc(var(--chrome) * .46); font-weight:800; font-family:inherit;
+    box-shadow:0 4px 0 rgba(0,0,0,.15), inset 0 2px 0 rgba(255,255,255,.9);
+    transition:transform .1s;
+  }
+  .chrome-btn:active { transform:translateY(3px); box-shadow:0 1px 0 rgba(0,0,0,.15); }
+  .chrome-back { left:calc(var(--sal) + var(--cgap)); }
+  .chrome-set  { right:calc(var(--sar) + var(--cgap)); }
+  .chrome-btn[hidden] { display:none; }
 
   /* soft drifting bubbles behind everything */
   .bub {
@@ -35,7 +73,9 @@
 
   .wrap {
     position:relative; z-index:1;
-    width:min(94vw, 720px);
+    /* 100% of body's already-inset content box, not of the raw viewport, so
+       the cards can't reach under a side inset */
+    width:100%; max-width:720px;
     margin:auto 0;
     display:flex; flex-direction:column; align-items:center; gap:clamp(14px,3.2vh,26px);
     padding:clamp(8px,2vh,20px) 0;
@@ -121,16 +161,39 @@
 
   .foot { color:#ffffffcc; font-size:clamp(12px,3.2vw,15px); font-weight:700; text-align:center; }
 
-  /* sound toggle */
-  #snd {
-    position:fixed; z-index:3;
-    top:max(10px, env(safe-area-inset-top)); right:max(10px, env(safe-area-inset-right));
-    width:44px; height:44px; border:none; border-radius:50%; cursor:pointer;
-    background:rgba(255,255,255,.35); color:#fff; font-size:20px;
-    display:grid; place-items:center;
-    backdrop-filter:blur(6px);
+  /* settings sheet — the arcade's own, matching the games' */
+  .overlay {
+    position:fixed; inset:0; z-index:70;
+    background:rgba(40,25,80,.45);
+    display:flex; align-items:center; justify-content:center;
+    padding:24px;
+    opacity:0; pointer-events:none; transition:opacity .2s;
   }
-  #snd:active { transform:scale(.92); }
+  .overlay.show { opacity:1; pointer-events:auto; }
+  .overlay .panel {
+    background:#fff; border-radius:26px; padding:22px 24px;
+    width:min(88vw,340px);
+    box-shadow:0 14px 40px rgba(40,20,90,.35);
+    display:flex; flex-direction:column; gap:14px;
+  }
+  .overlay h2 { font-size:22px; font-weight:800; color:#5b3fd4; text-align:center; }
+  .set-row {
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    font-size:17px; font-weight:800; color:#5b3fd4;
+  }
+  .toggle {
+    border:none; cursor:pointer; font-family:inherit; font-weight:800;
+    border-radius:999px; padding:8px 20px; font-size:15px;
+    background:#e8e3ff; color:#5b3fd4; min-width:5.2em;
+  }
+  .toggle.on { background:linear-gradient(#8de78a,#54c452); color:#0d4d0c; }
+  .big-btn {
+    border:none; cursor:pointer; font-family:inherit; font-weight:800;
+    border-radius:999px; padding:12px 22px; font-size:17px;
+    background:linear-gradient(#a89bff,#7c5cff); color:#fff;
+    box-shadow:0 4px 0 rgba(0,0,0,.18);
+  }
+  .big-btn:active { transform:translateY(2px); box-shadow:0 2px 0 rgba(0,0,0,.18); }
 
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration:.001s !important; animation-iteration-count:1 !important; }
@@ -139,7 +202,16 @@
 </head>
 <body>
 
-<button id="snd" aria-label="Sound on or off">🔊</button>
+<!-- the arcade is the root, so it has no back — settings sits where it always does -->
+<button class="chrome-btn chrome-set" id="set-btn" aria-label="Settings">⚙</button>
+
+<div class="overlay" id="settings">
+  <div class="panel">
+    <h2>Settings</h2>
+    <div class="set-row"><span>🔊 Sound</span><button class="toggle" id="t-sound">ON</button></div>
+    <button class="big-btn" id="set-close">Done</button>
+  </div>
+</div>
 
 <div class="wrap">
   <h1>🎈 Toddler Games</h1>
@@ -184,8 +256,11 @@ function pick() {
   if (!soundOn) return;
   try { tone(659, 0, .1); tone(988, .07, .16); } catch (e) {}
 }
-const sndBtn = document.getElementById('snd');
-function paintSnd() { sndBtn.textContent = soundOn ? '🔊' : '🔇'; }
+const sndBtn = document.getElementById('t-sound');
+function paintSnd() {
+  sndBtn.textContent = soundOn ? 'ON' : 'OFF';
+  sndBtn.classList.toggle('on', soundOn);
+}
 sndBtn.addEventListener('click', () => {
   soundOn = !soundOn;
   localStorage.setItem('home-sound', soundOn ? 'on' : 'off');
@@ -193,6 +268,10 @@ sndBtn.addEventListener('click', () => {
   if (soundOn) pick();
 });
 paintSnd();
+const setOverlay = document.getElementById('settings');
+document.getElementById('set-btn').addEventListener('click', () => { pick(); setOverlay.classList.add('show'); });
+document.getElementById('set-close').addEventListener('click', () => setOverlay.classList.remove('show'));
+setOverlay.addEventListener('click', e => { if (e.target === setOverlay) setOverlay.classList.remove('show'); });
 
 /* ---------- cards ---------- */
 // Fixed drift spots: clear of the badge (far left) and of the ▸ arrow, which
