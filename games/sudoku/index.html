@@ -379,8 +379,19 @@
   }
   #hint-back:active { transform:translateY(2px); box-shadow:0 2px 0 rgba(0,0,0,.12); }
   #hint-back:disabled { opacity:.3; box-shadow:none; cursor:default; transform:none; }
-  #hint-dots { display:flex; gap:6px; flex:1; justify-content:center; }
-  .hdot { width:9px; height:9px; border-radius:50%; background:#ddd6f8; }
+  /* min-width:0 is load-bearing: a flex item defaults to min-content, so a
+     long story's dots refuse to shrink and shove the buttons off the card */
+  #hint-dots { display:flex; gap:6px; flex:1; min-width:0; justify-content:center; }
+  /* too many beats to show as dots — a counter instead. Tabular figures and a
+     centred fixed-width box keep it from nudging anything as the number grows. */
+  #hint-dots.count {
+    display:block; text-align:center; white-space:nowrap;
+    font-size:clamp(12px,3.2vw,15px); font-weight:800; color:#9b8fd8;
+    font-variant-numeric:tabular-nums;
+  }
+  /* flex:none or they squash into ovals to fit — and then the overflow test
+     below sees them "fitting" and never switches to the counter */
+  .hdot { width:9px; height:9px; border-radius:50%; background:#ddd6f8; flex:none; }
   .hdot.on { background:#7c5cff; transform:scale(1.25); }
   #hint-next {
     border:none; cursor:pointer; font-family:inherit;
@@ -1973,12 +1984,13 @@ function onCellTap(i,el){
 let hintTimers=[];
 let hintStory=null, hintStep=0;
 let hintPlaced=false;    // the card is sized and positioned once per story
+let hintCounter=false;   // ...and shows "3 / 16" when dots won't fit the width
 function hintActive(){ return !!hintStory; }
 
 function clearHintFx(){
   hintTimers.forEach(clearTimeout);
   hintTimers=[];
-  hintStory=null; hintStep=0; hintPlaced=false;
+  hintStory=null; hintStep=0; hintPlaced=false; hintCounter=false;
   $('hint-bubble').classList.remove('show');
   $('hint-bubble').style.minHeight='';
   const svg=$('hint-arrows'); if(svg){ svg.style.display='none'; svg.innerHTML=''; }
@@ -2312,8 +2324,23 @@ function layoutHintCard(){
   b.style.visibility='hidden';
   b.classList.add('show');
   // dots and buttons are part of the height, so put them in before measuring
-  $('hint-dots').innerHTML = total>1 ? hintStory.map(()=>'<span class="hdot"></span>').join('') : '';
+  const dotsEl=$('hint-dots');
+  dotsEl.classList.remove('count');
+  dotsEl.innerHTML = total>1 ? hintStory.map(()=>'<span class="hdot"></span>').join('') : '';
   $('hint-back').style.display = total>1 ? '' : 'none';
+  // A long derivation has more beats than the card is wide. Ask the layout
+  // rather than guessing a cutoff. scrollWidth is no use here — a centred flex
+  // row spills both ways and reports none of it — so measure the dots' own
+  // footprint against the track. offsetWidth/clientWidth are both untransformed,
+  // so this stays right even mid scale-in.
+  hintCounter=false;
+  const dot=dotsEl.firstElementChild;
+  if(total>1 && dot){
+    const gap=parseFloat(getComputedStyle(dotsEl).gap)||6;
+    const need=total*dot.offsetWidth + (total-1)*gap;
+    hintCounter = need > dotsEl.clientWidth+1;
+  }
+  if(hintCounter) dotsEl.classList.add('count');
   let h=0;
   for(const st of hintStory){ textEl.innerHTML=st.text; h=Math.max(h, b.offsetHeight); }
   textEl.innerHTML=keep;
@@ -2360,8 +2387,9 @@ function renderHintStep(){
   applyStepVisuals(st);
   $('hint-text').innerHTML=st.text;
   const total=hintStory.length;
-  $('hint-dots').innerHTML = total>1
-    ? hintStory.map((_,k)=>'<span class="hdot'+(k===hintStep?' on':'')+'"></span>').join('') : '';
+  $('hint-dots').innerHTML = total<2 ? ''
+    : hintCounter ? (hintStep+1)+' / '+total
+    : hintStory.map((_,k)=>'<span class="hdot'+(k===hintStep?' on':'')+'"></span>').join('');
   $('hint-next').textContent = hintStep<total-1 ? 'Next ▸' : 'Got it! ✓';
   $('hint-back').disabled = hintStep===0;
   $('hint-bubble').classList.add('show');
