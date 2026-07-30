@@ -24,15 +24,27 @@ the blast, so what a booster does is guessable rather than memorised:
 | a corner or T | 💣 **bomb** | everything around it, **twice** |
 | five in a line | 🌈 **rainbow** | every fruit of one colour |
 
-The bomb detonates **twice**: the first blast opens a hole, fruit fall in to
-fill it, and a beat later it goes off again underneath them. Measured, a tap
-takes 18 tiles where it used to take 9, and the 5×5 combine takes 39. Doubling
-the radius instead would have swallowed a quarter of the board in one go and
-left nothing to watch — the second wave is where the power actually reads,
-because you see the hole refill and blow open again. Echoes are recorded at the
-three places a bomb really detonates rather than inside `blastCells`, since the
-booster-preview highlight calls `blastCells` too and arming from a preview would
-fire a phantom blast on the following move.
+**The bomb goes off twice, and it is the bomb itself that goes off twice.** It
+survives its own first blast, falls into the hole it just made, and detonates
+again from wherever it lands — so the second blast hits a different patch of
+board rather than the same one refilled. Watching it drop through the gap it
+opened is the whole point. Measured, a tap takes 18 tiles where it used to take
+9. Doubling the radius instead would have swallowed a quarter of the board in one
+go and left nothing to watch.
+
+The extra life is one flag spent on first firing, so the second blast consumes
+the bomb like any other booster, and a bomb caught in *that* blast gets its own
+extra life — chains still work and still terminate. The pending blasts fire at
+the top of `resolve()`, before `groups()`, because a cascade that matched the
+surviving bomb away would otherwise swallow its second blast silently.
+
+Getting this to work meant collapsing a duplicate. `activate()` used to do a
+tapped booster's first blast itself *and* mark the tile fired so `expand()` would
+skip it — two copies of the rule for how a booster goes off. That is how a tapped
+bomb once ended up clearing nothing but itself when one copy lost a line, and it
+would have quietly eaten the second blast too. `expand()` is now the only thing
+that detonates a star or a bomb, anywhere. A rainbow is still fired by hand in
+the two places that have to tell it which colour to hunt.
 
 Swap two boosters together and they combine — a bomb pair makes one much
 bigger blast, star + bomb makes a three-wide cross, and a rainbow turns every
@@ -150,7 +162,7 @@ fun. Levels get their identity from what's **on** the board instead:
 | | |
 |---|---|
 | 🍃 **leaves** | cover a fruit; sweep them by popping the fruit under them |
-| 🧊 **frost** | freezes a fruit in place; two matches *beside* it chip it away and hand the fruit back |
+| 🧊 **frost** | holds a fruit in place; match that fruit, or anything beside it, to chip the ice away and get the fruit back |
 | 🐤 **duckling** | can't be matched, but *can* be swapped; falls with everything else and is home when it reaches the floor, so you have to clear its column out from under it |
 
 A duckling is swappable and frost is not, which sounds inconsistent until you
@@ -162,6 +174,13 @@ never match, so the move only stands if the fruit taking its place makes a run.
 Nothing about "every move is a match" is bent — you just get to steer. Measured
 after the change, the bot brought the duckling home on 4 of 5 drop levels inside
 20 moves, against roughly half before.
+
+Collecting a duckling used to leave a **hole in the floor**. `collectDucks()`
+runs at the end of `gravity()` and empties the cell the duckling was standing in,
+but that was the end of the fall — nothing was ever going to come along and close
+the gap, so the column sat with gaps under it until some unrelated move happened
+to trigger another pass. Gravity now recurses when it collects one, which
+terminates because every pass consumes at least one duckling.
 
 Frost is a **layer on a fruit**, not a tile of its own. That matters three ways:
 the board never loses a cell to it, you can see which fruit you're about to
@@ -205,6 +224,25 @@ has to carry the whole read.
 
 Chip the last layer and the fruit is simply yours, sitting right there ready to
 match.
+
+**A frozen fruit counts towards a match.** It can't be *moved* — that's what
+being frozen means — but the fruit inside still has a colour, so you can break
+frost head-on by lining up what's inside it instead of only nibbling from beside.
+It doesn't pop: it takes a hit on the ice while the free fruit in the run pop
+around it. Ice in a run is chipped explicitly rather than left to the
+"neighbour of a cleared cell" rule, which misses the far ends of
+`[frozen, frozen, free, frozen, frozen]` — both are in the match but neither is
+next to the one cell that actually clears.
+
+A run needs **at least one unfrozen fruit** to count. Three frozen fruit in a
+line would clear nothing at all, and `resolve()` loops until the board stops
+producing groups, so it would spin on that group forever. With that rule every
+pass either clears a tile or chips a layer, both bounded by the board, so the
+cascade terminates — and `resolve()` carries a hard iteration cap anyway, because
+"almost certainly terminates" is not a good enough guarantee for a toddler's
+game. Boosters are also barred from spawning on a frozen cell now that frozen
+fruit join runs: one sealed under ice can't be seen, tapped or swapped, so it
+would just go to waste.
 
 The duckling is the one true blocker — not fruit, never poppable — and uses a
 kind index the matcher already skips.

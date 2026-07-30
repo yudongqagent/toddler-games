@@ -1423,7 +1423,9 @@ function paint(t) {
   // going to free, and it can never read as a blank white square.
   if (t.ice > 0) {
     el.classList.add('ice', t.ice > 1 ? 'ice2' : 'ice1');
-    el.setAttribute('aria-label', KINDS[t.k].name + (t.ice > 1 ? ' under thick ice' : ' under cracked ice'));
+    el.setAttribute('aria-label', KINDS[t.k].name
+      + (t.ice > 1 ? ' under thick ice' : ' under cracked ice')
+      + ', can be matched but not moved');
   }
 }
 function place(t, r, c, instant) {
@@ -1511,16 +1513,30 @@ function refillKind(r, c) {
 }
 
 function runsOn(g) {
-  // Every horizontal/vertical run of 3+ of the same kind. Rainbows (k<0) never match.
+  // Every horizontal/vertical run of 3+ of the same kind. Rainbows (k<0) never
+  // match.
+  //
+  // Frozen fruit DO count towards a run: the fruit is still there and still has
+  // a colour, so you can break frost head-on by matching what's inside it
+  // instead of only nibbling at it from beside. It doesn't pop — it takes a hit
+  // on the ice and the free fruit in the run pop around it.
+  //
+  // A run must contain at least one UNFROZEN fruit to count, though. Three
+  // frozen fruit in a line would clear nothing whatsoever, and resolve() loops
+  // until the board stops producing groups — so it would spin on that same
+  // group forever.
   const out = [];
+  const push = (cells, k, dir) => {
+    if (cells.some(([r, c]) => !g[r][c].ice)) out.push({ k, cells, dir });
+  };
   for (let r = 0; r < R; r++) {
     let c = 0;
     while (c < C) {
       const t = g[r][c];
       if (!t || t.k < 0) { c++; continue; }
       let e = c + 1;
-      while (e < C && g[r][e] && !g[r][e].ice && g[r][e].k === t.k) e++;
-      if (e - c >= 3) { const cells = []; for (let i = c; i < e; i++) cells.push([r, i]); out.push({ k: t.k, cells, dir: 'h' }); }
+      while (e < C && g[r][e] && g[r][e].k === t.k) e++;
+      if (e - c >= 3) { const cells = []; for (let i = c; i < e; i++) cells.push([r, i]); push(cells, t.k, 'h'); }
       c = e;
     }
   }
@@ -1530,8 +1546,8 @@ function runsOn(g) {
       const t = g[r][c];
       if (!t || t.k < 0) { r++; continue; }
       let e = r + 1;
-      while (e < R && g[e][c] && !g[e][c].ice && g[e][c].k === t.k) e++;
-      if (e - r >= 3) { const cells = []; for (let i = r; i < e; i++) cells.push([i, c]); out.push({ k: t.k, cells, dir: 'v' }); }
+      while (e < R && g[e][c] && g[e][c].k === t.k) e++;
+      if (e - r >= 3) { const cells = []; for (let i = r; i < e; i++) cells.push([i, c]); push(cells, t.k, 'v'); }
       r = e;
     }
   }
@@ -1595,6 +1611,9 @@ function hintMove() {
       let sc = 0;
       for (const g of gs) for (const [gr, gc] of g.cells) {
         if (covers[gr] && covers[gr][gc]) sc += 3;
+        // A match that takes in frozen fruit chips them directly, which beats
+        // hoping a neighbour happens to be next to one.
+        if (grid[gr][gc] && grid[gr][gc].ice) sc += 4;
         for (let up = gr - 1; up >= 0; up--) {           // a duckling above this cell
           const d = grid[up][gc];
           if (d && d.block === 'duck') { sc += 5; break; }
@@ -2289,33 +2308,31 @@ function blastCells(r, c, sp, k, out, radius) {
       if (grid[rr][cc] && grid[rr][cc].k === k) out.add(rr * C + cc);
   }
 }
-/* A bomb goes off TWICE. The first blast opens a hole, fruit fall in to fill
-   it, and a beat later it detonates again underneath them. Doubling the RADIUS
-   instead would swallow a quarter of the board from a single tap and there'd be
-   nothing to watch — the second wave is where the power reads, because you see
-   the hole refill and then blow open again.
+/* A bomb goes off TWICE, and it is the bomb ITSELF that goes off twice — it
+   survives its own first blast. It clears everything around it, then falls into
+   the hole it just made, and detonates a second time from wherever it lands.
+   That is the part worth watching: the bomb drops through the gap it opened and
+   blows again somewhere new, so the second blast hits a different patch of board
+   rather than the same one refilled.
 
-   Recorded at the three places a bomb actually detonates rather than inside
-   blastCells, because showAim() calls blastCells too and arming an echo from a
-   PREVIEW would fire a phantom blast on the next move. */
-let bombEchoes = [];
-function armEcho(r, c, radius) { bombEchoes.push([r, c, radius || 1]); }
-async function fireEchoes() {
-  const shots = bombEchoes;
-  bombEchoes = [];
+   `twice` is the extra life, spent the first time it fires, so the second blast
+   consumes it like any other booster. A bomb caught in the second blast gets its
+   own extra life, so chains keep working and still terminate. */
+let bombAgain = [];
+async function fireBombAgain() {
+  // Only the ones still sitting where we left them: a surviving bomb can be
+  // taken by something else first — the board reshuffling out from under it, or
+  // a cascade landing on it.
+  const shots = bombAgain.filter(t => grid[t.r] && grid[t.r][t.c] === t);
+  bombAgain = [];
   if (!shots.length) return false;
   const keys = new Set();
-  for (const [r, c, rad] of shots) blastCells(r, c, SP_BOMB, -1, keys, rad);
-  // The column can empty out completely between the two bangs. Skip the second
-  // one rather than spending a beat detonating over a hole.
-  let live = 0;
-  keys.forEach(k => { if (grid[Math.floor(k / C)][k % C]) live++; });
-  if (!live) return false;
-  shots.forEach(([r, c, rad]) => bombBlast(r, c, 2 * rad + 1));
-  sfx('blast', 1); buzz(34);
-  const chain = expand(keys);
+  shots.forEach(t => { t.fired = false; keys.add(t.r * C + t.c); });
+  const chain = expand(keys);              // draws the blast and claims the area
+  if (!chain) return false;
+  sfx('blast', 1); buzz(34); shake();
   await sleep(REDUCED ? 0 : 130);
-  await clearCells(keys, 2, [shots[0][0], shots[0][1]], null, null, chain);
+  await clearCells(keys, 2, [shots[0].r, shots[0].c], null, null, chain);
   await gravity();
   return true;
 }
@@ -2332,6 +2349,7 @@ function expand(set) {
   let frontier = [...set];
   const depthOf = new Map();     // cell -> chain depth at which it is destroyed
   const srcOf = new Map();       // cell -> the booster that claimed it
+  const survive = [];            // bombs holding themselves back for blast two
   frontier.forEach(k => depthOf.set(k, 0));
   let depth = 0, first = null, links = 0, maxDepth = 0;
 
@@ -2345,8 +2363,11 @@ function expand(set) {
       if (!first) first = [t.r, t.c];
       maxDepth = Math.max(maxDepth, depth);
       const at = [t.r, t.c], sp = t.sp, rad = t.radius, d = depth;
+      // A bomb keeps ITSELF out of its own first blast, so it is still standing
+      // when gravity runs and drops it into the hole. It goes off again from
+      // there. One extra life each, spent here.
+      if (sp === SP_BOMB && !t.twice) { t.twice = true; survive.push(t); bombAgain.push(t); }
       // The visual and the sound fire when the chain actually arrives here.
-      if (sp === SP_BOMB) armEcho(at[0], at[1], rad);
       const go = () => {
         if (sp === SP_STAR) starBeams(at[0], at[1]);
         else if (sp === SP_BOMB) bombBlast(at[0], at[1], 2 * (rad || 1) + 1);
@@ -2369,6 +2390,9 @@ function expand(set) {
     frontier = next;
     depth++;
   }
+  // Pull the surviving bombs back out of the clear set — done last, because a
+  // later link of the chain may well have added the same cell again.
+  survive.forEach(t => set.delete(t.r * C + t.c));
   return links ? { first, depthOf, srcOf, maxDepth, links } : null;
 }
 
@@ -2426,9 +2450,15 @@ async function clearCells(keys, cascade, from, zapFrom, suckTo, chain) {
     const r = Math.floor(key / C), c = key % C;
     const t = grid[r][c];
     if (!t) return;
-    // Neither a blocker nor frozen fruit is ever popped. Frost is chipped from
-    // beside it; a duckling leaves by reaching the floor.
-    if (t.block || t.ice) return;
+    // Neither a blocker nor frozen fruit is ever popped. A duckling leaves by
+    // reaching the floor; frost takes a hit and hands the fruit back once the
+    // last layer goes.
+    if (t.block) return;
+    // Chipped explicitly rather than left to the adjacency rule below, which
+    // would miss a frozen fruit at the far end of a long run — in
+    // [frozen, frozen, free, frozen, frozen] the outer two are part of the match
+    // but are not next to the one cell that actually clears.
+    if (t.ice) { hitIce(r, c); return; }
     // credit the goal
     if (t.sp !== SP_RAIN) {
       const gi = L.goals.findIndex(g => g.t === 'fruit' && g.k === t.k);
@@ -2544,7 +2574,15 @@ async function gravity() {
   await sleep(REDUCED ? 10 : 110);
   // Anything that reached the floor this fall is home. Checked after the fall
   // settles so a duckling that lands is collected on the same beat it arrives.
-  if (collectDucks()) await sleep(REDUCED ? 10 : 320);
+  if (collectDucks()) {
+    await sleep(REDUCED ? 10 : 320);
+    // A collected duckling leaves a hole ON THE FLOOR, and this was the end of
+    // the fall — nothing else was ever going to come along and close it, so the
+    // column sat with a gap under it until some unrelated move happened to
+    // trigger another pass. Fall again. This terminates because every pass
+    // consumes at least one duckling and a level has finitely many.
+    await gravity();
+  }
 }
 
 // Toddlers can't read these, so each one carries an emoji that says the same
@@ -2557,13 +2595,22 @@ async function resolve(origins) {
   // Remember where the player actually touched, so the very first burst can
   // radiate out from their own move.
   const touched = origins && origins.length ? origins[0] : null;
-  for (;;) {
-    // The bomb's second bang, once the fruit have fallen in to fill the hole.
-    // Every path that detonates anything — tap, match, chain, hammer, combine —
-    // reaches gravity and then resolve, so consuming them here covers all of
-    // them from one place. Each shot is taken off the list before it fires and
-    // a bomb only ever fires once, so this terminates.
-    if (bombEchoes.length && await fireEchoes()) continue;
+  // Every pass either clears at least one tile or chips at least one layer of
+  // ice, and both are bounded by the size of the board, so this does terminate —
+  // even now that a group can be mostly frozen fruit and clear almost nothing.
+  // The cap is there because "almost certainly terminates" is not good enough
+  // for a toddler's game: a hung board is worse than a cascade cut short, and
+  // 400 is far past any legitimate one (a full board plus every ice layer on it
+  // is under 200).
+  for (let guard = 0; guard < 400; guard++) {
+    // Bombs that survived a blast have now fallen; let them go off again before
+    // anything else. Every path that detonates anything — tap, match, chain,
+    // hammer, combine — reaches gravity and then resolve, so doing it here
+    // covers all of them from one place. It has to come BEFORE groups(), or a
+    // cascade could match the surviving bomb away and its second blast would be
+    // silently lost. Each shot leaves the list before it fires and each bomb has
+    // exactly one extra life, so this terminates.
+    if (bombAgain.length && await fireBombAgain()) continue;
     const gs = groups();
     if (!gs.length) break;
     cascade++;
@@ -2589,7 +2636,10 @@ async function resolve(origins) {
         // itself a star or bomb it got excluded from the clear set, never
         // fired, and was then overwritten — the player's booster vanished with
         // no blast at all. Plain fruit only; nearest the player's move first.
-        const plain = ([r, c]) => grid[r][c] && grid[r][c].sp === SP_NONE;
+        // Not onto a frozen cell either, now that frozen fruit join runs — a
+        // booster sealed under ice is one you can't see, can't tap and can't
+        // swap, so it would just quietly go to waste.
+        const plain = ([r, c]) => { const x = grid[r][c]; return x && x.sp === SP_NONE && !x.ice && !x.block; };
         const hit = (origins || []).find(o => g.cells.some(([r, c]) => r === o[0] && c === o[1]) && plain(o));
         const cell = hit || g.cells.filter(plain)[Math.floor(g.cells.filter(plain).length / 2)];
         // If every cell in the group is already a booster there's nowhere to
@@ -2636,6 +2686,7 @@ async function resolve(origins) {
         if (!t) continue;
         t.sp = sp; if (sp === SP_RAIN) t.k = -1; else t.k = k;
         t.fired = false;
+        t.twice = false;        // a fresh bomb gets a fresh second blast
         paint(t);
         converge(r, c, sp === SP_RAIN ? null : k);
         pushNeighbours(r, c);
@@ -2785,19 +2836,16 @@ async function activate(t) {
     await gravity();
     await resolve(null);
     return settle();
-  } else if (t.sp === SP_BOMB) {
-    // This blastCells call is what makes a tapped bomb do anything. Without it
-    // `keys` held only the bomb's own cell and it cleared itself alone — and
-    // because t.fired is set below, expand() skipped it too, so nothing put the
-    // area back. Matching a bomb still worked, which is why it looked partial.
-    blastCells(t.r, t.c, SP_BOMB, t.k, keys, t.radius);
-    bombBlast(at[0], at[1], 2 * (t.radius || 1) + 1);
-    armEcho(t.r, t.c, t.radius);
-  } else {
-    blastCells(t.r, t.c, SP_STAR, t.k, keys);
-    starBeams(at[0], at[1]);
   }
-  t.fired = true;
+  // A tapped star or bomb detonates through expand() and nowhere else. `keys`
+  // already holds this tile, and expand is the one place that knows how each
+  // booster goes off — draws its blast, claims its area, and hands a bomb the
+  // extra life that lets it fall and fire again. This used to do the first
+  // blast here as WELL, and mark the tile fired so expand would skip it: two
+  // copies of the same rule, which is how a tapped bomb once ended up clearing
+  // nothing but itself when one copy lost a line, and which would silently
+  // swallow the second blast now.
+  t.fired = false;
   const chain = expand(keys);
   sfx('blast'); shake(); buzz(40);
   await sleep(REDUCED ? 0 : 130);
@@ -2878,10 +2926,14 @@ async function useHammer(t) {
   sfx('swing');
   await sleep(REDUCED ? 10 : 190);
   const keys = new Set([at[0] * C + at[1]]);
-  if (t.sp !== SP_NONE) {
+  // A rainbow needs to be told which colour to hunt, so it is fired by hand. A
+  // star or a bomb goes through expand() like everywhere else, which is what
+  // gives a hammered bomb its second blast too.
+  if (t.sp === SP_RAIN) {
     t.fired = true;
-    blastCells(t.r, t.c, t.sp, t.sp === SP_RAIN ? commonKind() : t.k, keys, t.radius);
-    if (t.sp === SP_BOMB) armEcho(t.r, t.c, t.radius);
+    blastCells(t.r, t.c, SP_RAIN, commonKind(), keys);
+  } else if (t.sp !== SP_NONE) {
+    t.fired = false;
   }
   const chain = expand(keys);
   sfx('blast'); buzz(45); shake();
@@ -3274,7 +3326,7 @@ function goalHow(g) {
        // The swap is the part nobody discovers on their own, and it's the
        // difference between a stuck column and a solvable one.
        : g.t === 'drop'  ? 'Clear the fruit under a duckling so it falls. You can slide a duckling sideways too.'
-       : g.t === 'ice'   ? 'Match fruit right NEXT to frozen fruit to chip the ice off.'
+       : g.t === 'ice'   ? 'Match the frozen fruit itself, or any fruit right beside it.'
        : 'Match 4 or 5 at once instead of 3 to make one.';
 }
 
@@ -3512,7 +3564,7 @@ function start(idx, resume, quiet) {
   score = 0; movesLeft = L.moves; movesUsed = 0; usedHelp = false; over = false; busy = false; sel = null;
   goalGot = L.goals.map(() => 0);
   boostMade = {}; ducksHome = 0; iceLeft = 0;
-  bombEchoes = [];              // never carry a pending bang into a new level
+  bombAgain = [];               // never carry a pending blast into a new level
   hideTip();
   sinceBooster = 0;
 
