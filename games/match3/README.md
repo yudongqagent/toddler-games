@@ -46,6 +46,16 @@ would have quietly eaten the second blast too. `expand()` is now the only thing
 that detonates a star or a bomb, anywhere. A rainbow is still fired by hand in
 the two places that have to tell it which colour to hunt.
 
+A rainbow set off by something *else* — a star's line sweeping over it, a bomb
+catching it — hunts the most common colour, the same one it takes when you tap
+it, so a rainbow does the same thing however it goes off. It used to be handed
+`-1` as the colour to hunt, which is the rainbow's own kind: it swept the board
+looking for other rainbows, found none, and vanished having done nothing, so a
+line blast could swallow your rainbow for free. Measured before the fix, a star
+crossing a rainbow left 12 of the 14 tiles of that colour standing. A chained
+rainbow also throws its bolts now — a bare shockwave gave it the same anonymous
+ring as anything else, so even once it worked you couldn't see that it had.
+
 Swap two boosters together and they combine — a bomb pair makes one much
 bigger blast, star + bomb makes a three-wide cross, and a rainbow turns every
 fruit of a colour into the other booster and sets them all off at once. The

@@ -2367,19 +2367,41 @@ function expand(set) {
       // when gravity runs and drops it into the hole. It goes off again from
       // there. One extra life each, spent here.
       if (sp === SP_BOMB && !t.twice) { t.twice = true; survive.push(t); bombAgain.push(t); }
+      // A rainbow set off by something else has to be TOLD which colour to hunt.
+      // It used to be handed -1 here, which is the rainbow's own kind, so it
+      // swept the board looking for other rainbows, found none, and vanished
+      // having done nothing at all — a star's line blast could swallow your
+      // rainbow for free. It takes the most common colour now, the same one it
+      // takes when you tap it, so a rainbow does the same thing however it goes
+      // off.
+      const hunt = sp === SP_RAIN ? commonKind() : t.k;
+      const add = new Set();
+      blastCells(at[0], at[1], sp, hunt, add, rad);
+
       // The visual and the sound fire when the chain actually arrives here.
       const go = () => {
         if (sp === SP_STAR) starBeams(at[0], at[1]);
         else if (sp === SP_BOMB) bombBlast(at[0], at[1], 2 * (rad || 1) + 1);
-        else shockwave(at[0], at[1]);
+        else {
+          // Bolts, one per target, are what a rainbow LOOKS like in this game.
+          // A bare shockwave gave a chained one the same anonymous ring as
+          // anything else, so even once it started working you couldn't tell it
+          // had. Staggered to match the order the fruit actually pop in.
+          shockwave(at[0], at[1]);
+          let i = 0;
+          add.forEach(x => {
+            const rr = Math.floor(x / C), cc = x % C;
+            if (rr === at[0] && cc === at[1]) return;
+            const n = i++;
+            setTimeout(() => { zap(at[0], at[1], rr, cc); if (n < 6) sfx('zap'); }, n * 42);
+          });
+        }
         sfx('blast', Math.min(d, 4));
         buzz(d ? 16 : 30);
         if (d) shake();
       };
       if (d === 0 || REDUCED) go(); else setTimeout(go, d * CHAIN_STEP);
 
-      const add = new Set();
-      blastCells(at[0], at[1], sp, sp === SP_RAIN ? -1 : t.k, add, rad);
       add.forEach(x => {
         if (!set.has(x)) { set.add(x); next.push(x); }
         // Claimed at THIS link's depth; a booster among them detonates one
