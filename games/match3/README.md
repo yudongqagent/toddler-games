@@ -174,6 +174,8 @@ fun. Levels get their identity from what's **on** the board instead:
 | 🍃 **leaves** | cover a fruit; sweep them by popping the fruit under them |
 | 🧊 **frost** | holds a fruit in place; match that fruit, or anything beside it, to chip the ice away and get the fruit back |
 | 🐤 **duckling** | can't be matched, but *can* be swapped; falls with everything else and is home when it reaches the floor, so you have to clear its column out from under it |
+| 🎁 **gift** (level 20+) | two knocks from matches beside it and it bursts open, leaving a **booster** behind |
+| 🥥 **coconut** (level 30+) | ignores ordinary matches completely — only a booster going off over it cracks it |
 
 A duckling is swappable and frost is not, which sounds inconsistent until you
 play it. Frost is scenery — there is nothing to decide about it until you break
@@ -257,11 +259,73 @@ would just go to waste.
 The duckling is the one true blocker — not fruit, never poppable — and uses a
 kind index the matcher already skips.
 
-**Levels are generated, and there is no end to them.** Six kinds of objective —
-collect a fruit, sweep leaves, break ice, bring a duckling home, make boosters,
-reach a score — are drawn from a menu that unlocks gradually, so a new idea
-always arrives on its own. Twenty-six distinct goal mixes appear in the first
-sixty levels.
+**Levels are generated, and there is no end to them.** Ten kinds of objective are
+drawn from a menu that unlocks gradually, so a new idea always arrives on its
+own — and the unlocks are spread far enough apart that the game is still handing
+you something new at level fifty.
+
+| Unlocks | Objective |
+|---|---|
+| 1, 3, 4 | collect a fruit · sweep leaves · reach a score |
+| 5, 6, 8 | make boosters · bring a duckling home · break ice |
+| **20** | 🎁 open gifts |
+| **30** | 🥥 crack coconuts |
+| **40** | 💥 combine two boosters |
+| **50** | 🔥 set off a chain of three |
+
+### The late game
+
+Everything before level 20 is about *clearing* things. The four late objectives
+are deliberately not more of that — each one asks for a different kind of move,
+because a hundred levels of "clear more of it, faster" is just one level with a
+bigger number on it.
+
+**🎁 The gift is the first blocker you are pleased to see.** Two knocks from
+matches beside it — the same rule as frost, so there is nothing new to learn —
+and it bursts open leaving a **booster** on its cell. Everything else on the
+board is an obstacle; this one is a reward sitting behind a small errand, which
+makes a board with gifts on it read completely differently. It never pays out a
+rainbow: a free rainbow from a blocker you were going to break anyway is the
+biggest thing in the game arriving without the straight five that earns it.
+
+**🥥 The coconut only listens to blasts.** Ordinary matches beside it do
+nothing at all — it takes a booster going off over it, which finally makes the
+late game about *using* boosters instead of hoarding them. It is matte and dull
+next to the candy on purpose, because it must not look like something you could
+match. Note that a bomb cracks one outright: a bomb detonates twice, each blast
+is its own clear, and two hits is a coconut. That is a synergy worth having
+rather than a bug — it is the reward for reading what the bomb does.
+
+**💥 Combining** asks you to swap one booster straight onto another, which is
+the best thing in the game and the thing a child is least likely to discover
+alone. **🔥 Chains** ask for one clear that keeps going three times over, which
+you cannot do on demand — you do it by making bigger matches and letting the
+board pay you back.
+
+Every one of them is priced off **measured** throughput, and measuring caught two
+real design faults that reasoning had not.
+
+**Combining scored zero in 132 moves of bot play.** Two boosters have to be alive
+*and* adjacent, which essentially never happens by accident — the same shape of
+mistake as the old "make 3 bombs" goal. The fix is the same too: the hint has to
+steer at it, exactly as it already steers at leaves, ice and ducklings. A booster
+pair was only ever registered as a *fallback*, taken when no scoring move existed
+at all, so on a busy board the hint never once showed the player the move the
+level was asking for. With the steering in, it lands at 0.083/move and the goal
+finishes in 12 moves of a 35-move budget.
+
+**Chains turned out more than twice as common as guessed** — 0.23/move measured
+against an estimate of 0.10 — so a chain goal was finishing in about four moves
+against a budget built for thirty. Repriced, and the ask raised from one chain to
+two.
+
+The coconut is the rarest thing in the game by some distance, since it needs a
+booster to land *and* to land near one. With two on the board it took 31 moves of
+a 38-move budget, which is finishable but a long errand for a three-year-old, so
+a level that asks for one now puts **three** on the board — more targets rather
+than a longer level. That brought it to 13–19 moves across three levels. There is
+a floor under it regardless: two hammers crack a coconut outright, and you always
+have hammers, so the goal can never strand anyone.
 
 ### The goal chips
 
