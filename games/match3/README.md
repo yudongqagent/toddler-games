@@ -174,7 +174,7 @@ fun. Levels get their identity from what's **on** the board instead:
 | 🍃 **leaves** | cover a fruit; sweep them by popping the fruit under them |
 | 🧊 **frost** | holds a fruit in place; match that fruit, or anything beside it, to chip the ice away and get the fruit back |
 | 🐤 **duckling** | can't be matched, but *can* be swapped; falls with everything else and is home when it reaches the floor, so you have to clear its column out from under it |
-| 🎁 **gift** (level 20+) | two knocks from matches beside it and it bursts open, leaving a **booster** behind |
+| 🎁 **gift** (level 20+) | one knock from a match beside it and it bursts open, leaving a **booster** behind; it can be swapped, like a duckling |
 | 🥥 **coconut** (level 30+) | ignores ordinary matches completely — only a booster going off over it cracks it |
 
 A duckling is swappable and frost is not, which sounds inconsistent until you
@@ -280,13 +280,37 @@ are deliberately not more of that — each one asks for a different kind of move
 because a hundred levels of "clear more of it, faster" is just one level with a
 bigger number on it.
 
-**🎁 The gift is the first blocker you are pleased to see.** Two knocks from
-matches beside it — the same rule as frost, so there is nothing new to learn —
-and it bursts open leaving a **booster** on its cell. Everything else on the
-board is an obstacle; this one is a reward sitting behind a small errand, which
-makes a board with gifts on it read completely differently. It never pays out a
-rainbow: a free rainbow from a blocker you were going to break anyway is the
-biggest thing in the game arriving without the straight five that earns it.
+**🎁 The gift is the first blocker you are pleased to see.** One knock from a
+match beside it and it bursts open, leaving a **booster** on its cell.
+Everything else on the board is an obstacle; this one is a reward sitting behind
+a small errand, which makes a board with gifts on it read completely
+differently. It never pays out a rainbow: a free rainbow from a blocker you were
+going to break anyway is the biggest thing in the game arriving without the
+straight five that earns it.
+
+It is also **swappable**, like a duckling — the only two things on the board that
+are. Frost and coconuts are scenery until they break; a gift is something you
+want, so being able to shove it toward a match you can already see is the whole
+difference between waiting for one and going and getting it.
+
+A single knock has a consequence worth spelling out: **gifts arrive during the
+level rather than sitting on the board at the start**. Measured with four on the
+board and a goal of two, the first cascade opened all of them and the goal was
+finished on move ONE — a blast sweeps a gift and its neighbours together, so
+one-knock plus a boardful is no objective at all. A gift level now starts with two
+and drips more in through the refill, capped at three on the board at once. That
+makes "open five gifts" a real errand while each individual gift stays the quick
+treat it is meant to be: 3–12 moves across four levels, against budgets of 35+.
+
+One bug worth recording, because the shape of it recurs. A gift opens into a
+**booster**, and `clearCells` decided whether a cell was a block by looking at it
+when the loop reached it. A blast sweeps a gift and its neighbours in the same
+clear, so a neighbour would be processed first, the adjacency rule would open the
+gift into a booster, and then the loop would arrive at that cell, find an
+ordinary booster sitting in its key set, and pop it — the blast destroyed the
+reward it had just created. Measured before the fix: a star over a gift opened it
+and left **zero** boosters on the board. Block-ness is now a snapshot taken
+before the loop starts.
 
 **🥥 The coconut only listens to blasts.** Ordinary matches beside it do
 nothing at all — it takes a booster going off over it, which finally makes the
