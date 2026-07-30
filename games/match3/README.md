@@ -195,53 +195,15 @@ terminates because every pass consumes at least one duckling.
 Frost is a **layer on a fruit**, not a tile of its own. That matters three ways:
 the board never loses a cell to it, you can see which fruit you're about to
 free, and it can't render as a blank white square — which is exactly what an
-opaque blue block with an 🧊 glyph did. Most frost is a **single layer** you can
-free in one match; thick two-layer blocks creep in from level 12 as a growing
-minority. Uniform double frost was tedious.
+opaque blue block with an 🧊 glyph did. Most frost is a **single layer** you can free in one match; thick two-layer
+blocks creep in from level 12 as a growing minority. Uniform double frost was
+tedious. A thick block reads as a heavy frosted slab; a single layer is
+thinner, inset smaller and visibly fractured, with the fruit clear underneath.
 
-### Why the frost is an angular crystal
+### Why the frost is built as a rim and a window
 
-Two things have to be readable at 40 pixels: *is this tile frozen*, and *how many
-hits are left*. They want different tools.
-
-**Presence is a silhouette problem.** Ranked by how fast the eye resolves them,
-the cues available are silhouette, then value, then hue, then texture. Every
-earlier attempt here answered "is this frozen" with hue plus a thin border —
-the two weakest — on a board already made of saturated colours. That is why a
-frozen tile was easy to miss, and why it was worst of all on the blue blueberry
-tile. So the frost is now an **eight-sided crystal**: on a board built entirely
-from soft rounded squares, an angular gem is findable at a glance. It keeps
-working when the fruit underneath is blue, when the tile is small, and for a
-colour-blind player, because none of that changes a shape.
-
-**Depth wants a qualitative difference, not a quantitative one.** "Slightly
-thicker border" forces you to hold two tiles side by side and compare. So at one
-layer the crystal has a **whole corner chipped off** — three signals moving
-together, all in the same direction: the silhouette breaks, the ice turns much
-clearer, and a fracture opens from the broken corner. Thinner ice reveals *more*
-fruit, which is the way round it ought to be. The chip is a chamfer cut on the
-gem's own 45°, so it reads as damage rather than as a rectangle gone missing.
-
-Five treatments were built and compared on the real board before picking this
-one. A near-opaque frosted slab was the clearest of all at range but made the
-fruit unreadable — the exact "too white and washed out" failure from an earlier
-round. Countable icicles turned to white smudges at tile size. A crystal that
-*shrank* as it thinned gave the most legible layer count, but backwards: the
-small crystal sits over the fruit's face, so one layer showed less than two. A
-right-angled notch out of the corner read as a rendering glitch rather than as
-damage, which is what sent the chip to 45°.
-
-The two-layer state carries a second inner wall, because a single flat disc of
-blue reads as "darker glass" rather than "thick glass".
-
-### What the crystal inherited from the round before it
-
-The rim-and-window build the crystal replaced is worth keeping on record,
-because the constraint that produced it still holds and the crystal still obeys
-it.
-
-Two attempts at the frost before that both failed the same way on a real phone,
-and the reason was architectural rather than a matter of taste. A stack of
+Two earlier attempts at the frost both failed the same way on a real phone, and
+the reason was architectural rather than a matter of taste. A stack of
 translucent gradients takes its final colour from whatever sits underneath, and
 underneath is one of six saturated tile colours — so the same frost came out
 grey over a blueberry, lavender over grapes and khaki over a banana. Six
@@ -250,24 +212,21 @@ that when the input is what varies. Blur can't unify them either:
 `backdrop-filter` needs the `-webkit-` prefix on iOS Safari, and its wash is
 what made frozen fruit look flat white on an iPhone.
 
-The fix was a **rim** plus a **window**, and the crystal is still built that way:
-a nearly-opaque edge, whose colour is therefore fixed no matter what it covers
-and which carries the identity of the material, around a lightly-veiled centre
-that lets the fruit read through sharp and in its own colour. The crystal's
-radial gradient is exactly this — dense at the polygon's edge, clear at its
-middle — it just hangs it on an angular silhouette instead of a rounded square.
+So the frost is a **rim** plus a **window**. The rim is nearly opaque, which
+makes its colour fixed no matter what it covers, and it carries the entire
+identity of the material. The window is only lightly veiled, so the fruit shows
+through sharp and in its own colour. Thickness then becomes a real variable: how
+far the rim intrudes, and how much the window is veiled. Both states are
+obviously the same substance — which a white X over a grey wash never was.
 
-Two other constraints carried over. Facets are **corner wedges**, never lines
-across the middle, because three crossing white lines landed as a struck-through
-"cancelled" mark straight over the fruit; and the fracture is **masked so it
-fades**, radiating out of the broken corner rather than ruling a line the full
-width of the tile, which reads as a scratch drawn on the fruit instead of damage
-to the ice.
-
-One implementation note: `clip-path` clips `box-shadow` away with everything
-else outside the polygon, so the crystal's edge has to come from the gradient
-itself, and its drop shadow has to be a `filter: drop-shadow()` — that one
-follows the clipped silhouette.
+The rim is **blue**, with white as a specular edge one thin ring wide on top of
+it. Stacked `inset` box-shadows paint front-to-back, so a narrow white spread
+listed before a wider blue spread reads as a lit edge on a blue body. Building
+it the other way round — a wide near-white rim — is how the frost came out
+looking bleached. Facets are corner wedges rather than lines across the middle,
+because three crossing white lines landed as a struck-through "cancelled" mark
+straight over the fruit. The single fracture on the thin state is masked so it
+fades out instead of stopping in mid-air.
 
 The goal chip uses the same build with the window pulled in tight: at 24px
 there's no fruit behind it for the window to be a window *onto*, so the collar
