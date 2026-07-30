@@ -21,8 +21,18 @@ the blast, so what a booster does is guessable rather than memorised:
 | You match | You get | It clears |
 |---|---|---|
 | four in a line | ⭐ **star** | its whole row and column |
-| a corner or T | 💣 **bomb** | everything around it |
+| a corner or T | 💣 **bomb** | everything around it, **twice** |
 | five in a line | 🌈 **rainbow** | every fruit of one colour |
+
+The bomb detonates **twice**: the first blast opens a hole, fruit fall in to
+fill it, and a beat later it goes off again underneath them. Measured, a tap
+takes 18 tiles where it used to take 9, and the 5×5 combine takes 39. Doubling
+the radius instead would have swallowed a quarter of the board in one go and
+left nothing to watch — the second wave is where the power actually reads,
+because you see the hole refill and blow open again. Echoes are recorded at the
+three places a bomb really detonates rather than inside `blastCells`, since the
+booster-preview highlight calls `blastCells` too and arming from a preview would
+fire a phantom blast on the following move.
 
 Swap two boosters together and they combine — a bomb pair makes one much
 bigger blast, star + bomb makes a three-wide cross, and a rainbow turns every
@@ -74,7 +84,7 @@ clear, and how do I go off:
 **Helper tools.** Three of them sit in a bar pinned to the bottom of the
 screen, thumb-height, and none of them cost a move — they're a treat, not a currency, and nothing here is for sale:
 
-- 🔨 **hammer** — tap any single fruit and pop it (set off a booster with it too)
+- 🔨 **hammer** — tap any single fruit and pop it (set off a booster with it too, or smash a whole block of frost off in one swing)
 - 🔄 **swap** — trade any two neighbours, even when it makes no match at all
 - 🌀 **mix** — reshuffle the whole board
 
@@ -86,6 +96,12 @@ is now a target, and the footnote says what to do next. Each has its own
 payoff: the hammer swings down and lands *before* anything breaks, the mix
 tumbles the whole board through a spin and re-deals at the midpoint where every
 tile is small and blurred, so the swap itself is invisible.
+
+The hammer refuses a duckling outright, without spending, because a duckling has
+to *reach the floor* — smashing it would undo the very goal you were spending
+the tool on. Both it and frost used to take your hammer and then do nothing at
+all: `clearCells` won't pop a blocker or a frozen tile, and by the time it
+declined the tool was already gone.
 
 **The rainbow hunts.** It doesn't just delete a colour. The orb swells and
 flares, then fires a bolt of light at each fruit of that colour **one at a
@@ -135,7 +151,17 @@ fun. Levels get their identity from what's **on** the board instead:
 |---|---|
 | 🍃 **leaves** | cover a fruit; sweep them by popping the fruit under them |
 | 🧊 **frost** | freezes a fruit in place; two matches *beside* it chip it away and hand the fruit back |
-| 🐤 **duckling** | can't be matched; falls with everything else and is home when it reaches the floor, so you have to clear its column out from under it |
+| 🐤 **duckling** | can't be matched, but *can* be swapped; falls with everything else and is home when it reaches the floor, so you have to clear its column out from under it |
+
+A duckling is swappable and frost is not, which sounds inconsistent until you
+play it. Frost is scenery — there is nothing to decide about it until you break
+it. A duckling is a piece with a destination, and refusing to let you move it
+meant a duckling parked over a column you had no way to clear turned the level
+into a coin flip. Swapping one still obeys the ordinary rule: the duckling can
+never match, so the move only stands if the fruit taking its place makes a run.
+Nothing about "every move is a match" is bent — you just get to steer. Measured
+after the change, the bot brought the duckling home on 4 of 5 drop levels inside
+20 moves, against roughly half before.
 
 Frost is a **layer on a fruit**, not a tile of its own. That matters three ways:
 the board never loses a cell to it, you can see which fruit you're about to
@@ -188,6 +214,23 @@ collect a fruit, sweep leaves, break ice, bring a duckling home, make boosters,
 reach a score — are drawn from a menu that unlocks gradually, so a new idea
 always arrives on its own. Twenty-six distinct goal mixes appear in the first
 sixty levels.
+
+### The goal chips
+
+Each chip **fills up** as you go, behind the icon and the number. Most of the
+people playing this cannot read "7/10", and a bar that visibly grows is the only
+part of the chip they can actually use. Finishing one turns it gold and gives
+the icon a spin.
+
+**Tap a chip and it tells you what it wants and how to get it** — a title
+("Break 10 ice blocks") over one plain sentence naming the action ("Match fruit
+right NEXT to frozen fruit to chip the ice off"). A chip can only ever be a
+picture and a number; there is no room on it to say that ice breaks from beside
+rather than on top, or that a duckling can be slid sideways, and those are
+exactly the rules nobody works out unaided. Tapping the open one closes it,
+anything else on screen closes it, and it times out on its own so it can never
+be left covering the board. The bubble is `pointer-events:none`, so a tap that
+dismisses it still reaches the tile underneath.
 
 They're drawn from a **seeded** stream, not `Math.random`, and the seed is the
 level number. That distinction matters: a level is genuinely varied, but Level

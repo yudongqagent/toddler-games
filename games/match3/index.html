@@ -169,20 +169,57 @@
   /* goal chips */
   .goals { display:flex; gap:min(2.4vw,12px); flex-wrap:wrap; justify-content:center; }
   .goal {
+    position:relative; overflow:hidden;
     display:flex; align-items:center; gap:7px;
-    background:rgba(255,255,255,.9); border-radius:999px;
+    background:rgba(255,255,255,.92); border-radius:999px;
+    border:none; font-family:inherit; cursor:pointer;
     padding:5px 13px 5px 6px;
-    box-shadow:0 3px 0 rgba(0,0,0,.13);
-    transition:transform .18s, background .25s;
+    box-shadow:0 3px 0 rgba(0,0,0,.13), inset 0 1px 0 rgba(255,255,255,.95);
+    transition:transform .18s, background .25s, box-shadow .12s;
   }
-  .goal .mini { position:relative; width:clamp(26px,7vw,34px); height:clamp(26px,7vw,34px); flex:none; }
+  .goal:active { transform:translateY(2px); box-shadow:0 1px 0 rgba(0,0,0,.13); }
+  .goal:focus-visible { outline:3px solid #fff; outline-offset:2px; }
+  /* Progress as something you can SEE filling, not only a fraction to read.
+     Most of the people playing this cannot read "7/10" yet. */
+  .goal .fill {
+    position:absolute; left:0; top:0; bottom:0; width:0;
+    background:linear-gradient(90deg, rgba(255,205,84,.45), rgba(255,169,64,.7));
+    transition:width .5s cubic-bezier(.25,1.15,.45,1);
+  }
+  .goal .mini, .goal .num { position:relative; }
+  .goal .mini {
+    width:clamp(26px,7vw,34px); height:clamp(26px,7vw,34px); flex:none;
+    filter:drop-shadow(0 1px 1px rgba(60,30,10,.22));
+  }
   .goal .mini .shape { position:absolute; inset:0; }
   .goal .mini .face { position:absolute; inset:0; display:grid; place-items:center; font-size:clamp(15px,4vw,20px); }
   .goal .num { font-size:clamp(14px,3.8vw,19px); font-weight:800; color:#4a2800; white-space:nowrap; }
   .goal.pulse { animation:gpulse .35s ease; }
   @keyframes gpulse { 40%{transform:scale(1.18) rotate(-3deg)} }
-  .goal.done { background:linear-gradient(#fff0a8,#ffd94d); }
-  .goal.done .num { color:#7a5200; }
+  .goal.done { background:linear-gradient(#fff3b0,#ffcf3d); box-shadow:0 3px 0 rgba(150,100,0,.25), inset 0 1px 0 rgba(255,255,255,.9); }
+  .goal.done .fill { width:100% !important; background:none; }
+  .goal.done .num { color:#6b4700; }
+  .goal.done .mini { animation:goalWin .5s cubic-bezier(.3,1.5,.5,1); }
+  @keyframes goalWin { 40%{transform:scale(1.3) rotate(8deg)} }
+
+  /* tap a chip and it tells you, in one line, what it wants and how to get it */
+  .tip {
+    position:fixed; z-index:70; pointer-events:none;
+    max-width:min(80vw,340px);
+    background:linear-gradient(#4b3a72,#3a2b5c); color:#fff;
+    padding:10px 14px; border-radius:16px;
+    box-shadow:0 10px 26px rgba(40,20,90,.4);
+    opacity:0; transform:translateY(-7px) scale(.92); transform-origin:top center;
+    transition:opacity .18s ease, transform .2s cubic-bezier(.3,1.4,.5,1);
+  }
+  .tip.show { opacity:1; transform:translateY(0) scale(1); }
+  .tip b { display:block; font-size:clamp(14px,3.9vw,17px); font-weight:800; }
+  .tip span { display:block; margin-top:2px; font-size:clamp(12px,3.4vw,15px); font-weight:700; color:#ffffffc4; line-height:1.35; }
+  .tip::before {
+    content:''; position:absolute; top:-7px; left:var(--ax,50%); transform:translateX(-50%);
+    border-left:8px solid transparent; border-right:8px solid transparent;
+    border-bottom:8px solid #4b3a72;
+  }
 
   /* ---- helper tools: a bar pinned to the bottom of the screen ---- */
   .tools {
@@ -1364,7 +1401,7 @@ function paint(t) {
     t.shape.style.background = '';
     el.classList.add('blk', 'duck');
     t.face.textContent = '🐤';
-    el.setAttribute('aria-label', 'duckling');
+    el.setAttribute('aria-label', 'duckling, can be moved but not matched');
     return;
   }
   if (t.sp === SP_RAIN) {
@@ -1407,6 +1444,12 @@ function isRain(t) { return t && t.sp === SP_RAIN; }
                   you have to empty the column underneath it
 
    It uses k = BLOCK_K, which runsOn already skips.
+
+   A duckling IS swappable, though — it just can't match. Swap one with a
+   neighbouring fruit and the move stands only if that fruit makes a run in the
+   duckling's old cell, so the "every move is a match" rule holds and you still
+   get to steer the duckling out of a column you have no way to clear. That
+   column was the whole reason drop levels came down to luck.
 
    Frozen fruit is deliberately NOT one of these. Ice is a layer ON a fruit
    (t.ice = how many layers are left), so the board never loses a cell to it,
@@ -1531,7 +1574,10 @@ function hintMove() {
       const r2 = r + dr, c2 = c + dc;
       if (r2 >= R || c2 >= C) continue;
       const a = grid[r][c], b = grid[r2][c2];
-      if (!a || !b || a.block || b.block || a.ice || b.ice) continue;
+      // Ducklings are swappable, so a duckling swap is a real candidate here —
+      // runsOn decides, and it can only ever come back true for the fruit that
+      // lands in the duckling's cell, which is exactly the rule.
+      if (!a || !b || a.ice || b.ice || (a.block && b.block)) continue;
       // Only a rainbow (or two boosters together) goes off regardless. A star
       // or bomb swapped against a plain fruit still has to make a match, so it
       // must be tested like any other swap — pointing the finger at one that
@@ -1570,12 +1616,12 @@ function hintMove() {
 function anyMove() {
   for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) {
     const a0 = grid[r][c];
-    if (!a0 || a0.block || a0.ice) continue;         // hole, blocker or frozen
+    if (!a0 || a0.ice) continue;                     // hole or frozen
     for (const [dr, dc] of [[0, 1], [1, 0]]) {
       const r2 = r + dr, c2 = c + dc;
       if (r2 >= R || c2 >= C) continue;
       const b0 = grid[r2][c2];
-      if (!b0 || b0.block || b0.ice) continue;
+      if (!b0 || b0.ice || (a0.block && b0.block)) continue;
       const a = grid[r][c], b = grid[r2][c2];
       if (isRain(a) || isRain(b)) return [[r, c], [r2, c2]];
       grid[r][c] = b; grid[r2][c2] = a;
@@ -2243,6 +2289,37 @@ function blastCells(r, c, sp, k, out, radius) {
       if (grid[rr][cc] && grid[rr][cc].k === k) out.add(rr * C + cc);
   }
 }
+/* A bomb goes off TWICE. The first blast opens a hole, fruit fall in to fill
+   it, and a beat later it detonates again underneath them. Doubling the RADIUS
+   instead would swallow a quarter of the board from a single tap and there'd be
+   nothing to watch — the second wave is where the power reads, because you see
+   the hole refill and then blow open again.
+
+   Recorded at the three places a bomb actually detonates rather than inside
+   blastCells, because showAim() calls blastCells too and arming an echo from a
+   PREVIEW would fire a phantom blast on the next move. */
+let bombEchoes = [];
+function armEcho(r, c, radius) { bombEchoes.push([r, c, radius || 1]); }
+async function fireEchoes() {
+  const shots = bombEchoes;
+  bombEchoes = [];
+  if (!shots.length) return false;
+  const keys = new Set();
+  for (const [r, c, rad] of shots) blastCells(r, c, SP_BOMB, -1, keys, rad);
+  // The column can empty out completely between the two bangs. Skip the second
+  // one rather than spending a beat detonating over a hole.
+  let live = 0;
+  keys.forEach(k => { if (grid[Math.floor(k / C)][k % C]) live++; });
+  if (!live) return false;
+  shots.forEach(([r, c, rad]) => bombBlast(r, c, 2 * rad + 1));
+  sfx('blast', 1); buzz(34);
+  const chain = expand(keys);
+  await sleep(REDUCED ? 0 : 130);
+  await clearCells(keys, 2, [shots[0][0], shots[0][1]], null, null, chain);
+  await gravity();
+  return true;
+}
+
 // One link of a chain reaction to the next.
 const CHAIN_STEP = 150;
 // A booster caught in a clear fires, and whatever it hits can fire too — but a
@@ -2269,6 +2346,7 @@ function expand(set) {
       maxDepth = Math.max(maxDepth, depth);
       const at = [t.r, t.c], sp = t.sp, rad = t.radius, d = depth;
       // The visual and the sound fire when the chain actually arrives here.
+      if (sp === SP_BOMB) armEcho(at[0], at[1], rad);
       const go = () => {
         if (sp === SP_STAR) starBeams(at[0], at[1]);
         else if (sp === SP_BOMB) bombBlast(at[0], at[1], 2 * (rad || 1) + 1);
@@ -2480,6 +2558,12 @@ async function resolve(origins) {
   // radiate out from their own move.
   const touched = origins && origins.length ? origins[0] : null;
   for (;;) {
+    // The bomb's second bang, once the fruit have fallen in to fill the hole.
+    // Every path that detonates anything — tap, match, chain, hammer, combine —
+    // reaches gravity and then resolve, so consuming them here covers all of
+    // them from one place. Each shot is taken off the list before it fires and
+    // a bomb only ever fires once, so this terminates.
+    if (bombEchoes.length && await fireEchoes()) continue;
     const gs = groups();
     if (!gs.length) break;
     cascade++;
@@ -2708,6 +2792,7 @@ async function activate(t) {
     // area back. Matching a bomb still worked, which is why it looked partial.
     blastCells(t.r, t.c, SP_BOMB, t.k, keys, t.radius);
     bombBlast(at[0], at[1], 2 * (t.radius || 1) + 1);
+    armEcho(t.r, t.c, t.radius);
   } else {
     blastCells(t.r, t.c, SP_STAR, t.k, keys);
     starBeams(at[0], at[1]);
@@ -2767,6 +2852,25 @@ async function useHammer(t) {
   if (busy || over) return;
   busy = true;
   const at = [t.r, t.c];
+  // Both of these used to charge you a hammer and then do nothing at all,
+  // because clearCells refuses to pop a blocker or frozen fruit and the tool
+  // was already spent by then. A duckling is refused outright — it has to reach
+  // the floor, so smashing it would undo the goal you're spending the tool on —
+  // and the tool stays armed for another tile. Frost is fair game: a hammer
+  // taking the whole block off in one swing is what a hammer is for.
+  if (t.block) { sfx('nope'); busy = false; return; }
+  if (t.ice) {
+    if (!spendTool('hammer')) { busy = false; return; }
+    disarm();
+    smash(at[0], at[1]); sfx('swing');
+    await sleep(REDUCED ? 10 : 190);
+    iceHitThisClear = new Set();
+    while (t.ice) { iceHitThisClear.clear(); hitIce(t.r, t.c); }
+    await sleep(REDUCED ? 0 : 220);
+    await gravity();
+    await resolve(null);
+    return settle();
+  }
   if (!spendTool('hammer')) { busy = false; return; }
   disarm();
   // let the hammer actually fall before anything breaks
@@ -2774,7 +2878,11 @@ async function useHammer(t) {
   sfx('swing');
   await sleep(REDUCED ? 10 : 190);
   const keys = new Set([at[0] * C + at[1]]);
-  if (t.sp !== SP_NONE) { t.fired = true; blastCells(t.r, t.c, t.sp, t.sp === SP_RAIN ? commonKind() : t.k, keys, t.radius); }
+  if (t.sp !== SP_NONE) {
+    t.fired = true;
+    blastCells(t.r, t.c, t.sp, t.sp === SP_RAIN ? commonKind() : t.k, keys, t.radius);
+    if (t.sp === SP_BOMB) armEcho(t.r, t.c, t.radius);
+  }
   const chain = expand(keys);
   sfx('blast'); buzz(45); shake();
   await sleep(REDUCED ? 0 : 130);
@@ -2825,7 +2933,14 @@ async function useMix() {
 
 async function trySwap(a, b) {
   if (busy || over) return;
-  if (!a || !b || a.block || b.block || a.ice || b.ice) return;
+  // A duckling CAN be swapped. It still can't match — its kind is one the
+  // matcher skips — so the move only stands if the fruit taking its place makes
+  // a run, exactly like any other swap. That keeps the "every move is a match"
+  // rule intact while letting you walk a duckling out of a column you can't
+  // clear, which is the situation that used to leave the level down to luck.
+  // Frost stays immovable: it is scenery until you break it.
+  if (!a || !b || a.ice || b.ice) return;
+  if (a.block && b.block) return;                  // two blockers, nothing to match
   busy = true;
   select(null);
   clearNudge();
@@ -2995,9 +3110,9 @@ board.addEventListener('pointerdown', ev => {
   if (!el) return;
   const t = tileFromEl(el);
   if (!t) return;
-  // A blocker isn't yours to move. Tapping it does nothing rather than
-  // selecting something that can never make a match.
-  if ((t.block || t.ice) && !armed) { sfx('nope'); return; }
+  // Frozen fruit isn't yours to move — it's scenery until you chip it off. A
+  // duckling is, though: it can't match, but it can be shoved sideways.
+  if (t.ice && !armed) { sfx('nope'); return; }
   if (armed === 'hammer') { useHammer(t); return; }
   if (armed === 'swap') {
     if (!toolPick) { toolPick = t; t.el.classList.add('sel'); sfx('tap'); setFoot('Now tap the one next to it 🔄'); return; }
@@ -3024,9 +3139,10 @@ board.addEventListener('pointermove', ev => {
   const r2 = drag.t.r + dr, c2 = drag.t.c + dc;
   if (r2 < 0 || r2 >= R || c2 < 0 || c2 >= C) return;
   const target = grid[r2][c2];
-  // The tap path refused blockers and frozen fruit; the DRAG path did not, so
-  // you could swipe a fruit straight into a block of ice.
-  if (!target || target.block || target.ice) { sfx('nope'); return; }
+  // The tap path refused frozen fruit; the DRAG path did not, so you could
+  // swipe a fruit straight into a block of ice.
+  if (!target || target.ice) { sfx('nope'); return; }
+  if (drag.t.block && target.block) { sfx('nope'); return; }
   trySwap(drag.t, target);
 });
 board.addEventListener('pointerup', () => { drag = null; });
@@ -3131,13 +3247,77 @@ function goalSummary(lv) {
     : g.need + '✨');
 }
 function goalLabel(g) {
-  return g.t === 'fruit' ? 'collect ' + g.need + ' ' + KINDS[g.k].name
-       : g.t === 'leaf'  ? 'sweep ' + g.need + ' leaves'
-       : g.t === 'score' ? 'score ' + g.need + ' points'
-       : g.t === 'drop'  ? 'bring ' + g.need + ' ducklings down'
-       : g.t === 'ice'   ? 'break ' + g.need + ' ice blocks'
-       : 'make ' + g.need + ' boosters';
+  // Most levels want several of a thing, but plenty want exactly one duckling,
+  // and "bring 1 ducklings down" is the sort of thing a parent reads aloud.
+  const q = (one, many) => g.need + ' ' + (g.need === 1 ? one : many);
+  return g.t === 'fruit' ? 'collect ' + q(KINDS[g.k].name, plural(g.k))
+       : g.t === 'leaf'  ? 'sweep ' + q('leaf', 'leaves')
+       : g.t === 'score' ? 'score ' + g.need.toLocaleString() + ' points'
+       : g.t === 'drop'  ? 'bring ' + q('duckling', 'ducklings') + ' down'
+       : g.t === 'ice'   ? 'break ' + q('ice block', 'ice blocks')
+       : 'make ' + q('booster', 'boosters');
 }
+// What the chip is asking for, as a title — "Break 8 ice blocks".
+function goalTitle(g) {
+  const s = goalLabel(g);
+  return s[0].toUpperCase() + s.slice(1);
+}
+// ...and HOW you do it, in one sentence. Every one of these names the action,
+// because knowing a level wants ice is useless if you don't know that ice
+// breaks from a match BESIDE it rather than on it.
+// "grapes" is already plural; the rest just take an s.
+function plural(k) { const n = KINDS[k].name; return n.endsWith('s') ? n : n + 's'; }
+function goalHow(g) {
+  return g.t === 'fruit' ? 'Line up 3 or more ' + plural(g.k) + ' to pop them.'
+       : g.t === 'leaf'  ? 'Pop the fruit sitting on a leaf and the leaf goes with it.'
+       : g.t === 'score' ? 'Every pop scores. Bigger matches are worth more.'
+       // The swap is the part nobody discovers on their own, and it's the
+       // difference between a stuck column and a solvable one.
+       : g.t === 'drop'  ? 'Clear the fruit under a duckling so it falls. You can slide a duckling sideways too.'
+       : g.t === 'ice'   ? 'Match fruit right NEXT to frozen fruit to chip the ice off.'
+       : 'Match 4 or 5 at once instead of 3 to make one.';
+}
+
+/* A tooltip, because the chips can only ever be pictures and a number — there
+   is no room to say what a duckling wants. Tap to open, tap anywhere to close,
+   and it times out on its own so it can't be left covering the board. */
+let tipEl = null, tipTimer = null, tipFor = -1;
+function hideTip() {
+  if (tipTimer) { clearTimeout(tipTimer); tipTimer = null; }
+  tipFor = -1;
+  if (!tipEl) return;
+  const el = tipEl; tipEl = null;
+  el.classList.remove('show');
+  setTimeout(() => el.remove(), 220);
+}
+function showTip(chip, g, i) {
+  hideTip();
+  tipFor = i;
+  const el = document.createElement('div');
+  el.className = 'tip';
+  el.setAttribute('role', 'status');
+  el.innerHTML = '<b></b><span></span>';
+  el.querySelector('b').textContent = goalTitle(g);
+  el.querySelector('span').textContent = goalHow(g);
+  document.body.appendChild(el);
+  const r = chip.getBoundingClientRect(), w = el.offsetWidth;
+  // Centre on the chip, then pull back inside the screen and point the arrow at
+  // where the chip actually is — on a narrow phone an edge chip's bubble has to
+  // slide across, and an arrow left at 50% would then point at nothing.
+  const cx = r.left + r.width / 2;
+  const left = Math.max(8, Math.min(cx - w / 2, window.innerWidth - w - 8));
+  el.style.left = left + 'px';
+  el.style.top = (r.bottom + 9) + 'px';
+  el.style.setProperty('--ax', Math.max(12, Math.min(cx - left, w - 12)) + 'px');
+  requestAnimationFrame(() => el.classList.add('show'));
+  tipEl = el;
+  tipTimer = setTimeout(hideTip, 5000);
+}
+// Anything else the player does puts it away.
+document.addEventListener('pointerdown', ev => {
+  if (tipEl && !ev.target.closest('.goal')) hideTip();
+}, true);
+
 // How far along a goal is, and what it needs.
 function goalProgress(g, i) {
   if (g.t === 'leaf')  return Math.max(0, g.need - coversLeft);
@@ -3153,12 +3333,23 @@ function paintGoals(animate) {
   // the same NUMBER of chips but different ones, which used to leave the
   // previous level's chip sitting there showing this level's numbers.
   const sig = L.name + '|' + L.goals.map(g => [g.t, g.k, g.sp, g.need].join(':')).join(',');
-  if (!L.goals.length) { host.innerHTML = ''; goalSig = sig; return; }
+  if (!L.goals.length) { host.innerHTML = ''; goalSig = sig; hideTip(); return; }
   if (sig !== goalSig) {
     goalSig = sig;
+    hideTip();
     host.innerHTML = L.goals.map((g, i) =>
-      '<div class="goal" data-i="' + i + '" aria-label="' + goalLabel(g) + '">'
-      + goalChip(g) + '<span class="num"></span></div>').join('');
+      '<button type="button" class="goal" data-i="' + i + '" aria-label="'
+      + goalTitle(g) + '. ' + goalHow(g) + '">'
+      + '<span class="fill"></span>' + goalChip(g) + '<span class="num"></span></button>').join('');
+    [...host.children].forEach((chip, i) => {
+      chip.onclick = () => {
+        sfx('tap');
+        // Tapping the open one closes it, so a chip is a toggle rather than a
+        // thing you can only dismiss by poking elsewhere.
+        if (tipFor === i) { hideTip(); return; }
+        showTip(chip, L.goals[i], i);
+      };
+    });
   }
   L.goals.forEach((g, i) => {
     const chip = host.children[i];
@@ -3166,6 +3357,7 @@ function paintGoals(animate) {
     const done = got >= g.need;
     chip.querySelector('.num').textContent = done ? '✓'
       : (g.t === 'score' ? got.toLocaleString() + '/' + g.need.toLocaleString() : got + '/' + g.need);
+    chip.querySelector('.fill').style.width = Math.min(100, got / g.need * 100) + '%';
     chip.classList.toggle('done', done);
     if (animate) { chip.classList.remove('pulse'); void chip.offsetWidth; chip.classList.add('pulse'); }
   });
@@ -3320,6 +3512,8 @@ function start(idx, resume, quiet) {
   score = 0; movesLeft = L.moves; movesUsed = 0; usedHelp = false; over = false; busy = false; sel = null;
   goalGot = L.goals.map(() => 0);
   boostMade = {}; ducksHome = 0; iceLeft = 0;
+  bombEchoes = [];              // never carry a pending bang into a new level
+  hideTip();
   sinceBooster = 0;
 
   if (resume) {
