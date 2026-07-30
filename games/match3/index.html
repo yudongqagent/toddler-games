@@ -565,66 +565,75 @@
      how far the rim intrudes and how much the window is veiled. Both states are
      obviously the same substance, which the old white-X-over-grey-wash pair
      never were. */
-  .tile.ice .crown { display:block; border-radius:30%; }
+  /* The frost is an eight-sided CRYSTAL, not a tinted rounded square.
+     Silhouette is the strongest cue there is at this size, and it was the one
+     thing the old build wasn't using: a blue collar on a rounded square is hue
+     plus a thin border, the two weakest cues, on a board already full of
+     saturated hues — which is exactly why a frozen tile was easy to miss. An
+     angular gem among soft rounded squares is findable at a glance, and it
+     stays findable when the tile underneath is itself blue, and for a
+     colour-blind player. */
+  .tile.ice .crown {
+    display:block; border-radius:0;
+    clip-path:polygon(26% 0,74% 0,100% 26%,100% 74%,74% 100%,26% 100%,0 74%,0 26%);
+    /* drop-shadow follows the clipped silhouette. A box-shadow would be clipped
+       away with everything else outside the polygon. */
+    filter:drop-shadow(0 calc(var(--cell)*.015) calc(var(--cell)*.022) rgba(8,58,104,.55));
+  }
 
-  /* The collar is BLUE and the white is a specular edge on top of it, one thin
-     ring wide. Stacked inset shadows paint front-to-back, so a narrow white
-     spread listed first sits over a wider blue spread and the two read as a lit
-     edge on a blue body. Doing it the other way round — a wide near-white rim —
-     is how the frost came out looking bleached on a phone. */
-
-  /* Thick: a heavy collar, fruit veiled but readable behind it. */
+  /* Two layers: whole, heavy, and double-walled — the inner bevel is what says
+     "thick glass" rather than "slightly darker glass". */
   .tile.ice2 .crown {
-    background:
-      radial-gradient(112% 112% at 50% 40%,
-        rgba(198,238,255,.2) 0 28%,
-        rgba(116,194,240,.62) 58%,
-        rgba(48,142,206,.94)  100%);
-    box-shadow:
-      inset 0 0 0 calc(var(--cell)*.024) rgba(240,252,255,.92),
-      inset 0 0 0 calc(var(--cell)*.085) rgba(60,155,214,.9),
-      inset 0 0 calc(var(--cell)*.13) calc(var(--cell)*.085) rgba(126,203,244,.5),
-      inset 0 calc(var(--cell)*-.07) calc(var(--cell)*.09) rgba(12,74,128,.45),
-      0 0 calc(var(--cell)*.07) rgba(130,210,255,.55);
+    background:radial-gradient(closest-side circle at 50% 44%,
+      rgba(214,244,255,.1)  0 41%,
+      rgba(106,191,240,.72) 69%,
+      rgba(18,110,182,.99)  100%);
   }
-  /* Thin: the collar has retreated to a narrow edge and the window is nearly
-     clear, so "one more match" is something you can see rather than count. */
+  .tile.ice2 .crown::after {
+    content:''; position:absolute; inset:15%;
+    clip-path:polygon(26% 0,74% 0,100% 26%,100% 74%,74% 100%,26% 100%,0 74%,0 26%);
+    background:radial-gradient(closest-side circle at 50% 44%,
+      transparent 0 54%, rgba(202,239,255,.5) 80%, rgba(66,166,223,.95) 100%);
+  }
+
+  /* One layer: a whole corner has been chipped clean off, it is far clearer,
+     and it is cracked. Three signals moving together and all in the same
+     direction, so you never have to hold two tiles side by side to count what
+     is left — and thinner ice reveals MORE of the fruit, which is the way round
+     it ought to be. The chip is a chamfer on the gem's own 45 degrees, so it
+     reads as damage rather than as a rectangle gone missing. */
   .tile.ice1 .crown {
-    inset:5%;
-    background:
-      radial-gradient(110% 110% at 50% 40%,
-        rgba(214,244,255,.07) 0 44%,
-        rgba(126,199,241,.34) 72%,
-        rgba(70,163,219,.7)   100%);
-    box-shadow:
-      inset 0 0 0 calc(var(--cell)*.014) rgba(240,252,255,.85),
-      inset 0 0 0 calc(var(--cell)*.042) rgba(70,163,219,.72),
-      inset 0 calc(var(--cell)*-.04) calc(var(--cell)*.06) rgba(12,74,128,.28);
+    clip-path:polygon(26% 0,74% 0,100% 26%,100% 50%,50% 100%,26% 100%,0 74%,0 26%);
+    background:radial-gradient(closest-side circle at 44% 42%,
+      rgba(220,247,255,.04) 0 46%,
+      rgba(126,200,242,.4)  74%,
+      rgba(38,136,202,.85)  100%);
   }
-
-  /* Facets. Corner wedges, not lines across the middle: a crystal catches the
-     light on its bevelled faces, and the previous three crossing white lines
-     landed as a struck-through "cancelled" mark straight over the fruit. */
-  .tile.ice .crown::before {
-    content:''; position:absolute; inset:0; border-radius:30%;
-    background:
-      linear-gradient(141deg, rgba(255,255,255,.62) 0 11%, transparent 11.4%),
-      linear-gradient(321deg, rgba(214,243,255,.3)  0 8%,  transparent 8.4%);
-  }
-  .tile.ice1 .crown::before { background:
-      linear-gradient(141deg, rgba(255,255,255,.5)  0 8%, transparent 8.4%),
-      linear-gradient(321deg, rgba(214,243,255,.22) 0 5%, transparent 5.4%); }
-
-  /* A single fracture running in from one corner and dying out — masked so it
-     fades rather than terminating in mid-air. Only the thin state gets it: a
-     crack is the tell that this block is one hit from gone. */
+  /* The fracture radiates OUT of the broken corner and fades, rather than ruling
+     a straight line the full width of the tile — a crack that runs edge to edge
+     reads as a scratch drawn on top of the fruit instead of damage to the ice. */
   .tile.ice1 .crown::after {
-    content:''; position:absolute; inset:0; border-radius:30%;
+    content:''; position:absolute; inset:0;
     background:
-      linear-gradient(69deg,  transparent 47.2%, rgba(255,255,255,.85) 48.6%, transparent 50%),
-      linear-gradient(-21deg, transparent 55%,   rgba(255,255,255,.6)  56.4%, transparent 57.8%);
-    -webkit-mask-image:radial-gradient(circle at 74% 26%, #000 0 40%, transparent 68%);
-    mask-image:radial-gradient(circle at 74% 26%, #000 0 40%, transparent 68%);
+      linear-gradient(66deg,  transparent 45%, rgba(255,255,255,.95) 47.4%, transparent 49.8%),
+      linear-gradient(-16deg, transparent 55%, rgba(255,255,255,.6)  57%,   transparent 59%);
+    -webkit-mask-image:radial-gradient(circle at 66% 68%, #000 0 32%, transparent 68%);
+    mask-image:radial-gradient(circle at 66% 68%, #000 0 32%, transparent 68%);
+  }
+
+  /* The lit faces of the crystal. Corner wedges, never lines across the middle:
+     crossing white lines over the fruit landed as a struck-through "cancelled"
+     mark. */
+  .tile.ice .crown::before {
+    content:''; position:absolute; inset:0;
+    background:
+      linear-gradient(142deg, rgba(255,255,255,.95) 0 15%, transparent 15.4%),
+      linear-gradient(322deg, rgba(255,255,255,.5)  0 11%, transparent 11.4%);
+  }
+  .tile.ice1 .crown::before {
+    background:
+      linear-gradient(142deg, rgba(255,255,255,.8) 0 11%, transparent 11.4%),
+      linear-gradient(322deg, rgba(255,255,255,.3) 0 7%,  transparent 7.4%);
   }
 
   /* "tap again and THIS is what goes" — shown while a booster is selected */
@@ -3298,15 +3307,18 @@ function goalChip(g) {
   const bg = g.t === 'leaf' ? 'linear-gradient(160deg,#d6f5b0,#7cc94e)'
            : g.t === 'score' ? 'linear-gradient(160deg,#ffe08a,#f5a524)'
            : g.t === 'drop' ? 'linear-gradient(160deg,#fff2c4,#ffd469)'
-           // Same rim-and-window build as the block on the board, but with the
-           // window pulled in tight. At 24px a wide clear centre leaves nothing
-           // but a pale blob — there is no fruit behind the chip for it to be a
-           // window ONTO, so the collar has to carry the whole read.
-           : g.t === 'ice' ? 'radial-gradient(115% 115% at 46% 32%,#f2fcff 0 14%,#8fd2f5 44%,#3f9ad8 100%)'
+           // The same eight-sided crystal as the block on the board, so the chip
+           // is a picture of the thing it is asking you to break. Its centre is
+           // pulled in tighter than the tile's: there is no fruit behind a chip
+           // for the clear middle to be a window ONTO, so at 24px a wide one
+           // leaves nothing but a pale blob.
+           : g.t === 'ice' ? 'radial-gradient(closest-side circle at 50% 44%,#eaf9ff 0 22%,#7cc7f2 60%,#1f7ac0 100%)'
            : 'linear-gradient(160deg,#cfe4ff,#7aa8ff)';
+  // A box-shadow would be clipped away with everything outside the polygon, so
+  // the crystal's edge has to come from the gradient itself.
   const extra = g.t === 'ice'
-    ? ';box-shadow:inset 0 0 0 1px rgba(245,253,255,.95), inset 0 0 0 3px rgba(78,166,220,.75),'
-      + ' inset 0 -3px 4px rgba(12,74,128,.4)' : '';
+    ? ';border-radius:0;clip-path:polygon(26% 0,74% 0,100% 26%,100% 74%,74% 100%,26% 100%,0 74%,0 26%)'
+      + ';filter:drop-shadow(0 1px 1px rgba(8,58,104,.5))' : '';
   return '<span class="mini"><span class="shape" style="border-radius:26%;background:' + bg + extra
        + '"></span><span class="face">' + face + '</span></span>';
 }
