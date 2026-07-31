@@ -175,7 +175,8 @@ fun. Levels get their identity from what's **on** the board instead:
 | 🧊 **frost** | holds a fruit in place; match that fruit, or anything beside it, to chip the ice away and get the fruit back |
 | 🐤 **duckling** | can't be matched, but *can* be swapped; falls with everything else and is home when it reaches the floor, so you have to clear its column out from under it |
 | 🎁 **gift** (level 20+) | one knock from a match beside it and it bursts open, leaving a **booster** behind; it can be swapped, like a duckling |
-| 🥥 **coconut** (level 30+) | ignores ordinary matches completely — only a booster going off over it cracks it |
+| 🥥 **coconut** (level 30+) | ignores ordinary matches; one blast **splits it in half**, one more on a half cracks it open and the prize you could see inside drops out |
+| 🎰 **machine** (level 25+) | sits at the top of a column and drops the thing this level is asking for |
 
 A duckling is swappable and frost is not, which sounds inconsistent until you
 play it. Frost is scenery — there is nothing to decide about it until you break
@@ -312,13 +313,53 @@ reward it had just created. Measured before the fix: a star over a gift opened i
 and left **zero** boosters on the board. Block-ness is now a snapshot taken
 before the loop starts.
 
-**🥥 The coconut only listens to blasts.** Ordinary matches beside it do
-nothing at all — it takes a booster going off over it, which finally makes the
-late game about *using* boosters instead of hoarding them. It is matte and dull
-next to the candy on purpose, because it must not look like something you could
-match. Note that a bomb cracks one outright: a bomb detonates twice, each blast
-is its own clear, and two hits is a coconut. That is a synergy worth having
-rather than a bug — it is the reward for reading what the bomb does.
+**🥥 The coconut only listens to blasts, and it splits in half.** Ordinary
+matches beside it do nothing at all — it takes a booster going off over it, which
+finally makes the late game about *using* boosters instead of hoarding them. It
+is matte and dull next to the candy on purpose, because it must not look like
+something you could match.
+
+It was the least fun thing in the game before, and the diagnosis matters more
+than the fix: you could not **act** on it (you waited for a booster to happen to
+land near it, so it answered to luck rather than to your move), its verb was
+borrowed from frost and gifts ("hit it N times", just with a harder gate), and
+cracking it gave you *nothing* — so there was no reason to want one.
+
+So: the first blast **splits it into two halves**, which fall apart into the
+nearest cells that will take them; one more blast on a half cracks it open and
+the **prize drops out**. The coconut wears that prize from the moment it appears,
+so the work has a visible point to it. Three blasts for two boosters — and
+splitting apart is a verb nothing else in the game has. A whole coconut gets
+*harder* to finish by breaking, which is what makes the split feel like an event
+rather than a health bar ticking down.
+
+A half may not land on a leaf: a leaf is only swept by popping the fruit standing
+on it and a blocker is never popped, so a half sitting there would strand the
+leaf goal. That ruled out all four neighbours on the first leaf level it met and
+the coconut split into a single half, so a half now takes the nearest eligible
+cell anywhere rather than strictly an adjacent one.
+
+### 🎰 The machine
+
+A tile that makes tiles. It never moves, never matches, never breaks — it is
+furniture — and it shows **what it is about to drop**, so you can see what is
+coming before it arrives.
+
+**It makes what the level is asking for**, taken straight off the goals: a fruit
+goal gives it that fruit, a gift goal gives it gifts, a duckling goal gives it
+ducklings, a coconut goal gives it coconuts. A level with none of those gets no
+machine, so it is never decoration — it is the level telling you where to work. A
+fruit goal stops being a waiting game and becomes a *place on the board*.
+
+It sits at the **top of its column**, which is the one spot it can occupy without
+breaking anything. Mid-board it would split its column into two halves that can
+never reach each other, with everything above it resting on it forever — dead
+board, and the riskiest possible change to `gravity()`. At the top, the column's
+falling region simply starts one row lower and the machine's output enters at the
+cell under its mouth, so you watch it come *out* of the machine.
+
+Each kind it makes is capped by how many are already on the board, so a machine
+can never bury its own column.
 
 **💥 Combining** asks you to swap one booster straight onto another, which is
 the best thing in the game and the thing a child is least likely to discover

@@ -632,6 +632,37 @@
   }
   .tile.nut .shape::after { display:none; }      /* no candy gloss on a coconut */
 
+  /* ---- coconut: matte and heavy, and it wears its prize where you can see it.
+     A half is smaller and tipped over, so whole-versus-half reads as a shape
+     change rather than as a number you have to remember. ---- */
+  .tile.nut .crown {
+    display:grid; align-items:end; justify-items:end;
+    padding:calc(var(--cell)*.06);
+    font-size:calc(var(--cell)*.3);
+    filter:drop-shadow(0 1px 2px rgba(0,0,0,.5));
+  }
+  .tile.nut.half .face { transform:scale(.74) rotate(-22deg); }
+  .tile.nut.half .shape { background:linear-gradient(160deg,#e6c9a6,#a5713f) !important; }
+
+  /* ---- the machine. Mechanical, not candy: it is the one thing on the board
+     that is a piece of equipment rather than something to eat. ---- */
+  .tile.gen .shape {
+    background:linear-gradient(160deg,#8f9ec4,#4a5680) !important;
+    box-shadow:inset 0 0 0 calc(var(--cell)*.045) rgba(226,236,255,.8),
+               inset 0 calc(var(--cell)*-.1) 0 rgba(15,22,45,.45),
+               0 0 calc(var(--cell)*.12) rgba(120,150,220,.55);
+  }
+  .tile.gen .shape::after { display:none; }
+  /* a mouth at the bottom edge, so which way it dispenses is obvious */
+  .tile.gen .crown {
+    display:block;
+    background:linear-gradient(180deg, transparent 62%, rgba(12,18,38,.55) 62%, rgba(12,18,38,.55) 78%, transparent 78%);
+    border-radius:30%;
+  }
+  .tile.gen .face { font-size:calc(var(--cell)*.46); transform:translateY(-8%); }
+  .tile.gen.firing .inner { animation:genPop .45s cubic-bezier(.3,1.5,.5,1); }
+  @keyframes genPop { 35% { transform:translateY(7%) scale(1.1); } }
+
   /* One hit taken, for either of them: a fracture across the face. Blocks never
      carry booster or frost markings, so .crown is free to be the damage layer. */
   .tile.blk.hit1 .crown {
@@ -1313,9 +1344,23 @@ function levelFor(n) {
     // Two spare beyond the ask, since gifts are finite — nothing respawns them,
     // so the goal can never exceed what is placed. They are cheap to have around
     // now that one is swappable and opens on a single knock.
-    // Two to start with; the rest arrive as the level runs.
+    // Two to start with; the rest arrive from the machine, or from the drip on
+    // levels that have no machine.
     gifts:  (goals.find(g => g.t === 'gift') ? 2 : (n >= 20 ? 1 : 0)),
-    giftDrip: goals.find(g => g.t === 'gift') ? 0.035 : 0,
+    giftDrip: (goals.find(g => g.t === 'gift') && n < 25) ? 0.035 : 0,
+    // A machine makes what the level is ASKING for, so it is never decoration —
+    // it is the level telling you where to work. No goal it can help with means
+    // no machine, which is why it doesn't appear on score or leaf levels.
+    gen: n < 25 ? null : (() => {
+      const m = [];
+      goals.forEach(g => {
+        if (g.t === 'fruit') m.push({ t: 'fruit', k: g.k });
+        if (g.t === 'gift')  m.push({ t: 'gift' });
+        if (g.t === 'drop')  m.push({ t: 'duck' });
+        if (g.t === 'nut')   m.push({ t: 'nut' });
+      });
+      return m.length ? { makes: m, rate: .5 } : null;
+    })(),
     // Three coconuts when the level asks for one, so a blast landing near ANY of
     // them counts. Measured with two on the board it took 31 moves of a 38-move
     // budget to crack one — finishable, but a long errand for a three-year-old,
@@ -1396,7 +1441,9 @@ function saveGame() {
       cov: covers.map(row => row.slice()),
       blk: (() => { const o = []; for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) {
               const t = grid[r][c];
-              if (t && t.block) o.push([r, c, t.block, t.hits || 0]);
+              if (t && t.block) o.push([r, c, t.block, t.hits || 0,
+                    t.block === 'nut' ? [t.half ? 1 : 0, t.prize || 0]
+                  : t.block === 'gen' ? [t.makes, t.rate, t.next] : 0]);
               else if (t && t.ice) o.push([r, c, 'ice', t.ice]); } return o; })(),
       grid: grid.map(row => row.map(t => t ? [t.k, t.sp] : null)),
     }));
@@ -1737,7 +1784,7 @@ function makeTile(k, r, c, sp = SP_NONE) {
   const crown = document.createElement('div'); crown.className = 'crown';
   inner.append(shape, face, crown);
   el.appendChild(inner);
-  const t = { k, sp, r, c, el, shape, face };
+  const t = { k, sp, r, c, el, shape, face, crown };
   paint(t);
   // Append before placing: place(…, true) forces a reflow to pin the starting
   // position, and a detached element has no layout to flush.
@@ -1747,13 +1794,19 @@ function makeTile(k, r, c, sp = SP_NONE) {
 }
 function paint(t) {
   const el = t.el;
-  el.classList.remove('sp1', 'sp2', 'sp3', 'blk', 'duck', 'gift', 'nut', 'hit1', 'ice', 'ice1', 'ice2');
+  el.classList.remove('sp1', 'sp2', 'sp3', 'blk', 'duck', 'gift', 'nut', 'gen',
+                      'half', 'hit1', 'ice', 'ice1', 'ice2');
+  t.crown.textContent = '';
   if (t.block) {
     t.shape.className = 'shape';
     t.shape.style.background = '';
     el.classList.add('blk', t.block);
     if (t.hits && t.hits < BLOCKS[t.block].hits) el.classList.add('hit1');
-    t.face.textContent = BLOCKS[t.block].emoji;
+    if (t.block === 'nut' && t.half) el.classList.add('half');
+    t.face.textContent = t.block === 'gen' ? genFace(t) : BLOCKS[t.block].emoji;
+    // A coconut wears its prize where you can see it from the moment it appears,
+    // so the work has a visible point to it.
+    if (t.block === 'nut') t.crown.textContent = t.prize === SP_BOMB ? '💣' : '⭐';
     el.setAttribute('aria-label', BLOCKS[t.block].say(t));
     return;
   }
@@ -1828,10 +1881,29 @@ const BLOCKS = {
           say:() => 'duckling, can be moved but not matched' },
   gift: { emoji:'🎁', hits:1, blastOnly:false, move:true,
           say:() => 'gift box, match beside it to open it — it can also be moved' },
-  nut:  { emoji:'🥥', hits:2, blastOnly:true,  move:false,
-          say:t => 'coconut, ' + t.hits + ' more ' + (t.hits === 1 ? 'hit' : 'hits')
-                 + ' — only a blast cracks it' },
+  // One blast splits a whole coconut into two halves; one more on a half cracks
+  // it and the prize you could see inside all along drops out. Three blasts for
+  // two boosters, and a verb — splitting apart — that nothing else in the game
+  // has.
+  nut:  { emoji:'🥥', hits:1, blastOnly:true,  move:false,
+          say:t => t.half ? 'half a coconut, one more blast to open it'
+                          : 'coconut, blast it to split it in half' },
+  // A machine. Never moves, never matches, never breaks — it is furniture, and
+  // it makes the thing this level is asking for.
+  gen:  { emoji:'🎰', hits:0, blastOnly:false, move:false,
+          say:t => 'machine making ' + genLabel(t) },
 };
+// What a generator is about to drop, as an emoji and as words.
+function genFace(t) {
+  const m = t.next;
+  return !m ? '❓' : m.t === 'fruit' ? KINDS[m.k].emoji : m.t === 'gift' ? '🎁'
+       : m.t === 'duck' ? '🐤' : '🥥';
+}
+function genLabel(t) {
+  const m = t.next;
+  return !m ? 'something' : m.t === 'fruit' ? plural(m.k) : m.t === 'gift' ? 'gifts'
+       : m.t === 'duck' ? 'ducklings' : 'coconuts';
+}
 // Only a duckling may be swapped. Everything else stays put until it breaks.
 const canMove = t => !!t && (!t.block || BLOCKS[t.block].move) && !t.ice;
 
@@ -1839,6 +1911,7 @@ function makeBlock(kind, r, c) {
   const t = makeTile(0, r, c);
   t.k = BLOCK_K; t.block = kind;
   t.hits = BLOCKS[kind].hits;
+  if (kind === 'nut') { t.half = false; t.prize = Math.random() < .5 ? SP_STAR : SP_BOMB; }
   paint(t);
   return t;
 }
@@ -2168,6 +2241,58 @@ function hitBlock(r, c, blast) {
     fxSparks(r, c, t.block === 'nut' ? '#c89a63' : '#ffd0ea', 10, .9);
     return;
   }
+  if (t.block === 'nut' && !t.half) {
+    // First blast splits it. This tile becomes one half and a second half is
+    // born beside it, so the single target you were aiming at becomes two — the
+    // coconut gets harder to finish precisely by breaking, which is what makes
+    // splitting feel like an event rather than a health bar ticking down.
+    t.half = true; t.hits = 1; paint(t);
+    // Nearest eligible cell, not strictly an adjacent one. A leaf is only swept
+    // by popping the fruit standing on it and a blocker is never popped, so a
+    // half may not land on one — and on a leaf level that ruled out all four
+    // neighbours and the coconut split into a single half instead of two.
+    const ok = (rr, cc) => cellOk(rr, cc) && grid[rr][cc] && !grid[rr][cc].block
+                        && !grid[rr][cc].ice && grid[rr][cc].sp === SP_NONE
+                        && !(covers[rr] && covers[rr][cc]);
+    let spot = null, bestD = 1e9;
+    for (let rr = 0; rr < R; rr++) for (let cc = 0; cc < C; cc++) {
+      if (!ok(rr, cc)) continue;
+      const d = Math.abs(rr - r) + Math.abs(cc - c);
+      if (d < bestD) { bestD = d; spot = [rr, cc]; }
+    }
+    if (spot) {
+      const [rr, cc] = spot;
+      grid[rr][cc].el.remove();
+      // makeBlock builds the tile but does not put it in the grid — placeBlocks
+      // assigns it too. Without this line the old tile's element was gone while
+      // the model still pointed at it, so the DOM and the grid disagreed.
+      const h = grid[rr][cc] = makeBlock('nut', rr, cc);
+      h.half = true; h.hits = 1; h.prize = t.prize; paint(h);
+      h.el.classList.add('born');
+      setTimeout(() => h.el.classList.remove('born'), 340);
+    }
+    sfx('crack');
+    fxSparks(r, c, '#c89a63', 16, 1.2); fxShards(r, c, '#8a5a2b', 8);
+    buzz(22);
+    return;
+  }
+  if (t.block === 'nut') {
+    // A half cracks open and the prize drops out where it stood.
+    nutsCracked++;
+    t.block = null; t.hits = 0; t.half = false;
+    t.k = Math.floor(Math.random() * KINDS.length);
+    t.sp = t.prize || SP_STAR; t.fired = false; t.twice = false; t.radius = 1;
+    paint(t);
+    converge(r, c, t.k);
+    fxSparks(r, c, '#ffe6a0', 22, 1.5); fxShards(r, c, '#8a5a2b', 10);
+    fxRing(r, c, 2.4, 'rgba(255,220,150,.95)', 520);
+    sfx('crack'); sfx('make'); buzz(34);
+    t.el.classList.remove('born'); void t.el.offsetWidth; t.el.classList.add('born');
+    setTimeout(() => t.el.classList.remove('born'), 340);
+    toast('🥥 Cracked open!');
+    paintGoals(true);
+    return;
+  }
   if (t.block === 'gift') {
     giftsOpened++;
     // A star or a bomb, never a rainbow: a free rainbow from a blocker you were
@@ -2185,17 +2310,21 @@ function hitBlock(r, c, blast) {
     t.el.classList.remove('born'); void t.el.offsetWidth; t.el.classList.add('born');
     setTimeout(() => t.el.classList.remove('born'), 340);
     toast('🎁 A booster!');
-  } else {
-    nutsCracked++;
-    fxSparks(r, c, '#c89a63', 22, 1.5); fxShards(r, c, '#8a5a2b', 10);
-    fxRing(r, c, 2.2, 'rgba(220,180,130,.9)', 480);
-    sfx('crack');
-    const el = t.el;
-    el.classList.add('pop');
-    setTimeout(() => el.remove(), 470);
-    grid[r][c] = null;              // a hole: the column falls through it
   }
   paintGoals(true);
+}
+
+// Stamp a machine's output onto a tile that has just been made for the refill.
+// Capped per kind so a machine can never bury its own column.
+function applyEmit(t, m) {
+  const count = k => grid.flat().filter(x => x && x.block === k).length;
+  if (m.t === 'fruit') { t.k = m.k; paint(t); return; }
+  if (m.t === 'gift' && count('gift') >= 3) return;
+  if (m.t === 'duck' && count('duck') >= 3) return;
+  if (m.t === 'nut'  && count('nut')  >= 4) return;
+  t.block = m.t; t.k = BLOCK_K; t.hits = BLOCKS[m.t].hits;
+  if (m.t === 'nut') { t.half = false; t.prize = Math.random() < .5 ? SP_STAR : SP_BOMB; }
+  paint(t);
 }
 
 // Blockers are stored alongside the grid, since they are not fruit and can't be
@@ -2203,14 +2332,18 @@ function hitBlock(r, c, blast) {
 function restoreBlocks(blk) {
   iceLeft = 0;                 // ducksHome comes from the save, don't reset it
   if (!Array.isArray(blk)) return;
-  blk.forEach(([r, c, kind, lvl]) => {
+  blk.forEach(([r, c, kind, lvl, extra]) => {
     if (!cellOk(r, c) || !grid[r][c]) return;
     if (kind === 'ice') { grid[r][c].ice = lvl; iceLeft++; paint(grid[r][c]); return; }
     grid[r][c].el.remove();
     grid[r][c] = makeBlock(kind, r, c);
-    // A half-opened gift has to come back half-opened, or a save would quietly
-    // repair every block on the board.
-    if (BLOCKS[kind].hits) { grid[r][c].hits = lvl; paint(grid[r][c]); }
+    const t = grid[r][c];
+    // A half coconut has to come back a half, and a machine has to come back
+    // making the same thing — otherwise a save quietly repairs the whole board.
+    if (BLOCKS[kind].hits) { t.hits = lvl; }
+    if (kind === 'nut' && Array.isArray(extra)) { t.half = !!extra[0]; t.prize = extra[1] || SP_STAR; }
+    if (kind === 'gen' && Array.isArray(extra)) { t.makes = extra[0]; t.rate = extra[1]; t.next = extra[2]; }
+    paint(t);
   });
 }
 
@@ -2259,9 +2392,25 @@ function paintCells() {
 }
 // Ducklings start high (they have to travel) and ice starts low and central
 // (it has to be dug out). Both replace a fruit rather than adding a cell.
-function placeBlocks(nDucks, nIce, rng, thickChance, nGift, nNut) {
+function placeBlocks(nDucks, nIce, rng, thickChance, nGift, nNut, gen) {
   ducksHome = 0; iceLeft = 0;
   giftsOpened = 0; nutsCracked = 0;
+  // The machine goes at the very top of a column, which is the one place it can
+  // live without breaking anything: its output falls down that column, and it
+  // never has to sit in the middle of a stack splitting it into two halves that
+  // can never reach each other.
+  if (gen) {
+    const gc = Math.floor(rng() * C);
+    const old = grid[colTop[gc]][gc];
+    if (old) {
+      old.el.remove();
+      const t = makeBlock('gen', colTop[gc], gc);
+      t.makes = gen.makes; t.rate = gen.rate;
+      t.next = t.makes[Math.floor(rng() * t.makes.length)];
+      paint(t);
+      grid[colTop[gc]][gc] = t;
+    }
+  }
   thickChance = thickChance || 0;
   const swap = (r, c, kind) => {
     const old = grid[r][c];
@@ -3066,9 +3215,14 @@ async function gravity() {
   let maxDrop = 0, landed = [];
   for (let c = 0; c < C; c++) {
     // Fall only within this column's span — the holes above and below it are
-    // not part of the board.
+    // not part of the board. A machine at the top of the column is furniture:
+    // it is not part of the falling region at all, so nothing tries to drop it
+    // and nothing refills over it.
+    const gen = grid[colTop[c]][c] && grid[colTop[c]][c].block === 'gen'
+              ? grid[colTop[c]][c] : null;
+    const top = gen ? colTop[c] + 1 : colTop[c];
     let write = colBot[c];
-    for (let r = colBot[c]; r >= colTop[c]; r--) {
+    for (let r = colBot[c]; r >= top; r--) {
       const t = grid[r][c];
       if (!t) continue;
       if (write !== r) {
@@ -3084,7 +3238,11 @@ async function gravity() {
     }
     // refill from above the ceiling
     let above = 1;
-    for (let r = write; r >= colTop[c]; r--) {
+    // The machine gets one attempt per fall, at the cell right under its mouth,
+    // so its output visibly comes OUT of it rather than materialising anywhere
+    // in the column.
+    let emit = gen && write >= top && Math.random() < gen.rate ? gen.next : null;
+    for (let r = write; r >= top; r--) {
       // Born above the ceiling, then walked down to its slot in the same tick —
       // makeTile has already flushed layout, so the transition still animates,
       // and the model never sees a tile parked at a negative row.
@@ -3097,6 +3255,15 @@ async function gravity() {
       if (L.giftDrip && Math.random() < L.giftDrip
           && grid.flat().filter(x => x && x.block === 'gift').length < 3) {
         t.block = 'gift'; t.k = BLOCK_K; t.hits = BLOCKS.gift.hits; paint(t);
+      }
+      if (emit && r === write) {
+        applyEmit(t, emit);
+        emit = null;
+        gen.next = gen.makes[Math.floor(Math.random() * gen.makes.length)];
+        paint(gen);
+        gen.el.classList.remove('firing'); void gen.el.offsetWidth;
+        gen.el.classList.add('firing');
+        setTimeout(() => gen.el.classList.remove('firing'), 460);
       }
       grid[r][c] = t;
       const dist = r + above;
@@ -4206,13 +4373,13 @@ function start(idx, resume, quiet) {
       buildBoard();
       makeCovers(L.covers || 0, L.pattern);
       placeBlocks(L.ducks || 0, L.ice || 0, mulberry32(((levelNo || 1) * 40503) >>> 0), L.thickIce || 0,
-                L.gifts || 0, L.nuts || 0);
+                L.gifts || 0, L.nuts || 0, L.gen);
     } else restoreBlocks(resume.blk);
   } else {
     buildBoard();
     makeCovers(L.covers || 0, L.pattern);
     placeBlocks(L.ducks || 0, L.ice || 0, mulberry32(((levelNo || 1) * 40503) >>> 0), L.thickIce || 0,
-                L.gifts || 0, L.nuts || 0);
+                L.gifts || 0, L.nuts || 0, L.gen);
   }
   paintGoals(false);
   paintHud();
