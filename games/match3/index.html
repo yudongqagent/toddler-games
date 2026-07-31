@@ -691,10 +691,6 @@
     33%     { transform:translate(14%,7%) scale(.82); }
     66%     { transform:translate(-8%,10%) scale(1.08); }
   }
-    50%     { transform:translate(6%,4%) scale(.92); }
-  }
-    50%     { transform:translate(6%,4%) scale(.92); }
-  }
 
   /* ---- the machine. Built as a HOUSING with a lit window and a chute, which
      is the shape language of every dispenser a child has ever seen. The earlier
@@ -730,7 +726,10 @@
     content:''; position:absolute; left:19%; top:8%; width:62%; height:44%;
     background:linear-gradient(142deg, rgba(255,255,255,.95) 0 24%, transparent 24.5%);
   }
-  .tile.gen .face { font-size:calc(var(--cell)*.32); transform:translateY(-19%); }
+  /* Above the glass, not behind it. .crown is appended after .face, so the
+     window pane was painting straight over the very item it exists to show. */
+  .tile.gen .face { font-size:calc(var(--cell)*.32); transform:translateY(-19%);
+                    position:relative; z-index:3; }
 
   /* Emitting. The item drops out of the window, through the chute and away, and
      the housing kicks back — you watch the thing LEAVE. Fast in, fast out: the
