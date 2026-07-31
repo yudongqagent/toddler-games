@@ -834,7 +834,8 @@ const LEVELS = {
     // means every Legend needs a swordfish, an XYZ/W-wing or a colouring chain.
     { name:'Legend',   emoji:'👑', desc:'9×9 · grown-up hard', n:9, boxW:3, boxH:3, blanks:59,
       tune:{ clues:22, tierMin:5, tierMax:6, climb:true, floor:1600,
-             minStalls:4, minHard:4, slice:4000, budget:25000, seeds:5, ruin:12 } },
+             minStalls:4, minHard:4, maxTail:26,
+             slice:4000, budget:25000, seeds:5, ruin:12 } },
   ],
 };
 const SUBTITLES = {
@@ -1054,6 +1055,10 @@ function effortOf(pz,L){
   const ctx=solverCtx(L), n=L.n;
   const state={grid:pz.slice(), cand:computeCands(pz,ctx)};
   let e=0,t2=0,t3=0,t4=0,t5=0,t6=0,stalls=0,prevAdv=false,guard=0;
+  // Where the thinking sits, not just how much of it there is: `tail` is how
+  // many placements come after the last advanced step — pure coasting — and
+  // `run` is the longest stretch with no thinking in it at all.
+  let places=0, lastAdv=0, run=0, longRun=0;
   while(state.grid.some(v=>v===0)){
     if(++guard>n*n*2) return null;
     let moves=0, empty=0;
@@ -1073,10 +1078,13 @@ function effortOf(pz,L){
     else if(d.tier===5){ t5++; e+=170; }
     else { t6++; e+=320; }
     if(d.tier>=2){ if(!prevAdv){ stalls++; e+=10; } prevAdv=true; } else prevAdv=false;
+    if(d.kind==='place'){ places++; if(++run>longRun) longRun=run; }
+    else { run=0; lastAdv=places; }
     applyDeduction(state,d,ctx);
   }
   return { effort:Math.round(e), tier:(t6?6:t5?5:t4?4:t3?3:t2?2:1), stalls,
-           hard:t4+t5+t6, adv:t2+t3+t4+t5+t6 };
+           hard:t4+t5+t6, adv:t2+t3+t4+t5+t6,
+           places, tail:places-lastAdv, longRun };
 }
 
 /* Tuned puzzle by ruin-and-recreate search, aimed at the level's `tune` spec.
@@ -1124,7 +1132,8 @@ async function makeTunedPuzzle(L){
   const lo=T.floor||0, hi=T.ceil||Infinity;
   const fits=r=>!!r && r.tier>=T.tierMin && r.tier<=T.tierMax
     && r.effort>=lo && r.effort<=hi
-    && r.stalls>=(T.minStalls||0) && r.hard>=(T.minHard||0);
+    && r.stalls>=(T.minStalls||0) && r.hard>=(T.minHard||0)
+    && r.tail<=(T.maxTail||Infinity);
   const fit=r=>{
     if(!r) return -1e9;
     let f=0;
@@ -1135,7 +1144,10 @@ async function makeTunedPuzzle(L){
     // its own it plateaus while the board still plays as mostly easy moves.
     // Banded levels steer back into the band, with a faint upward pull so the
     // search keeps a gradient once inside (a flat band leaves it wandering).
-    return f + (T.climb ? r.effort + 30*r.stalls + 45*r.hard
+    // The tail term is what stops a Legend being a hard opening followed by a
+    // long coast: without it every board put all its thinking in the first
+    // third and then solved itself with 30-odd unbroken singles.
+    return f + (T.climb ? r.effort + 30*r.stalls + 45*r.hard - 90*r.tail
                         : -(Math.max(0,lo-r.effort)+Math.max(0,r.effort-hi))
                           + r.effort/1000);
   };
