@@ -22,7 +22,7 @@
     --sal:env(safe-area-inset-left, 0px);
     --chrome:clamp(44px,10vw,54px);   /* corner button size */
     --cgap:10px;                      /* its margin from the safe edge */
-    --chrome-row:calc(var(--sat) + var(--chrome) + var(--cgap) * 2);
+    --appbar-h:calc(var(--sat) + var(--chrome) + var(--cgap) * 2);
   }
   /* The gradient lives on <html>, not <body>: the root background is painted
      over the whole canvas, so it reaches under the home indicator instead of
@@ -42,11 +42,25 @@
     display:flex; flex-direction:column; align-items:center;
   }
 
-  /* back top-left, settings top-right — the same two buttons, in the same
-     place, on every screen of every game */
+  /* One header row on every screen of every game: back on the left, settings
+     on the right, and whatever that game needs in between. Nothing else may
+     live up here, and nothing else may overlap it. */
+  .appbar {
+    position:fixed; top:0; left:0; right:0; z-index:60;
+    height:var(--appbar-h);
+    display:flex; align-items:center; gap:10px;
+    padding:calc(var(--sat) + var(--cgap)) calc(var(--sar) + var(--cgap))
+            var(--cgap) calc(var(--sal) + var(--cgap));
+    pointer-events:none;              /* taps fall through the empty middle */
+  }
+  .appbar > * { pointer-events:auto; }
+  .appbar-mid {
+    flex:1; min-width:0;
+    display:flex; align-items:center; justify-content:center; gap:10px;
+  }
+  html:not(.in-game) .appbar-mid { visibility:hidden; }
   .chrome-btn {
-    position:fixed; z-index:60;
-    top:calc(var(--sat) + var(--cgap));
+    flex:none;
     width:var(--chrome); height:var(--chrome);
     border:none; cursor:pointer; border-radius:50%;
     background:#ffffffee; color:#ff6f91;
@@ -56,9 +70,7 @@
     transition:transform .1s;
   }
   .chrome-btn:active { transform:translateY(3px); box-shadow:0 1px 0 rgba(0,0,0,.15); }
-  .chrome-back { left:calc(var(--sal) + var(--cgap)); }
-  .chrome-set  { right:calc(var(--sar) + var(--cgap)); }
-  .chrome-btn[hidden] { display:none; }
+  .chrome-btn[hidden] { visibility:hidden; }
   /* A custom property built from env() can't be read back resolved, so park
      the four insets on a probe's padding — computed padding IS in pixels. */
   #safe-probe {
@@ -80,7 +92,7 @@
     gap:min(2.4vh,16px);
     /* every screen sits below the chrome row, so the corner buttons never
        land on content and the Dynamic Island never lands on either */
-    padding:var(--chrome-row) max(12px, var(--sar))
+    padding:var(--appbar-h) max(12px, var(--sar))
             max(10px, var(--sab)) max(12px, var(--sal));
     transition:opacity .32s cubic-bezier(.4,0,.2,1), transform .32s cubic-bezier(.4,0,.2,1);
   }
@@ -88,10 +100,13 @@
   /* A short landscape screen has no vertical room to spare — the board, the
      topbar, the goals and the pinned tool bar already fill it. So pay for the
      back button out of the left margin instead of off the top. */
+  /* a short landscape screen has no height to spare — shrink the header so the
+     board keeps as much of it as possible, but still give it its own row */
   @media (orientation:landscape) and (max-height:560px) {
+    :root { --chrome:44px; --cgap:6px; }
     .screen {
-      padding:max(8px,var(--sat)) max(12px,var(--sar)) max(8px,var(--sab))
-              calc(var(--sal) + var(--chrome) + var(--cgap) * 2);
+      padding:var(--appbar-h) max(12px,var(--sar))
+              max(8px,var(--sab)) max(12px,var(--sal));
     }
   }
 
@@ -183,10 +198,6 @@
   /* room at the foot for the pinned tool bar */
   #game { justify-content:center; gap:min(2.6vh,18px); padding-bottom:clamp(84px,14vh,112px); }
   #game .side { display:flex; flex-direction:column; align-items:center; gap:min(1.8vh,12px); width:min(94vw,560px); }
-  .topbar {
-    width:min(94vw,560px);
-    display:flex; align-items:center; justify-content:space-between; gap:8px;
-  }
   .icon-btn {
     border:none; cursor:pointer; flex:none;
     width:clamp(40px,10vw,50px); height:clamp(40px,10vw,50px);
@@ -195,9 +206,19 @@
     box-shadow:0 3px 0 rgba(0,0,0,.14);
   }
   .icon-btn:active { transform:translateY(3px); box-shadow:none; }
-  .title-wrap { text-align:center; flex:1; min-width:0; }
-  .title-wrap .lv { font-size:clamp(17px,4.6vw,24px); font-weight:800; color:#fff; text-shadow:0 2px 0 rgba(170,60,90,.3); }
-  .title-wrap .sc { font-size:clamp(12px,3.2vw,15px); font-weight:800; color:#ffffffcc; display:inline-block; }
+  /* one line, not two — it lives in the header row now, which is the height of
+     a button, and a stacked title overflows it and rides up under the notch */
+  .title-wrap {
+    flex:1; min-width:0;
+    display:flex; align-items:baseline; justify-content:center; gap:8px;
+    white-space:nowrap;
+  }
+  .title-wrap .lv {
+    font-size:clamp(15px,4.2vw,22px); font-weight:800; color:#fff;
+    text-shadow:0 2px 0 rgba(170,60,90,.3);
+    overflow:hidden; text-overflow:ellipsis; min-width:0;
+  }
+  .title-wrap .sc { font-size:clamp(11px,3vw,14px); font-weight:800; color:#ffffffcc; flex:none; }
   .title-wrap .sc.bump { animation:scoreBump .32s cubic-bezier(.3,1.7,.5,1); }
   @keyframes scoreBump { 50% { transform:scale(1.35); color:#fff; } }
 
@@ -422,12 +443,16 @@
     width:var(--cell); height:var(--cell);
     padding:calc(var(--cell) * .06);
     transform:translate3d(calc(var(--tc) * var(--cell)), calc(var(--tr) * var(--cell)), 0);
-    transition:transform .26s cubic-bezier(.34,1.2,.5,1);
+    /* Snappier than it was. The old curve spent its time in the middle of the
+       move; this one leaves fast, arrives fast, and settles with a small
+       overshoot — the whole gesture is shorter without any of it feeling
+       clipped. */
+    transition:transform .19s cubic-bezier(.62,0,.24,1.14);
     cursor:pointer; z-index:2;
   }
   .tile .inner {
     position:relative; width:100%; height:100%;
-    transition:transform .15s ease;
+    transition:transform .12s cubic-bezier(.5,0,.3,1);
   }
   /* One glossy sweet for every fruit. There used to be a different geometric
      backdrop per kind as a colour-blind fallback, but the fruit emoji is
@@ -624,89 +649,112 @@
 
 
 
-  /* ---- jelly: a coat OVER a fruit, not a replacement for one. Same lesson the
-     frost took three goes to learn — you have to be able to see what you are
-     freeing, and the board must never lose a cell to it.
+  /* ---- jelly: a coat OVER a fruit, built the way the frost is — a saturated
+     RIM that carries the identity and a clear WINDOW that lets the fruit read
+     through. A flat pink wash was the same mistake the frost made twice: its
+     final colour came from whatever was underneath, so it looked different on
+     every fruit and like a sticker on all of them.
 
-     Its identity is MOVEMENT. On a board of firm little squares the only thing
-     that wobbles is instantly findable, and that works at any size, on any fruit
-     colour, and for a colour-blind player — none of which a pink tint would
-     manage on its own. The wobble animates border-radius rather than the box, so
-     the blob keeps its footprint and never leans into its neighbour. ---- */
+     The rim is where jelly is thick, which is the one place real jelly has
+     colour. Everything inside it stays nearly clear. ---- */
   .tile.jelly .crown {
     display:block;
-    background:radial-gradient(112% 112% at 38% 26%,
-      rgba(255,214,244,.42) 0 34%, rgba(255,110,205,.5) 66%, rgba(184,31,156,.6) 100%);
-    box-shadow:inset 0 calc(var(--cell)*.06) 0 rgba(255,255,255,.5),
-               inset 0 calc(var(--cell)*-.08) 0 rgba(120,10,95,.35);
-    animation:jellyWobble 1.6s ease-in-out infinite;
+    background:radial-gradient(closest-side circle at 42% 36%,
+      rgba(255,235,250,.05) 0 46%,
+      rgba(255,130,215,.34) 74%,
+      rgba(196,20,158,.72)  100%);
+    box-shadow:
+      inset 0 0 0 calc(var(--cell)*.035) rgba(255,190,238,.85),
+      inset 0 calc(var(--cell)*.05) calc(var(--cell)*.06) rgba(255,255,255,.5),
+      inset 0 calc(var(--cell)*-.07) calc(var(--cell)*.08) rgba(130,8,102,.5);
+    filter:drop-shadow(0 calc(var(--cell)*.015) calc(var(--cell)*.02) rgba(120,10,95,.45));
+    animation:jellyWobble 1.15s cubic-bezier(.5,0,.3,1) infinite;
   }
+  /* border-radius wobbles, never the box — the blob keeps its footprint and can
+     never appear to lean into the tile beside it. */
   @keyframes jellyWobble {
     0%,100% { border-radius:46% 54% 52% 48% / 50% 46% 54% 50%; }
-    33%     { border-radius:54% 46% 44% 56% / 44% 56% 44% 56%; }
-    66%     { border-radius:48% 52% 58% 42% / 56% 48% 52% 44%; }
+    33%     { border-radius:56% 44% 42% 58% / 42% 58% 42% 58%; }
+    66%     { border-radius:47% 53% 60% 40% / 58% 47% 53% 42%; }
   }
-  /* the sliding highlight is what sells "wet" */
+  /* One tight specular dot rather than a broad sheen. A small hard highlight is
+     what the eye reads as a WET surface; a big soft one just reads as fog. */
   .tile.jelly .crown::after {
-    content:''; position:absolute; inset:0;
-    background:radial-gradient(closest-side ellipse at 34% 22%, rgba(255,255,255,.8), transparent 68%);
-    animation:jellyShine 1.6s ease-in-out infinite;
+    content:''; position:absolute;
+    left:20%; top:14%; width:26%; height:20%;
+    border-radius:50%;
+    background:radial-gradient(closest-side circle, rgba(255,255,255,.95), rgba(255,255,255,.15) 70%, transparent);
+    animation:jellyShine 1.15s cubic-bezier(.5,0,.3,1) infinite;
   }
   @keyframes jellyShine {
     0%,100% { transform:translate(0,0) scale(1); }
+    33%     { transform:translate(14%,7%) scale(.82); }
+    66%     { transform:translate(-8%,10%) scale(1.08); }
+  }
     50%     { transform:translate(6%,4%) scale(.92); }
   }
     50%     { transform:translate(6%,4%) scale(.92); }
   }
 
-  /* ---- the machine. A gumball machine: a glass dome you can see the next item
-     sitting in, and a chute underneath it. A child knows what a gumball machine
-     does without being told, which a generic grey box never manages — and the
-     shape says which way things come out, which is the one thing it has to
-     communicate. ---- */
+  /* ---- the machine. Built as a HOUSING with a lit window and a chute, which
+     is the shape language of every dispenser a child has ever seen. The earlier
+     version tried to be a gumball machine using a soft gradient for the dome,
+     and at 48px a soft gradient is just a smudge — the parts have to be hard
+     edged to survive being small. ---- */
   .tile.gen .shape {
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0) 58%, #e8563f 58%, #a8281a 100%),
-      radial-gradient(120% 95% at 50% 22%, #fff6fb 0 38%, #ffd6ec 62%, #f2a6cf 100%) !important;
-    box-shadow:inset 0 0 0 calc(var(--cell)*.035) rgba(255,255,255,.75),
-               inset 0 calc(var(--cell)*-.05) 0 rgba(90,15,10,.35),
-               0 0 calc(var(--cell)*.13) rgba(255,150,120,.5);
+    background:linear-gradient(168deg,#ffb454,#f0762a 52%,#c9491a) !important;
+    box-shadow:
+      inset 0 0 0 calc(var(--cell)*.032) rgba(255,232,195,.95),
+      inset 0 calc(var(--cell)*-.09) 0 rgba(110,40,8,.5),
+      0 0 calc(var(--cell)*.13) rgba(255,160,70,.5);
   }
   .tile.gen .shape::after { display:none; }
+  /* The window the item sits in, and the chute it leaves by. Hard-edged stops so
+     both survive at tile size. */
   .tile.gen .crown {
-    display:block; pointer-events:none;
+    display:block; border-radius:30%;
     background:
-      /* the chute mouth, dark and centred on the base */
-      linear-gradient(90deg, transparent 33%, rgba(60,8,4,.62) 33%, rgba(60,8,4,.62) 67%, transparent 67%),
-      /* glass: a bright sweep across the top of the dome */
-      linear-gradient(148deg, rgba(255,255,255,.9) 0 16%, transparent 16.5%);
-    background-size:100% 20%, 100% 100%;
-    background-position:0 78%, 0 0;
+      /* chute: a dark slot centred on the base */
+      linear-gradient(90deg, transparent 30%, #3a1405 30% 70%, transparent 70%),
+      /* window: a bright pane filling the top two thirds */
+      linear-gradient(180deg, rgba(255,252,245,.96) 0 50%, transparent 50%);
+    /* The window has to leave a real frame of housing around it, or the machine
+       reads as a white tile with a bar on it — which is what a 78%-wide pane
+       did. Two thirds wide, half tall, and the orange does the rest. */
+    background-size:100% 15%, 62% 100%;
+    background-position:50% 90%, 50% 6%;
     background-repeat:no-repeat;
-    border-radius:30%;
   }
-  /* the item rides high, inside the dome, where you can see it waiting */
-  .tile.gen .face { font-size:calc(var(--cell)*.4); transform:translateY(-16%); }
-  /* Emitting: the whole machine recoils, the item drops through the base and out
-     of the bottom. You watch the thing LEAVE, which is the entire point of the
-     animation — a scale pulse said "something happened", not "one came out". */
-  .tile.gen.firing .face { animation:genDrop .5s cubic-bezier(.4,0,.7,1); }
+  /* a glass glint across the window, so it reads as a pane rather than a hole */
+  .tile.gen .crown::after {
+    content:''; position:absolute; left:19%; top:8%; width:62%; height:44%;
+    background:linear-gradient(142deg, rgba(255,255,255,.95) 0 24%, transparent 24.5%);
+  }
+  .tile.gen .face { font-size:calc(var(--cell)*.32); transform:translateY(-19%); }
+
+  /* Emitting. The item drops out of the window, through the chute and away, and
+     the housing kicks back — you watch the thing LEAVE. Fast in, fast out: the
+     whole gesture is under a third of a second. */
+  .tile.gen.firing .face { animation:genDrop .34s cubic-bezier(.55,0,.35,1); }
   @keyframes genDrop {
-    0%   { transform:translateY(-16%) scale(1); opacity:1; }
-    45%  { transform:translateY(26%) scale(.6); opacity:.9; }
-    62%  { transform:translateY(46%) scale(.34); opacity:0; }
-    63%  { transform:translateY(-46%) scale(.5); opacity:0; }
-    100% { transform:translateY(-16%) scale(1); opacity:1; }
+    0%   { transform:translateY(-14%) scale(1); opacity:1; }
+    46%  { transform:translateY(26%) scale(.5); opacity:.95; }
+    60%  { transform:translateY(44%) scale(.28); opacity:0; }
+    61%  { transform:translateY(-44%) scale(.55); opacity:0; }
+    100% { transform:translateY(-14%) scale(1); opacity:1; }
   }
-  .tile.gen.firing .shape { animation:genRecoil .5s cubic-bezier(.3,1.4,.5,1); }
+  .tile.gen.firing .shape { animation:genRecoil .34s cubic-bezier(.5,0,.25,1.3); }
   @keyframes genRecoil {
     0%,100% { transform:translateY(0) scaleY(1); }
-    40%     { transform:translateY(4%) scaleY(.93); }
-    70%     { transform:translateY(-2%) scaleY(1.03); }
+    38%     { transform:translateY(5%) scaleY(.9); }
+    68%     { transform:translateY(-2%) scaleY(1.04); }
   }
-  .tile.gen.firing .crown { animation:genFlash .5s ease-out; }
+  .tile.gen.firing .crown { animation:genFlash .34s ease-out; }
   @keyframes genFlash {
-    0%, 40% { filter:none; }
+    0%, 34% { filter:none; }
+    50%     { filter:brightness(1.9) drop-shadow(0 0 5px rgba(255,220,150,.95)); }
+    100%    { filter:none; }
+  }
     55%     { filter:brightness(2.1) drop-shadow(0 0 6px rgba(255,230,180,.9)); }
     100%    { filter:none; }
   }
@@ -1040,7 +1088,7 @@
 
   /* ---------------- landscape: board left, panel right ---------------- */
   @media (orientation:landscape) and (max-height:560px) {
-    #game { flex-direction:row; align-items:center; justify-content:center; gap:min(3vw,22px); padding-bottom:8px; }
+    #game { flex-direction:row; align-items:center; justify-content:center; gap:min(3vw,22px); padding-bottom:max(8px,var(--sab)); }
     /* wide screens have room in the side column, so the bar goes back in flow */
     .tools {
       position:static; transform:none; padding:0;
@@ -1050,7 +1098,6 @@
       display:flex; flex-direction:column; gap:10px;
       width:min(40vw,300px); align-items:stretch;
     }
-    .topbar { width:100%; }
     .goals { flex-direction:column; align-items:stretch; }
     .goal { justify-content:flex-start; }
     .footnote { text-align:left; padding:0; }
@@ -1088,16 +1135,6 @@
 <!-- ---------------- GAME ---------------- -->
 <div class="screen hidden" id="game">
   <div class="side">
-    <div class="topbar">
-      <div class="title-wrap">
-        <div class="lv" id="lv-name">Berry Patch</div>
-        <div class="sc" id="score">0 points</div>
-      </div>
-      <div class="moves" id="moves-box">
-        <div class="n" id="moves-n">20</div>
-        <div class="l">MOVES</div>
-      </div>
-    </div>
     <div class="goals" id="goals"></div>
     <div class="tools" id="tools">
       <button class="tool" data-t="hammer"><span class="ic">🔨</span><span class="ct"></span></button>
@@ -1147,8 +1184,20 @@
 </div>
 
 <div id="safe-probe" aria-hidden="true"></div>
-<button id="chrome-back" class="chrome-btn chrome-back" aria-label="Back">‹</button>
-<button id="set-btn" class="chrome-btn chrome-set" aria-label="Settings">⚙</button>
+<header class="appbar">
+  <button id="chrome-back" class="chrome-btn chrome-back" aria-label="Back">‹</button>
+  <div class="appbar-mid" id="appbar-mid">
+    <div class="title-wrap">
+      <div class="lv" id="lv-name">Berry Patch</div>
+      <div class="sc" id="score">0 points</div>
+    </div>
+    <div class="moves" id="moves-box">
+      <div class="n" id="moves-n">20</div>
+      <div class="l">MOVES</div>
+    </div>
+  </div>
+  <button id="set-btn" class="chrome-btn chrome-set" aria-label="Settings">⚙</button>
+</header>
 
 <div class="overlay" id="settings">
   <div class="panel">
@@ -1229,6 +1278,9 @@ const COVERS_PER_MOVE   = 0.45;  // leaves come off far slower than fruit
 const BOOSTERS_PER_MOVE = 0.25;  // ~8 boosters per 30 moves, measured
 const POINTS_PER_MOVE   = 900;   // ~15.5k over 14 moves, measured, kept pessimistic
 const DROPS_PER_MOVE    = 0.045; // measured, and it is genuinely this slow
+// With a machine feeding the column, ducklings arrive far faster than one that
+// has to be dug out from wherever it was placed.
+const DROPS_PER_MOVE_GEN = 0.16;
 const ICE_PER_MOVE      = 0.5;
 // Gifts open from a match beside them, like frost, but there are only ever one
 // or two on a board so they arrive far more slowly than ice does.
@@ -1291,6 +1343,9 @@ function levelFor(n) {
     for (let i = x.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [x[i], x[j]] = [x[j], x[i]]; }
     return x; };
 
+  // Whether this level will get a machine has to be known BEFORE the goals are
+  // priced, because a machine changes what a goal is worth.
+  const hasGen = n >= 25;
   const order = shuffled(Array.from({ length: kinds }, (_, i) => i));
   const fruit = i => ({ t: 'fruit', k: order[i % kinds], need: per });
   const leaf  = () => ({ t: 'leaf',  need: leaves });
@@ -1307,7 +1362,11 @@ function levelFor(n) {
   // about once in eleven moves. Two of them lost more level-9 runs than they
   // won even with the hint steering hard toward them. One is a clear, focused
   // errand; two is a hunt.
-  const drop  = () => ({ t: 'drop',  need: 1 });
+  // One duckling is the right ask when the only one you get is placed at the
+  // start. A machine feeding a stream of them makes that trivial, so a level
+  // with a machine asks for three — and gets costed at the machine's rate, not
+  // at the lonely-duckling rate.
+  const drop  = () => ({ t: 'drop',  need: hasGen ? 3 : 1 });
   const ice   = () => ({ t: 'ice',   need: Math.min(10, 2 + Math.floor(n / 2)) });
   // The late-game set. Deliberately small numbers: each one is a scarce event,
   // and the budget is priced off measured throughput rather than off hope.
@@ -1368,7 +1427,7 @@ function levelFor(n) {
     : g.t === 'leaf'  ? g.need / COVERS_PER_MOVE
     : g.t === 'boost' ? g.need / BOOSTERS_PER_MOVE
     : g.t === 'score' ? g.need / POINTS_PER_MOVE
-    : g.t === 'drop'  ? g.need / DROPS_PER_MOVE
+    : g.t === 'drop'  ? g.need / (hasGen ? DROPS_PER_MOVE_GEN : DROPS_PER_MOVE)
     : g.t === 'ice'   ? g.need / ICE_PER_MOVE
     : g.t === 'gift'  ? g.need / GIFTS_PER_MOVE
     : g.t === 'jelly' ? g.need / JELLY_PER_MOVE
@@ -2018,7 +2077,9 @@ let levelRng = Math.random;
 const rndL = n => Math.floor(levelRng() * n);
 // Fruit accelerates as it falls rather than easing in and out — floaty tiles
 // were the single biggest thing making the board feel unphysical.
-const FALL_EASE = 'cubic-bezier(.38,0,.72,.36)';
+// Falling accelerates harder and stops sooner, so a refill feels dropped rather
+// than lowered.
+const FALL_EASE = 'cubic-bezier(.5,0,.78,.3)';
 
 // Refilled fruit sometimes copies a neighbour. That seeds the near-misses that
 // turn into cascades and 4-in-a-rows, which is what makes the board feel alive
@@ -3258,7 +3319,7 @@ async function gravity() {
         grid[write][c] = t; grid[r][c] = null;
         const dist = write - r;
         maxDrop = Math.max(maxDrop, dist);
-        t.el.style.transitionDuration = Math.min(430, 130 + dist * 55) + 'ms';
+        t.el.style.transitionDuration = Math.min(330, 95 + dist * 42) + 'ms';
         t.el.style.transitionTimingFunction = FALL_EASE;
         place(t, write, c);
         landed.push(t);
@@ -3297,7 +3358,7 @@ async function gravity() {
       grid[r][c] = t;
       const dist = r + above;
       maxDrop = Math.max(maxDrop, dist);
-      t.el.style.transitionDuration = Math.min(430, 130 + dist * 55) + 'ms';
+      t.el.style.transitionDuration = Math.min(330, 95 + dist * 42) + 'ms';
       t.el.style.transitionTimingFunction = 'cubic-bezier(.45,.05,.55,1)';
       place(t, r, c);
       landed.push(t);
@@ -3305,7 +3366,7 @@ async function gravity() {
     }
   }
   if (!landed.length) return;
-  const dur = REDUCED ? 30 : Math.min(430, 130 + maxDrop * 55);
+  const dur = REDUCED ? 30 : Math.min(330, 95 + maxDrop * 42);
   await sleep(dur);
   landed.forEach(t => {
     t.el.style.transitionDuration = '';
@@ -3724,7 +3785,7 @@ async function useSwap(a, b) {
   a.el.classList.add('swapping'); b.el.classList.add('swapping');
   place(a, br, bc); place(b, ar, ac2);
   grid[br][bc] = a; grid[ar][ac2] = b;
-  await sleep(REDUCED ? 20 : 270);
+  await sleep(REDUCED ? 20 : 200);
   a.el.classList.remove('swapping'); b.el.classList.remove('swapping');
   // The whole point is that it sticks even with no match — no revert here.
   if (groups().length) await resolve([[a.r, a.c], [b.r, b.c]]);
@@ -3776,7 +3837,7 @@ async function trySwap(a, b) {
   a.el.classList.add('swapping'); b.el.classList.add('swapping');
   place(a, br, bc); place(b, ar, ac2);
   grid[br][bc] = a; grid[ar][ac2] = b;
-  await sleep(REDUCED ? 20 : 270);
+  await sleep(REDUCED ? 20 : 200);
   a.el.classList.remove('swapping'); b.el.classList.remove('swapping');
 
   // Two boosters swapped together combine into something bigger than either.
@@ -4388,6 +4449,7 @@ function showMenu() {
   clearNudge();
   $('menu').classList.remove('hidden');
   $('game').classList.add('hidden');
+  document.documentElement.classList.remove('in-game');
   $('win').classList.remove('show');
   $('more').classList.remove('show');
   $('resume').classList.remove('show');
@@ -4418,6 +4480,7 @@ function start(idx, resume, quiet) {
 
   $('menu').classList.add('hidden');
   $('game').classList.remove('hidden');
+  document.documentElement.classList.add('in-game');   // reveals the header's middle
   $('win').classList.remove('show');
   $('more').classList.remove('show');
   $('resume').classList.remove('show');

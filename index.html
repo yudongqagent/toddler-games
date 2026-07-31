@@ -22,7 +22,7 @@
     --sal:env(safe-area-inset-left, 0px);
     --chrome:clamp(44px,10vw,54px);   /* corner button size */
     --cgap:10px;                      /* its margin from the safe edge */
-    --chrome-row:calc(var(--sat) + var(--chrome) + var(--cgap) * 2);
+    --appbar-h:calc(var(--sat) + var(--chrome) + var(--cgap) * 2);
   }
   /* The gradient lives on <html>, not <body>: the root background is painted
      over the whole canvas, so it reaches under the home indicator instead of
@@ -41,15 +41,26 @@
     min-height:100dvh;
     background:none;
     display:flex; flex-direction:column; align-items:center; justify-content:center;
-    padding:var(--chrome-row) max(12px, var(--sar))
+    padding:var(--appbar-h) max(12px, var(--sar))
             max(18px, var(--sab)) max(12px, var(--sal));
   }
 
-  /* back top-left, settings top-right — the same two buttons, in the same
-     place, on every screen of every game */
+  /* One header row on every screen of every game: back on the left, settings
+     on the right, and whatever that game needs in between. The arcade is the
+     root, so its back slot stays empty — but it stays, to keep the row
+     identical to the games'. */
+  .appbar {
+    position:fixed; top:0; left:0; right:0; z-index:60;
+    height:var(--appbar-h);
+    display:flex; align-items:center; gap:10px;
+    padding:calc(var(--sat) + var(--cgap)) calc(var(--sar) + var(--cgap))
+            var(--cgap) calc(var(--sal) + var(--cgap));
+    pointer-events:none;
+  }
+  .appbar > * { pointer-events:auto; }
+  .appbar-mid { flex:1; min-width:0; }
   .chrome-btn {
-    position:fixed; z-index:60;
-    top:calc(var(--sat) + var(--cgap));
+    flex:none;
     width:var(--chrome); height:var(--chrome);
     border:none; cursor:pointer; border-radius:50%;
     background:#ffffffee; color:#7c5cff;
@@ -59,9 +70,7 @@
     transition:transform .1s;
   }
   .chrome-btn:active { transform:translateY(3px); box-shadow:0 1px 0 rgba(0,0,0,.15); }
-  .chrome-back { left:calc(var(--sal) + var(--cgap)); }
-  .chrome-set  { right:calc(var(--sar) + var(--cgap)); }
-  .chrome-btn[hidden] { display:none; }
+  .chrome-btn[hidden] { visibility:hidden; }
 
   /* soft drifting bubbles behind everything */
   .bub {
@@ -202,8 +211,11 @@
 </head>
 <body>
 
-<!-- the arcade is the root, so it has no back — settings sits where it always does -->
-<button class="chrome-btn chrome-set" id="set-btn" aria-label="Settings">⚙</button>
+<header class="appbar">
+  <button class="chrome-btn chrome-back" hidden aria-label="Back"></button>
+  <div class="appbar-mid"></div>
+  <button class="chrome-btn chrome-set" id="set-btn" aria-label="Settings">⚙</button>
+</header>
 
 <div class="overlay" id="settings">
   <div class="panel">

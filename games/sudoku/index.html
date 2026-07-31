@@ -22,7 +22,7 @@
     --sal:env(safe-area-inset-left, 0px);
     --chrome:clamp(44px,10vw,54px);   /* corner button size */
     --cgap:10px;                      /* its margin from the safe edge */
-    --chrome-row:calc(var(--sat) + var(--chrome) + var(--cgap) * 2);
+    --appbar-h:calc(var(--sat) + var(--chrome) + var(--cgap) * 2);
   }
   /* The gradient lives on <html>, not <body>: the root background is painted
      over the whole canvas, so it reaches under the home indicator instead of
@@ -44,11 +44,24 @@
     display:flex; flex-direction:column; align-items:center;
   }
 
-  /* back top-left, settings top-right — the same two buttons, in the same
-     place, on every screen of every game */
+  /* One header row on every screen of every game: back on the left, settings
+     on the right, and whatever that game needs in between. Nothing else may
+     live up here, and nothing else may overlap it. */
+  .appbar {
+    position:fixed; top:0; left:0; right:0; z-index:60;
+    height:var(--appbar-h);
+    display:flex; align-items:center; gap:10px;
+    padding:calc(var(--sat) + var(--cgap)) calc(var(--sar) + var(--cgap))
+            var(--cgap) calc(var(--sal) + var(--cgap));
+    pointer-events:none;              /* taps fall through the empty middle */
+  }
+  .appbar > * { pointer-events:auto; }
+  .appbar-mid {
+    flex:1; min-width:0;
+    display:flex; align-items:center; justify-content:center; gap:10px;
+  }
   .chrome-btn {
-    position:fixed; z-index:60;
-    top:calc(var(--sat) + var(--cgap));
+    flex:none;
     width:var(--chrome); height:var(--chrome);
     border:none; cursor:pointer; border-radius:50%;
     background:#ffffffee; color:#7c5cff;
@@ -58,9 +71,8 @@
     transition:transform .1s;
   }
   .chrome-btn:active { transform:translateY(3px); box-shadow:0 1px 0 rgba(0,0,0,.15); }
-  .chrome-back { left:calc(var(--sal) + var(--cgap)); }
-  .chrome-set  { right:calc(var(--sar) + var(--cgap)); }
-  .chrome-btn[hidden] { display:none; }
+  /* the arcade has no back; keep the slot so the middle stays centred */
+  .chrome-btn[hidden] { visibility:hidden; }
   /* A custom property built from env() can't be read back resolved, so park
      the four insets on a probe's padding — computed padding IS in pixels. */
   #safe-probe {
@@ -83,7 +95,7 @@
     gap:min(2.5vh,18px);
     /* every screen sits below the chrome row, so the corner buttons never
        land on content and the Dynamic Island never lands on either */
-    padding:var(--chrome-row) max(12px, var(--sar))
+    padding:var(--appbar-h) max(12px, var(--sar))
             max(10px, var(--sab)) max(12px, var(--sal));
     transition:opacity .25s, transform .25s;
   }
@@ -158,23 +170,11 @@
   .legend-btn .desc { color:#ffe6a8; }
   .legend-btn .emoji { filter:drop-shadow(0 3px 4px rgba(0,0,0,.4)); }
 
-  /* way back out to the arcade — every game has one, styled the same */
   /* ---------- GAME ---------- */
-  #game { justify-content:space-between; }
-  .topbar {
-    /* 100% of the screen's already-inset content box, not of the raw viewport,
-       so the topbar can't reach under a side inset */
-    width:100%; max-width:640px;
-    display:flex; align-items:center; justify-content:space-between;
-    gap:8px;
-  }
-  #level-wrap {
-    flex:1; display:flex; align-items:center; justify-content:center; gap:10px;
-    min-width:0;
-  }
-  .tb-group { display:flex; gap:8px; }
-  /* reserve the top-right corner for the always-visible settings button */
-  .tb-spacer { width:clamp(44px,10vw,54px); flex:none; }
+  #game { justify-content:center; }
+  /* the header's middle is this game's own: hint, mascot, level name */
+  html:not(.in-game) .appbar-mid { visibility:hidden; }
+  .appbar-mid #hint-btn { flex:none; }
   #mascot {
     font-size:clamp(26px,7vw,38px);
     display:inline-block;
@@ -374,7 +374,10 @@
     font-weight:800; color:#5b3fd4;
     font-size:clamp(15px,4.2vw,20px);
     box-shadow:0 10px 28px rgba(60,40,150,.35);
-    width:min(92vw,480px); text-align:center;
+    /* keep the card, and the close button that overhangs its corner, out of
+       the side insets */
+    width:min(480px, calc(100vw - var(--sal) - var(--sar) - 40px));
+    text-align:center;
     opacity:0; pointer-events:none;
     transition:opacity .25s, transform .25s;
     /* the card is held at the tallest beat's height, so keep the buttons
@@ -480,37 +483,33 @@
   html.land #game {
     display:grid;
     grid-template-columns:auto auto;
-    grid-template-rows:auto 1fr auto;
+    /* The board spans all three rows and so keeps the full height; the empty
+       "top" row is the space the header floats over, on the panel side only. */
+    grid-template-rows:var(--appbar-h) 1fr auto;
     grid-template-areas:
       "board top"
       "board tray"
       "board prog";
     align-content:center; justify-content:center;
     column-gap:clamp(10px,2.2vw,26px); row-gap:8px;
-    /* Landscape pays for the back button sideways, not from the top: the board
-       is height-limited here, so taking a chrome row off the top would shrink
-       it ~20%, while taking the same width off the left costs almost nothing.
-       The settings button already sits above the panel, where .tb-spacer
-       reserves for it. */
-    padding:max(8px,var(--sat)) max(8px,var(--sar)) max(8px,var(--sab))
-            calc(var(--sal) + var(--chrome) + var(--cgap) * 2);
+    padding:max(8px,var(--sat)) max(8px,var(--sar)) max(8px,var(--sab)) max(8px,var(--sal));
   }
+  /* renderBoard() parks the panel's left edge here each layout */
+  html.land .appbar { left:var(--panel-x, 0px); }
   html.land #board-area { display:contents; }
   html.land #board { grid-area:board; align-self:center; }
-  html.land .topbar { grid-area:top; width:auto; min-width:min(230px,32vw); }
   html.land #tray { grid-area:tray; align-self:center; }
   /* renderBoard() pins the bar to the board's width; beside the board it
      should track the panel instead */
   html.land #pwrap { grid-area:prog; align-self:end; width:auto !important; }
-  /* the panel is narrow — trim the chrome so the keypad keeps the room */
-  html.land .round-btn { width:46px; height:46px; font-size:21px; }
-  /* the settings button overhangs the panel by its own width plus its gap —
-     the topbar has to keep that much clear or the title runs under it */
-  html.land .tb-spacer { width:calc(var(--chrome) + var(--cgap)); }
+  /* a short landscape screen has no height to spare — shrink the header so
+     the board keeps as much of it as possible */
+  html.land { --chrome:44px; --cgap:6px; }
+  html.land .round-btn { width:44px; height:44px; font-size:20px; }
   html.land #mascot { font-size:clamp(20px,3vw,30px); }
   html.land #level-label { font-size:clamp(15px,2.4vw,22px); }
   /* no room above or below the board — float the card over the panel instead */
-  html.land #hint-bubble { width:min(46vw,430px); max-height:94vh; overflow-y:auto; }
+  html.land #hint-bubble { width:min(430px, calc(46vw - var(--sar))); max-height:94vh; overflow-y:auto; }
   html.land #hint-bubble::after { display:none; }
 
   /* ---------- SETTINGS (always-visible button + panel) ---------- */
@@ -698,16 +697,6 @@
 </div>
 
 <div id="game" class="screen hidden">
-  <div class="topbar">
-    <div class="tb-group">
-      <button class="round-btn" id="hint-btn" aria-label="Hint">💡</button>
-    </div>
-    <div id="level-wrap">
-      <span id="mascot"></span>
-      <span id="level-label"></span>
-    </div>
-    <div class="tb-spacer"></div>
-  </div>
   <div id="board-area">
     <div id="board"></div>
     <div id="pwrap"><div id="pfill"><span id="pstar"></span></div></div>
@@ -716,8 +705,15 @@
 </div>
 
 <div id="safe-probe" aria-hidden="true"></div>
-<button id="chrome-back" class="chrome-btn chrome-back" aria-label="Back"></button>
-<button id="settings-btn" class="chrome-btn chrome-set" aria-label="Settings"></button>
+<header class="appbar">
+  <button id="chrome-back" class="chrome-btn chrome-back" aria-label="Back"></button>
+  <div class="appbar-mid" id="appbar-mid">
+    <button class="round-btn" id="hint-btn" aria-label="Hint">💡</button>
+    <span id="mascot"></span>
+    <span id="level-label"></span>
+  </div>
+  <button id="settings-btn" class="chrome-btn chrome-set" aria-label="Settings"></button>
+</header>
 
 <div id="settings" class="modal">
   <div class="settings-card">
@@ -1615,29 +1611,27 @@ function layoutSizes(){
   const boardWFor=c=>c*n+sx*bgap+(n+sx-1)*gap+16;
   const tgap=Math.min(vw*0.02, 12);
   const nBtn=n+1;                        // +1 for the eraser
-  // What the outer shell has already claimed: the safe-area insets, and the
-  // chrome row/column the back button sits in. Stacked pays for the chrome off
-  // the top; side-by-side pays for it off the left, where it costs far less.
-  const ins=safeInsets(), cw=$('chrome-back').offsetWidth||0;
-  const topReserve  = ins.t + cw + 20;
-  const leftReserve = ins.l + cw + 20;
-  const sideW = vw - leftReserve - Math.max(8, ins.r);
+  // What the outer shell has already claimed: the safe-area insets and the
+  // header row. Measure the header rather than recompute it — its height moves
+  // with the safe area and shrinks in landscape.
+  const ins=safeInsets();
+  const barH=document.querySelector('.appbar').getBoundingClientRect().height;
+  const sideW = vw - Math.max(8, ins.l) - Math.max(8, ins.r);
   const sideH = vh - Math.max(8, ins.t) - Math.max(8, ins.b) - 6;
 
-  // Stacked: the board gets whatever is left after the chrome row, the topbar,
-  // the tray and the gaps have taken theirs. This used to be a fraction of the
-  // viewport height, which was tuned before the chrome row existed — on a small
+  // Stacked: the board gets whatever is left once the header, the tray, the
+  // progress bar and the gaps have taken theirs. This used to be a fraction of
+  // the viewport height, tuned before any of that chrome existed — on a small
   // phone with a notch it handed the board more than there was and pushed the
-  // tray off the bottom. Everything below is known here, so just subtract it.
+  // tray off the bottom. Everything else is known here, so just subtract it.
   const stackRows = n>6 && vw<560 ? 2 : 1;
   const stackCols = Math.ceil(nBtn/stackRows);
   const stackW = vw - Math.max(12, ins.l) - Math.max(12, ins.r);   // .screen padding
   const stackTs = Math.min(Math.floor((stackW-16-tgap*(stackCols-1))/stackCols), 84);
   const trayH = stackRows*stackTs + (stackRows-1)*tgap + 16;   // +16 = tray padding
-  const topbarH = Math.min(58, Math.max(46, vw*0.11));         // the round buttons
   const g1 = Math.min(18, vh*0.025), g2 = Math.min(14, vh*0.02);
-  const stackAvail = vh - topReserve - Math.max(10, ins.b)
-                   - topbarH - trayH - 16 - (2*g1 + g2);       // 16 = progress bar
+  const stackAvail = vh - barH - Math.max(10, ins.b)
+                   - trayH - 16 - (g1 + g2);                   // 16 = progress bar
   const stackCell=cellFor(Math.min(stackW, stackAvail, 620));
   // side-by-side: board takes the height, the panel takes a slice of the width
   const sideCell=cellFor(Math.min(sideH, sideW-PANEL_MIN, 620));
@@ -1652,7 +1646,7 @@ function layoutSizes(){
     // it and the grid overflows, shoving the board off the left edge.
     const colGap=Math.min(26,Math.max(10,vw*0.022));
     const restW=sideW-boardWFor(cell)-(32+colGap);
-    const restH=vh-Math.max(8,ins.t)-Math.max(8,ins.b)-PANEL_CHROME;
+    const restH=vh-barH-Math.max(8,ins.t)-Math.max(8,ins.b)-PANEL_CHROME;
     // Pick the keypad shape. Big buttons matter most (small fingers), but a
     // shape is also better for spanning the panel instead of hugging one edge,
     // worse for a ragged last row, and worse for standing taller than it is
@@ -1680,7 +1674,8 @@ function layoutSizes(){
   return {cell, gap, bgap, sx};
 }
 const PANEL_MIN=200;      // narrowest the side panel may squeeze the board to
-const PANEL_CHROME=124;   // topbar + progress bar + gaps above/below the tray
+const PANEL_CHROME=40;    // progress bar + the gap above it (the topbar moved
+                          // into the shared header, so the panel no longer pays)
 
 function symColor(v){ return isClassic ? DIGIT_COLORS[(v-1)%DIGIT_COLORS.length] : ''; }
 // symbol as rich text for the hint bubble: colored bold digit, or the emoji piece
@@ -1715,6 +1710,12 @@ function renderBoard(){
   }
   const boardW=cell*n+sx*bgap+(n+sx-1)*gap+16;
   $('pwrap').style.width=boardW+'px';
+  // Landscape: the header floats over the panel column, not the board, so the
+  // board keeps the full height it is sized for. The panel's own left edge is
+  // whatever the progress bar starts at, once the grid has centred everything.
+  document.documentElement.style.setProperty('--panel-x',
+    document.documentElement.classList.contains('land')
+      ? Math.round($('pwrap').getBoundingClientRect().left)+'px' : '0px');
   updateHighlights();
   updateConflicts();
   updateProgress();
@@ -2409,7 +2410,14 @@ function layoutHintCard(){
   b.style.visibility='';
   if(!wasShown) b.classList.remove('show');
 
+  // The card may only use the space between the header and the bottom inset —
+  // it used to clamp at 8px from the top, which put it over the back and
+  // settings buttons and under the status bar.
+  const ins=safeInsets();
+  const lo=$('appbar-mid').getBoundingClientRect().bottom + 8;
+  const hi=window.innerHeight - Math.max(8, ins.b);
   const br=boardEl.getBoundingClientRect();
+
   // Landscape: the board owns the full height, so there is no room above or
   // below it. Float the card over the panel beside the board instead — the
   // board, which is what every step points at, stays fully visible.
@@ -2417,29 +2425,21 @@ function layoutHintCard(){
     // centre it in the strip beside the board, then pull it back inside the
     // screen — the close button hangs 10px past the card's own corner.
     const w=b.offsetWidth;
-    const cx=Math.min((br.right+window.innerWidth)/2, window.innerWidth-14-w/2);
-    b.style.left=Math.max(w/2+14, cx)+'px';
-    b.style.top=Math.max(14,(window.innerHeight-h)/2)+'px';
+    const right=window.innerWidth-Math.max(14, ins.r), left=Math.max(14, ins.l);
+    const cx=Math.min((br.right+right)/2, right-w/2);
+    b.style.left=Math.max(left+w/2, cx)+'px';
+    b.style.top=Math.min(Math.max(lo, (window.innerHeight-h)/2), Math.max(lo, hi-h))+'px';
     b.classList.remove('below');
     hintPlaced=true;
     return;
   }
-  // Portrait: above the board normally, below it when ANY beat works in the
-  // rows the card would cover — one side for the whole story, so it can't flip.
-  b.style.left='50%';
-  const aboveTop=Math.max(8, br.top-h-14);
-  const covers=hintStory.some(st=>collectStepCells(st).some(c=>{
-    const el=boardEl.children[c];
-    return el && el.getBoundingClientRect().top < aboveTop+h+12;
-  }));
-  const belowTop=br.bottom+14;
-  if(covers && belowTop+h <= window.innerHeight-8){
-    b.style.top=belowTop+'px';
-    b.classList.add('below');
-  } else {
-    b.style.top=aboveTop+'px';
-    b.classList.remove('below');
-  }
+  // Portrait: sit under the board, against the bottom of the safe area. The
+  // board is what every beat points at, so it stays clear; the tray underneath
+  // is only wanted once the walkthrough is dismissed. Always the same place,
+  // so nothing about the card moves between stories either.
+  b.style.left=(ins.l + (window.innerWidth-ins.l-ins.r)/2)+'px';   // centre of the SAFE box
+  b.style.top=Math.max(lo, Math.min(br.bottom+14, hi-h-8))+'px';
+  b.classList.toggle('below', parseFloat(b.style.top) >= br.bottom);
   hintPlaced=true;
 }
 function renderHintStep(){
@@ -2917,6 +2917,7 @@ function enterLevel(key, idx, forceFresh){
   $('menu').classList.add('hidden');
   $('win').classList.remove('show');
   $('game').classList.remove('hidden');
+  document.documentElement.classList.add('in-game');   // reveals the header's middle
   // Only ask when the saved game has real progress worth keeping or discarding
   // (a level just opened but untouched has nothing meaningful to resume).
   const hasProgress = resuming && sv.board.some((v,i)=> sv.puzzle[i]===0 && v!==0);
@@ -3041,6 +3042,7 @@ function showMenu(){
   $('game').classList.add('hidden');
   $('win').classList.remove('show');
   $('menu').classList.remove('hidden');
+  document.documentElement.classList.remove('in-game');
 }
 
 function setStyle(key){
