@@ -175,7 +175,7 @@ fun. Levels get their identity from what's **on** the board instead:
 | 🧊 **frost** | holds a fruit in place; match that fruit, or anything beside it, to chip the ice away and get the fruit back |
 | 🐤 **duckling** | can't be matched, but *can* be swapped; falls with everything else and is home when it reaches the floor, so you have to clear its column out from under it |
 | 🎁 **gift** (level 20+) | one knock from a match beside it and it bursts open, leaving a **booster** behind; it can be swapped, like a duckling |
-| 🍧 **jelly** (level 30+) | one match beside it clears a blob — but every move it may **grow onto a neighbour** |
+| 🫧 **jelly** (level 30+) | coats a fruit; a match beside it frees the fruit — but every move it may **spread to a neighbour**. Clear the board of it |
 | 🎰 **machine** (level 25+) | sits at the top of a column and drops the thing this level is asking for |
 
 A duckling is swappable and frost is not, which sounds inconsistent until you
@@ -313,7 +313,7 @@ reward it had just created. Measured before the fix: a star over a gift opened i
 and left **zero** boosters on the board. Block-ness is now a snapshot taken
 before the loop starts.
 
-**🍧 Jelly is the only thing on the board that makes more of itself.** One match
+**🫧 Jelly is the only thing on the board that makes more of itself.** One match
 beside it clears a blob, which is easy — the interest is that every move a blob
 may grow onto a neighbour, so it is the one element with a reason to be handled
 *now*. Everything else sits waiting patiently to be dealt with.
@@ -336,11 +336,25 @@ blocker is never popped. Measured on the first jelly level: goal met in 8 moves
 of a 34-move budget, spread firing on 4 of them, peaking at 5 blobs against a cap
 of 7.
 
-It is drawn in CSS rather than given an emoji, and it **wobbles** — on a board of
-firm little squares, movement identifies it before colour does, and a round blob
-against rounded squares is a real silhouette difference. The wobble animates
-`border-radius` rather than the box, so the blob keeps its footprint and never
-appears to lean into the tile beside it.
+Jelly **coats a fruit** rather than replacing one, exactly like frost — you can
+see what you are freeing, the board never loses a cell, and clearing a blob hands
+a fruit straight back into play. It is not something a machine can make, because
+it grows on fruit already standing there.
+
+The goal is **"clear the board of jelly"**, not a quota. A fixed number is
+meaningless against something that makes more of itself: the count is how many it
+starts with, progress is how many *fewer* are on the board than that, so a blob
+spreading pushes you backwards and the goal is met only at zero. Measured: three
+seed blobs on level 35, spreading all the way to the cap of seven, and still
+beaten at move 12 of a 34-move budget.
+
+It is drawn in CSS rather than given an emoji, and its identity is **movement**.
+On a board of firm little squares the only thing that wobbles is instantly
+findable, and that keeps working at any size, on any fruit colour, and for a
+colour-blind player — none of which a pink tint manages on its own. The wobble
+animates `border-radius` rather than the box, so the blob keeps its footprint and
+never appears to lean into the tile beside it. The goal chip is the same blob,
+because a chip should be a picture of the thing it is asking about.
 
 ### 🎰 The machine
 
