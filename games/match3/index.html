@@ -484,6 +484,7 @@
     position:absolute; inset:0; display:none; place-items:center;
     pointer-events:none;
   }
+  .tile.jelly .face { position:relative; z-index:1; }
 
   .tile.sel .inner { transform:scale(1.12); animation:wiggle .5s ease-in-out infinite; }
   @keyframes wiggle { 0%,100%{rotate:-4deg} 50%{rotate:4deg} }
@@ -649,47 +650,48 @@
 
 
 
-  /* ---- jelly: a coat OVER a fruit, built the way the frost is — a saturated
-     RIM that carries the identity and a clear WINDOW that lets the fruit read
-     through. A flat pink wash was the same mistake the frost made twice: its
-     final colour came from whatever was underneath, so it looked different on
-     every fruit and like a sticker on all of them.
+  /* ---- bubblegum. It is the tile's own BACKING, not a film laid over the top:
+     the fruit sits on it exactly as it sits on its normal candy square, so
+     nothing is ever obscured and there is no "sticker" reading at all. Coating
+     the fruit was the wrong instinct — what is stuck is the SQUARE.
 
-     The rim is where jelly is thick, which is the one place real jelly has
-     colour. Everything inside it stays nearly clear. ---- */
-  .tile.jelly .crown {
-    display:block;
-    background:radial-gradient(closest-side circle at 42% 36%,
-      rgba(255,235,250,.05) 0 46%,
-      rgba(255,130,215,.34) 74%,
-      rgba(196,20,158,.72)  100%);
-    box-shadow:
-      inset 0 0 0 calc(var(--cell)*.035) rgba(255,190,238,.85),
-      inset 0 calc(var(--cell)*.05) calc(var(--cell)*.06) rgba(255,255,255,.5),
-      inset 0 calc(var(--cell)*-.07) calc(var(--cell)*.08) rgba(130,8,102,.5);
-    filter:drop-shadow(0 calc(var(--cell)*.015) calc(var(--cell)*.02) rgba(120,10,95,.45));
-    animation:jellyWobble 1.5s ease-in-out infinite;
+     The backing bleeds to the full cell, cancelling the tile's padding, so two
+     neighbouring pieces of gum touch edge to edge. Squaring off the touching
+     corners then fuses them into one blob, which is the whole point: you can see
+     at a glance that a patch of gum is one growing thing rather than a handful
+     of separate stickers. ---- */
+  .tile.jelly .shape {
+    /* A hair past the padding, so neighbouring pieces overlap by a fraction of a
+       pixel. Meeting exactly edge-to-edge left a faint seam at fractional device
+       ratios, which is precisely the thing this is meant to hide. */
+    inset:calc(var(--cell) * -.065);
+    background:radial-gradient(125% 125% at 34% 24%, #ffc9ec, #ff86d4 46%, #e0338f) !important;
+    box-shadow:inset 0 calc(var(--cell)*.05) 0 rgba(255,255,255,.5),
+               inset 0 calc(var(--cell)*-.06) calc(var(--cell)*.06) rgba(150,10,90,.3);
+    border-radius:32%;
+    z-index:0;
   }
-  /* border-radius wobbles, never the box — the blob keeps its footprint and can
-     never appear to lean into the tile beside it. */
-  @keyframes jellyWobble {
-    0%,100% { border-radius:46% 54% 52% 48% / 50% 46% 54% 50%; }
-    33%     { border-radius:56% 44% 42% 58% / 42% 58% 42% 58%; }
-    66%     { border-radius:47% 53% 60% 40% / 58% 47% 53% 42%; }
+  /* no candy gloss — gum is matte-soft, not a boiled sweet */
+  .tile.jelly .shape::after { display:none; }
+  /* Square off every edge that meets more gum, so the seam disappears. */
+  .tile.jelly.j-u .shape { border-top-left-radius:0; border-top-right-radius:0; }
+  .tile.jelly.j-d .shape { border-bottom-left-radius:0; border-bottom-right-radius:0; }
+  .tile.jelly.j-l .shape { border-top-left-radius:0; border-bottom-left-radius:0; }
+  .tile.jelly.j-r .shape { border-top-right-radius:0; border-bottom-right-radius:0; }
+  /* A lone blob breathes; a joined one stays put, because a whole patch pulsing
+     in step reads as a rendering fault rather than as something alive. */
+  .tile.jelly:not(.j-u):not(.j-d):not(.j-l):not(.j-r) .shape {
+    animation:gumBreathe 1.9s ease-in-out infinite;
   }
-  /* One tight specular dot rather than a broad sheen. A small hard highlight is
-     what the eye reads as a WET surface; a big soft one just reads as fog. */
-  .tile.jelly .crown::after {
-    content:''; position:absolute;
-    left:20%; top:14%; width:26%; height:20%;
+  @keyframes gumBreathe {
+    0%,100% { border-radius:32%; }
+    50%     { border-radius:44% 38% 42% 36% / 38% 44% 36% 42%; }
+  }
+  /* one soft highlight, sitting on the gum rather than over the fruit */
+  .tile.jelly .shape::before {
+    content:''; position:absolute; left:16%; top:11%; width:30%; height:22%;
     border-radius:50%;
-    background:radial-gradient(closest-side circle, rgba(255,255,255,.95), rgba(255,255,255,.15) 70%, transparent);
-    animation:jellyShine 1.5s ease-in-out infinite;
-  }
-  @keyframes jellyShine {
-    0%,100% { transform:translate(0,0) scale(1); }
-    33%     { transform:translate(14%,7%) scale(.82); }
-    66%     { transform:translate(-8%,10%) scale(1.08); }
+    background:radial-gradient(closest-side circle, rgba(255,255,255,.7), transparent 72%);
   }
 
   /* ---- the machine. Built as a HOUSING with a lit window and a chute, which
@@ -1902,8 +1904,8 @@ function makeTile(k, r, c, sp = SP_NONE) {
 }
 function paint(t) {
   const el = t.el;
-  el.classList.remove('sp1', 'sp2', 'sp3', 'blk', 'duck', 'gift', 'gen',
-                      'hit1', 'ice', 'ice1', 'ice2', 'jelly');
+  el.classList.remove('sp1', 'sp2', 'sp3', 'blk', 'duck', 'gift', 'gen', 'hit1',
+                      'ice', 'ice1', 'ice2', 'jelly', 'j-u', 'j-d', 'j-l', 'j-r');
   t.crown.textContent = '';
   if (t.block) {
     t.shape.className = 'shape';
@@ -1933,7 +1935,7 @@ function paint(t) {
   // going to free, and it can never read as a blank white square.
   if (t.jelly) {
     el.classList.add('jelly');
-    el.setAttribute('aria-label', KINDS[t.k].name + ' in jelly, match beside it to free it');
+    el.setAttribute('aria-label', KINDS[t.k].name + ' stuck in bubblegum, match beside it to free it');
   }
   if (t.ice > 0) {
     el.classList.add('ice', t.ice > 1 ? 'ice2' : 'ice1');
@@ -2326,6 +2328,25 @@ function hitIce(r, c) {
 // becoming a fail state: it can crowd the board, it can never take it.
 const JELLY_CAP = 7;
 const jellyOn = () => grid.flat().filter(t => t && t.jelly).length;
+/* Which sides of each piece of gum meet more gum. Recomputed wholesale rather
+   than patched, because gravity rearranges the board under it — a piece that was
+   joined on its left last move may be alone this one, and a stale seam is
+   immediately visible. Sixty-four cheap class toggles is nothing next to getting
+   that wrong. */
+function paintJellyLinks() {
+  for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) {
+    const t = grid[r][c];
+    if (!t) continue;
+    const has = (rr, cc) => cellOk(rr, cc) && grid[rr][cc] && grid[rr][cc].jelly;
+    // The !! is load-bearing. has() returns undefined when a neighbour simply has
+    // no jelly property, and classList.toggle(name, undefined) TOGGLES rather
+    // than forcing — so those cells flipped their seam on every single call.
+    t.el.classList.toggle('j-u', !!(t.jelly && has(r - 1, c)));
+    t.el.classList.toggle('j-d', !!(t.jelly && has(r + 1, c)));
+    t.el.classList.toggle('j-l', !!(t.jelly && has(r, c - 1)));
+    t.el.classList.toggle('j-r', !!(t.jelly && has(r, c + 1)));
+  }
+}
 /* Jelly coats a fruit rather than replacing it, exactly like frost — so you can
    see what you are freeing, the board never loses a cell, and clearing one hands
    a fruit straight back into play. Sharing the frost dedupe keeps one clear from
@@ -2340,6 +2361,7 @@ function hitJelly(r, c) {
   t.jelly = 0;
   jellyCleared++;
   paint(t);
+  paintJellyLinks();
   fxSparks(r, c, '#ff9de0', 16, 1.1);
   fxRing(r, c, 1.9, 'rgba(255,157,224,.9)', 420);
   sfx('leaf');
@@ -3384,6 +3406,7 @@ async function gravity() {
   await sleep(REDUCED ? 10 : 80);
   // Anything that reached the floor this fall is home. Checked after the fall
   // settles so a duckling that lands is collected on the same beat it arrives.
+  paintJellyLinks();
   if (collectDucks()) {
     await sleep(REDUCED ? 10 : 235);
     // A collected duckling leaves a hole ON THE FLOOR, and this was the end of
@@ -3556,6 +3579,7 @@ async function playIntro(showCard) {
   // longest delay is the far corner of the wave, plus the animation itself
   await sleep(((R - 1) + (C - 1)) * 42 + 520);
   tiles.forEach(t => t.el.classList.remove('dropin'));
+  paintJellyLinks();
   busy = false;
 }
 
@@ -4005,7 +4029,7 @@ async function spreadJelly() {
   if (!spots.length) return;
   const [r, c] = spots[Math.floor(Math.random() * spots.length)];
   const b = grid[r][c];
-  b.jelly = 1; paint(b);
+  b.jelly = 1; paint(b); paintJellyLinks();
   b.el.classList.remove('born'); void b.el.offsetWidth; b.el.classList.add('born');
   setTimeout(() => b.el.classList.remove('born'), 340);
   fxSparks(r, c, '#ff9de0', 10, .9);
@@ -4014,6 +4038,7 @@ async function spreadJelly() {
 
 async function settle() {
   if (jellySpreads) { jellySpreads = false; await spreadJelly(); }
+  paintJellyLinks();
   if (!anyMove()) await reshuffle();
   fxSweep();
   busy = false;
@@ -4198,7 +4223,7 @@ function goalLabel(g) {
        : g.t === 'drop'  ? 'bring ' + q('duckling', 'ducklings') + ' down'
        : g.t === 'ice'   ? 'break ' + q('ice block', 'ice blocks')
        : g.t === 'gift'  ? 'open ' + q('gift', 'gifts')
-       : g.t === 'jelly' ? 'clear the board of jelly'
+       : g.t === 'jelly' ? 'clear the board of bubblegum'
        : g.t === 'combo' ? 'combine ' + q('pair of boosters', 'pairs of boosters')
        : g.t === 'chain' ? 'set off ' + q('big chain', 'big chains')
        : 'make ' + q('booster', 'boosters');
@@ -4222,7 +4247,7 @@ function goalHow(g) {
        : g.t === 'drop'  ? 'Clear the fruit under a duckling so it falls. You can slide a duckling sideways too.'
        : g.t === 'ice'   ? 'Match the frozen fruit itself, or any fruit right beside it.'
        : g.t === 'gift'  ? 'Match fruit right beside a gift to knock it open. A booster pops out!'
-       : g.t === 'jelly' ? 'Match beside the jelly to free the fruit. Be quick — it spreads!'
+       : g.t === 'jelly' ? 'Match beside the bubblegum to unstick it. Be quick — it spreads!'
        : g.t === 'combo' ? 'Swap one booster straight onto another one.'
        : g.t === 'chain' ? 'One clear that keeps going three times over. Big matches start them.'
        : 'Match 4 or 5 at once instead of 3 to make one.';
@@ -4514,6 +4539,7 @@ function start(idx, resume, quiet) {
     placeBlocks(L.ducks || 0, L.ice || 0, mulberry32(((levelNo || 1) * 40503) >>> 0), L.thickIce || 0,
                 L.gifts || 0, L.jelly || 0, L.gen);
   }
+  paintJellyLinks();
   paintGoals(false);
   paintHud();
   armed = null; toolPick = null;
