@@ -272,6 +272,28 @@
     100%{transform:scale(1)}
   }
 
+  /* ---------- while a board is being generated ----------
+     A Legend board takes seconds of straight CPU. The screen goes up first
+     with an empty grid, and the wave below animates ONLY transform and
+     opacity — those run on the compositor, so it keeps moving through the
+     search instead of freezing the moment the main thread gets busy. */
+  #gen-note {
+    display:none;
+    font-size:clamp(14px,3.6vw,17px); font-weight:800; color:#ffffffdd;
+    text-shadow:0 2px 0 rgba(80,60,180,.28);
+  }
+  html.generating #gen-note { display:block; animation:genfade 1.5s ease-in-out infinite; }
+  html.generating #pwrap { display:none; }
+  @keyframes genfade { 0%,100%{opacity:.55} 50%{opacity:1} }
+  html.generating .cell { animation:genwave 1.25s ease-in-out infinite; }
+  @keyframes genwave {
+    0%,100% { opacity:.35; transform:scale(.88); }
+    50%     { opacity:1;   transform:scale(1); }
+  }
+  html.generating #board, html.generating #tray { pointer-events:none; }
+  html.generating #tray { opacity:.45; }
+  html.generating #hint-btn { opacity:.4; pointer-events:none; }
+
   #pwrap {
     height:16px; border-radius:999px;
     background:#ffffff66;
@@ -700,6 +722,7 @@
   <div id="board-area">
     <div id="board"></div>
     <div id="pwrap"><div id="pfill"><span id="pstar"></span></div></div>
+    <div id="gen-note">Making a puzzle…</div>
   </div>
   <div id="tray"></div>
 </div>
@@ -960,9 +983,9 @@ function logicSolvable(grid,L){
 
 // Build a puzzle that is solvable by pure logic (no guessing). Removing cells
 // only while it stays logicSolvable also guarantees a unique solution.
-function makePuzzle(L){
+async function makePuzzle(L){
   const n=L.n;
-  if(L.tune) return makeTunedPuzzle(L);
+  if(L.tune) return await makeTunedPuzzle(L);
   const solution=new Array(n*n).fill(0);
   fillGrid(solution,L);
   const puzzle=solution.slice();
@@ -1077,7 +1100,23 @@ function effortOf(pz,L){
    Every removal is gated on the logic engine still solving the grid. A
    deductive solve proves the answer is forced, so that single test keeps the
    solution unique AND keeps every step explainable by the hint engine. */
-function makeTunedPuzzle(L){
+/* Hand the main thread back every so often, so the page keeps painting and
+   the back button keeps working while a Legend board is searched for. The
+   deadlines below stay wall-clock, so the yields come out of the search
+   budget rather than being added to the wait. */
+let _breathedAt=0;
+async function breathe(){
+  // Nothing to paint in a backgrounded tab, and timers there are throttled to
+  // a second a piece — yielding would stretch a 4s search into minutes. Just
+  // run flat out until the page comes back.
+  if(document.hidden) return 0;
+  const now=performance.now();
+  if(now-_breathedAt<45) return 0;
+  await new Promise(r=>setTimeout(r,0));
+  _breathedAt=performance.now();
+  return _breathedAt-now;            // caller pushes its deadline out by this
+}
+async function makeTunedPuzzle(L){
   const n=L.n, all=[...Array(n*n).keys()], T=L.tune;
   const seedL=Object.assign({},L,{blanks:n*n-T.clues});
   // Champion's ceiling and Legend's floor are what keep the two levels from
@@ -1101,11 +1140,12 @@ function makeTunedPuzzle(L){
                           + r.effort/1000);
   };
   const start=performance.now();
+  let paused=0;                      // wall time handed back to the browser
   let best=null, bestSol=null, bestR=null, bestF=-1e9, seeds=0;
   const keep=(pz,sol,r,f)=>{ best=pz.slice(); bestSol=sol.slice(); bestR=r; bestF=f; };
   do {
     seeds++;
-    const seedEnd=performance.now()+T.slice;
+    let seedEnd=performance.now()+T.slice;
     const solution=new Array(n*n).fill(0);
     fillGrid(solution,L);
     let cur=digUnique(solution,seedL), curR=effortOf(cur,L), curF=fit(curR);
@@ -1125,11 +1165,16 @@ function makeTunedPuzzle(L){
       const r=effortOf(cand,L), f=fit(r);
       if(f>=curF){ cur=cand; curR=r; curF=f; }    // sideways moves keep it exploring
       if(f>bestF) keep(cand,solution,r,f);
+      // Time spent letting the browser breathe is not search time — push the
+      // deadline out by it, or the yields silently halve the budget and the
+      // level burns extra seeds trying to reach a floor it can no longer hit.
+      const gave=await breathe();
+      seedEnd+=gave; paused+=gave;
     }
     // Out of slice. Take another starting grid if this one never met the spec —
     // `budget` has to leave room for a whole extra slice or the retry can never
     // fire and the level quietly ships a board that misses its own promise.
-  } while(!fits(bestR) && seeds<T.seeds && performance.now()-start<T.budget);
+  } while(!fits(bestR) && seeds<T.seeds && performance.now()-start-paused<T.budget);
   return { puzzle:best, solution:bestSol };
 }
 
@@ -1683,7 +1728,7 @@ function symTag(v){ return isClassic ? '<b style="color:'+symColor(v)+'">'+symbo
 function boxOf(i){ const n=L.n,r=Math.floor(i/n),c=i%n; return Math.floor(r/L.boxH)*100+Math.floor(c/L.boxW); }
 
 function renderBoard(){
-  const n=L.n, {cell,gap,bgap,sx}=layoutSizes();
+  const n=L.n, {cell,gap,bgap,sx}=layoutSizes(), gen=isGenerating();
   // spacer tracks between boxes render as thick lines of the board color
   const colTracks=[], rowTracks=[];
   for(let c=0;c<n;c++){ if(c>0&&c%L.boxW===0) colTracks.push(bgap+'px'); colTracks.push(cell+'px'); }
@@ -1701,6 +1746,9 @@ function renderBoard(){
     d.style.gridRow=r+Math.floor(r/L.boxH)+1;
     d.style.width=d.style.height=cell+'px';
     d.style.fontSize=Math.floor(cell*0.62)+'px';
+    // only while generating — otherwise this delay would leak into the hint
+    // glow and the win sweep, which set (or expect) their own timing
+    if(gen) d.style.animationDelay=((r+c)*55)+'ms';   // diagonal sweep
     const s=document.createElement('span');
     s.className='sym';
     if(board[i]){ s.textContent=symbols[board[i]-1]; s.style.color=symColor(board[i]); }
@@ -1979,6 +2027,7 @@ function flashMatches(v){
 }
 
 function onTrayTap(v){
+  if(isGenerating()) return;
   eraserOn=false;
   const counts=new Array(L.n+1).fill(0);
   board.forEach(x=>{ if(x) counts[x]++; });
@@ -2001,7 +2050,7 @@ function onEraserTap(){
 }
 
 function onCellTap(i,el){
-  if(solvedFlag) return;
+  if(solvedFlag || isGenerating()) return;
   const given=puzzle[i]!==0;
   if(eraserOn){
     if(!given && board[i]!==0){ eraseCell(i); }
@@ -2830,7 +2879,7 @@ function storyChoicesNarrowest(g){
 /* ---------------- the hint button ---------------- */
 
 function onHint(){
-  if(solvedFlag) return;
+  if(solvedFlag || isGenerating()) return;
   clearHintFx();
   sfx('hint');
   mascotReact('think',1600);
@@ -2884,52 +2933,82 @@ function validSave(sv,key,idx){
 
 /* ---------------- flow ---------------- */
 
-function makeFresh(){
+function pickSymbols(){
   symbols = isClassic
     ? [...Array(L.n).keys()].map(i=>String(i+1))
     : shuffle(THEMES[Math.floor(Math.random()*THEMES.length)].slice()).slice(0,L.n);
-  const p=makePuzzle(L);
+}
+async function makeFresh(){
+  pickSymbols();
+  const p=await makePuzzle(L);
   puzzle=p.puzzle; solution=p.solution; board=puzzle.slice();
 }
+
+/* An empty board, on screen straight away, while the real one is searched for.
+   Only Legend takes long enough to notice, but a level that appears instantly
+   and then sits there is worse than one that says what it is doing. */
+let genToken=0;
+function showGenerating(){
+  document.documentElement.classList.add('generating');
+  pickSymbols();
+  puzzle=new Array(L.n*L.n).fill(0);
+  solution=puzzle.slice(); board=puzzle.slice();
+  renderBoard(); renderTray();
+}
+function endGenerating(){ document.documentElement.classList.remove('generating'); }
+function isGenerating(){ return document.documentElement.classList.contains('generating'); }
 
 // Start a level: resume the saved puzzle if it's this exact level (and not
 // forced fresh), otherwise generate a new one. Does NOT touch the URL — the
 // router owns that.
-function enterLevel(key, idx, forceFresh){
+async function enterLevel(key, idx, forceFresh){
   if(!LEVELS[key] || idx<0 || idx>=LEVELS[key].length){ showMenu(); return; }
+  const token=++genToken;
   styleKey=key; levelIdx=idx; L=LEVELS[key][idx]; isClassic=(key==='classic');
   const sv=forceFresh?null:loadSave();
   const resuming=validSave(sv,key,idx);
-  if(resuming){
-    symbols=sv.symbols.slice(); puzzle=sv.puzzle.slice();
-    solution=sv.solution.slice(); board=sv.board.slice();
-  } else {
-    makeFresh();
-  }
   selectedVal=0; selectedCell=-1; eraserOn=false; solvedFlag=false; streak=0;
   clearHintFx();
   $('level-label').textContent=L.name+' '+L.emoji;
   $('mascot').innerHTML=mascotSvg('happy');
-  renderBoard(); renderTray();
-  // Deliberately no saveGame() here: opening a level must not overwrite the
-  // one save slot. Placing or erasing a symbol saves, so merely browsing the
-  // menu can't throw away a half-finished puzzle.
+  // Put the screen up BEFORE generating, so the wait happens somewhere the
+  // player can see, with a board already framed and the back button live.
   $('menu').classList.add('hidden');
   $('win').classList.remove('show');
   $('game').classList.remove('hidden');
   document.documentElement.classList.add('in-game');   // reveals the header's middle
-  // Only ask when the saved game has real progress worth keeping or discarding
-  // (a level just opened but untouched has nothing meaningful to resume).
-  const hasProgress = resuming && sv.board.some((v,i)=> sv.puzzle[i]===0 && v!==0);
-  $('resume').classList.toggle('show', !!hasProgress);
+  $('resume').classList.remove('show');
+  if(resuming){
+    endGenerating();
+    symbols=sv.symbols.slice(); puzzle=sv.puzzle.slice();
+    solution=sv.solution.slice(); board=sv.board.slice();
+    renderBoard(); renderTray();
+    // Only ask when the saved game has real progress worth keeping or
+    // discarding (a level just opened but untouched has nothing to resume).
+    const hasProgress = sv.board.some((v,i)=> sv.puzzle[i]===0 && v!==0);
+    $('resume').classList.toggle('show', !!hasProgress);
+  } else {
+    showGenerating();
+    await makeFresh();
+    if(token!==genToken) return;        // the player moved on; drop this board
+    endGenerating();
+    renderBoard(); renderTray();
+  }
+  // Deliberately no saveGame() here: opening a level must not overwrite the
+  // one save slot. Placing or erasing a symbol saves, so merely browsing the
+  // menu can't throw away a half-finished puzzle.
 }
 
 // Discard the saved progress and lay out a brand-new puzzle for this level.
-function restartCurrent(){
+async function restartCurrent(){
+  const token=++genToken;
   clearSave();
-  makeFresh();
   selectedVal=0; selectedCell=-1; eraserOn=false; solvedFlag=false; streak=0;
   clearHintFx();
+  showGenerating();
+  await makeFresh();
+  if(token!==genToken) return;
+  endGenerating();
   renderBoard(); renderTray();
   saveGame();
 }
@@ -3036,6 +3115,8 @@ function onWin(){
 }
 
 function showMenu(){
+  genToken++;                 // abandon a board still being generated
+  endGenerating();
   clearHintFx();
   $('resume').classList.remove('show');
   renderMenu();
