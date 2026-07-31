@@ -443,16 +443,16 @@
     width:var(--cell); height:var(--cell);
     padding:calc(var(--cell) * .06);
     transform:translate3d(calc(var(--tc) * var(--cell)), calc(var(--tr) * var(--cell)), 0);
-    /* Snappier than it was. The old curve spent its time in the middle of the
-       move; this one leaves fast, arrives fast, and settles with a small
-       overshoot — the whole gesture is shorter without any of it feeling
-       clipped. */
-    transition:transform .19s cubic-bezier(.62,0,.24,1.14);
+    /* The curve is the original one, with its little overshoot on arrival —
+       that bounce is most of the character of the movement, and flattening it
+       into a hard accelerate/decelerate made everything feel businesslike. Only
+       the DURATION is shortened. */
+    transition:transform .21s cubic-bezier(.34,1.2,.5,1);
     cursor:pointer; z-index:2;
   }
   .tile .inner {
     position:relative; width:100%; height:100%;
-    transition:transform .12s cubic-bezier(.5,0,.3,1);
+    transition:transform .12s ease;
   }
   /* One glossy sweet for every fruit. There used to be a different geometric
      backdrop per kind as a colour-blind fallback, but the fruit emoji is
@@ -492,20 +492,20 @@
   @keyframes nudge { 0%,100%{transform:scale(1)} 40%{transform:scale(1.16)} }
   .tile.nope .inner { animation:nope .34s ease; }
   @keyframes nope { 25%{transform:translateX(-9%) rotate(-7deg)} 75%{transform:translateX(9%) rotate(7deg)} }
-  .tile.land .inner { animation:land .3s cubic-bezier(.25,1.5,.4,1); }
+  .tile.land .inner { animation:land .22s cubic-bezier(.25,1.5,.4,1); }
   @keyframes land {
     0%{transform:scaleY(.72) scaleX(1.16)} 55%{transform:scaleY(1.07) scaleX(.95)} 100%{transform:none}
   }
   .tile.pop { z-index:6; }
   /* picks up exactly where .charge left off, so the flash and the burst are one
      continuous motion rather than two animations fighting */
-  .tile.pop .inner { animation:pop .42s cubic-bezier(.35,0,.5,1) forwards; }
+  .tile.pop .inner { animation:pop .3s cubic-bezier(.35,0,.5,1) forwards; }
   @keyframes pop {
     0%   { transform:scale(1.22); filter:brightness(2.1) saturate(.35); }
     30%  { transform:scale(1.45) rotate(11deg); filter:brightness(1.35); }
     100% { transform:scale(0) rotate(-34deg); opacity:0; filter:brightness(1); }
   }
-  .tile.born .inner { animation:born .3s cubic-bezier(.3,1.5,.5,1); }
+  .tile.born .inner { animation:born .24s cubic-bezier(.3,1.5,.5,1); }
   @keyframes born { 0%{transform:scale(.4); opacity:.4} 100%{transform:scale(1); opacity:1} }
 
   /* ---------------- boosters ----------------
@@ -668,7 +668,7 @@
       inset 0 calc(var(--cell)*.05) calc(var(--cell)*.06) rgba(255,255,255,.5),
       inset 0 calc(var(--cell)*-.07) calc(var(--cell)*.08) rgba(130,8,102,.5);
     filter:drop-shadow(0 calc(var(--cell)*.015) calc(var(--cell)*.02) rgba(120,10,95,.45));
-    animation:jellyWobble 1.15s cubic-bezier(.5,0,.3,1) infinite;
+    animation:jellyWobble 1.5s ease-in-out infinite;
   }
   /* border-radius wobbles, never the box — the blob keeps its footprint and can
      never appear to lean into the tile beside it. */
@@ -684,7 +684,7 @@
     left:20%; top:14%; width:26%; height:20%;
     border-radius:50%;
     background:radial-gradient(closest-side circle, rgba(255,255,255,.95), rgba(255,255,255,.15) 70%, transparent);
-    animation:jellyShine 1.15s cubic-bezier(.5,0,.3,1) infinite;
+    animation:jellyShine 1.5s ease-in-out infinite;
   }
   @keyframes jellyShine {
     0%,100% { transform:translate(0,0) scale(1); }
@@ -734,7 +734,7 @@
   /* Emitting. The item drops out of the window, through the chute and away, and
      the housing kicks back — you watch the thing LEAVE. Fast in, fast out: the
      whole gesture is under a third of a second. */
-  .tile.gen.firing .face { animation:genDrop .34s cubic-bezier(.55,0,.35,1); }
+  .tile.gen.firing .face { animation:genDrop .34s cubic-bezier(.4,0,.7,1); }
   @keyframes genDrop {
     0%   { transform:translateY(-14%) scale(1); opacity:1; }
     46%  { transform:translateY(26%) scale(.5); opacity:.95; }
@@ -742,7 +742,7 @@
     61%  { transform:translateY(-44%) scale(.55); opacity:0; }
     100% { transform:translateY(-14%) scale(1); opacity:1; }
   }
-  .tile.gen.firing .shape { animation:genRecoil .34s cubic-bezier(.5,0,.25,1.3); }
+  .tile.gen.firing .shape { animation:genRecoil .34s cubic-bezier(.3,1.4,.5,1); }
   @keyframes genRecoil {
     0%,100% { transform:translateY(0) scaleY(1); }
     38%     { transform:translateY(5%) scaleY(.9); }
@@ -976,7 +976,7 @@
   }
 
   /* the beat before a match pops — says "these ones" before they go */
-  .tile.charge .inner { animation:charge .17s ease-out forwards; }
+  .tile.charge .inner { animation:charge .12s ease-out forwards; }
   @keyframes charge {
     0%   { filter:brightness(1); transform:scale(1); }
     100% { filter:brightness(2.1) saturate(.35); transform:scale(1.22); }
@@ -2076,9 +2076,7 @@ let levelRng = Math.random;
 const rndL = n => Math.floor(levelRng() * n);
 // Fruit accelerates as it falls rather than easing in and out — floaty tiles
 // were the single biggest thing making the board feel unphysical.
-// Falling accelerates harder and stops sooner, so a refill feels dropped rather
-// than lowered.
-const FALL_EASE = 'cubic-bezier(.5,0,.78,.3)';
+const FALL_EASE = 'cubic-bezier(.38,0,.72,.36)';
 
 // Refilled fruit sometimes copies a neighbour. That seeds the near-misses that
 // turn into cascades and 4-in-a-rows, which is what makes the board feel alive
@@ -3065,14 +3063,14 @@ async function fireBombAgain() {
   const chain = expand(keys);              // draws the blast and claims the area
   if (!chain) return false;
   sfx('blast', 1); buzz(34); shake();
-  await sleep(REDUCED ? 0 : 130);
+  await sleep(REDUCED ? 0 : 95);
   await clearCells(keys, 2, [shots[0].r, shots[0].c], null, null, chain);
   await gravity();
   return true;
 }
 
 // One link of a chain reaction to the next.
-const CHAIN_STEP = 150;
+const CHAIN_STEP = 105;
 // A booster caught in a clear fires, and whatever it hits can fire too — but a
 // chain is a sequence of events, not one event. This walks it breadth-first so
 // every booster knows its DEPTH in the chain: link 0 goes off now, link 1 a
@@ -3194,7 +3192,7 @@ async function clearCells(keys, cascade, from, zapFrom, suckTo, chain) {
     const d = chain.depthOf.get(key) || 0;
     const src = chain.srcOf.get(key);
     const away = src ? Math.abs(Math.floor(key / C) - src[0]) + Math.abs(key % C - src[1]) : 0;
-    return d * CHAIN_STEP + Math.min(190, away * 38);
+    return d * CHAIN_STEP + Math.min(135, away * 27);
   };
   if (chain) keys.forEach(k => { lastDelay = Math.max(lastDelay, chainDelay(k)); });
 
@@ -3210,7 +3208,7 @@ async function clearCells(keys, cascade, from, zapFrom, suckTo, chain) {
       // for the rest of the level, since paint() has no reason to strip it.
       if (t && !t.block && !t.ice) t.el.classList.add('charge');
     });
-    await sleep(150);
+    await sleep(105);
   }
 
   keys.forEach(key => {
@@ -3256,7 +3254,7 @@ async function clearCells(keys, cascade, from, zapFrom, suckTo, chain) {
     // or the booster that went off — so the burst reads as a consequence of it.
     const delay = order ? order.get(key) * step
                 : chain ? chainDelay(key)
-                : from  ? Math.min(300, (Math.abs(r - from[0]) + Math.abs(c - from[1])) * 46)
+                : from  ? Math.min(210, (Math.abs(r - from[0]) + Math.abs(c - from[1])) * 33)
                 : 0;
     const el = t.el;
     const kind = t.sp === SP_RAIN ? null : t.k;
@@ -3270,7 +3268,7 @@ async function clearCells(keys, cascade, from, zapFrom, suckTo, chain) {
       // --tr/--tc transform means this uses the same movement path as gravity,
       // so it reads as the fruit physically being drawn in.
       el.classList.remove('charge');
-      el.style.transitionDuration = '300ms';
+      el.style.transitionDuration = '215ms';
       el.style.transitionTimingFunction = 'cubic-bezier(.45,0,.7,.35)';
       el.classList.add('suck');
       place(t, target[0], target[1]);
@@ -3282,7 +3280,7 @@ async function clearCells(keys, cascade, from, zapFrom, suckTo, chain) {
       el.classList.add('pop');
     };
     if (delay) { setTimeout(fire, delay); } else fire();
-    setTimeout(() => el.remove(), (target ? 330 : 470) + delay);
+    setTimeout(() => el.remove(), (target ? 250 : 340) + delay);
     grid[r][c] = null;
   });
 
@@ -3371,17 +3369,17 @@ async function gravity() {
     t.el.style.transitionDuration = '';
     t.el.style.transitionTimingFunction = '';
     t.el.classList.add('land');
-    setTimeout(() => t.el.classList.remove('land'), 320);
+    setTimeout(() => t.el.classList.remove('land'), 240);
   });
   // A puff under the fruit that sits on the floor of each column — one per
   // column, so a full refill doesn't spray forty puffs at once.
   const bottoms = new Set();
   landed.forEach(t => { if (!bottoms.has(t.c) && (t.r === R - 1 || (grid[t.r + 1] && grid[t.r + 1][t.c] && !landed.includes(grid[t.r + 1][t.c])))) { bottoms.add(t.c); dust(t.r, t.c); } });
-  await sleep(REDUCED ? 10 : 110);
+  await sleep(REDUCED ? 10 : 80);
   // Anything that reached the floor this fall is home. Checked after the fall
   // settles so a duckling that lands is collected on the same beat it arrives.
   if (collectDucks()) {
-    await sleep(REDUCED ? 10 : 320);
+    await sleep(REDUCED ? 10 : 235);
     // A collected duckling leaves a hole ON THE FLOOR, and this was the end of
     // the fall — nothing else was ever going to come along and close it, so the
     // column sat with a gap under it until some unrelated move happened to
@@ -3470,7 +3468,7 @@ async function resolve(origins) {
     const blastFrom = chain && chain.first;
     // Let the beam or the ring actually arrive before the fruit it's hitting
     // disappears — firing both on the same frame read as "everything vanished".
-    if (chain) { shake(); await sleep(REDUCED ? 0 : 130); }
+    if (chain) { shake(); await sleep(REDUCED ? 0 : 95); }
     spawns.forEach(([key]) => keys.delete(key));
 
     if (cascade >= 2 && !REDUCED) {
@@ -3507,7 +3505,7 @@ async function resolve(origins) {
     };
     // 150ms of charge, then ~180ms of travel — the booster lands as they arrive.
     let promoteTimer = null;
-    if (spawns.length) promoteTimer = setTimeout(promote, REDUCED ? 0 : 330);
+    if (spawns.length) promoteTimer = setTimeout(promote, REDUCED ? 0 : 235);
 
     await clearCells(keys, cascade, blastFrom || (cascade === 1 ? touched : null), null, suckTo, chain);
 
@@ -3642,7 +3640,7 @@ async function activate(t) {
     t.fired = true;
     const chain = expand(keys);
     buzz(40); shake();
-    await sleep(REDUCED ? 0 : 130);
+    await sleep(REDUCED ? 0 : 95);
     await clearCells(keys, 2, at, at, null, chain);      // one bolt per fruit, in turn
     await gravity();
     await resolve(null);
@@ -3659,7 +3657,7 @@ async function activate(t) {
   t.fired = false;
   const chain = expand(keys);
   sfx('blast'); shake(); buzz(40);
-  await sleep(REDUCED ? 0 : 130);
+  await sleep(REDUCED ? 0 : 95);
   await clearCells(keys, 2, at, null, null, chain);
   await gravity();
   await resolve(null);
@@ -3767,7 +3765,7 @@ async function useHammer(t) {
   }
   const chain = expand(keys);
   sfx('blast'); buzz(45); shake();
-  await sleep(REDUCED ? 0 : 130);
+  await sleep(REDUCED ? 0 : 95);
   await clearCells(keys, 1, at, null, null, chain);
   await gravity();
   await resolve(null);
@@ -3912,7 +3910,7 @@ async function trySwap(a, b) {
 
     const chain = expand(keys);
     sfx('blast'); shake(); buzz(60);
-    await sleep(REDUCED ? 0 : 130);
+    await sleep(REDUCED ? 0 : 95);
     await clearCells(keys, 3, at, zapFrom, null, chain);
     await gravity();
     await resolve(null);
@@ -3932,7 +3930,7 @@ async function trySwap(a, b) {
     a.fired = b.fired = true;
     const chain = expand(keys);
     sfx('blast'); shake(); buzz(45);
-    await sleep(REDUCED ? 0 : 130);
+    await sleep(REDUCED ? 0 : 95);
     await clearCells(keys, 2, at, at, null, chain);      // hunt the colour down one by one
     await gravity();
     await resolve(null);
