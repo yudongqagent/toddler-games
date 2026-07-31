@@ -499,7 +499,7 @@
   .tile.pop { z-index:6; }
   /* picks up exactly where .charge left off, so the flash and the burst are one
      continuous motion rather than two animations fighting */
-  .tile.pop .inner { animation:pop .3s cubic-bezier(.35,0,.5,1) forwards; }
+  .tile.pop .inner { animation:pop .22s cubic-bezier(.35,0,.5,1) forwards; }
   @keyframes pop {
     0%   { transform:scale(1.22); filter:brightness(2.1) saturate(.35); }
     30%  { transform:scale(1.45) rotate(11deg); filter:brightness(1.35); }
@@ -3268,7 +3268,7 @@ async function clearCells(keys, cascade, from, zapFrom, suckTo, chain) {
       // --tr/--tc transform means this uses the same movement path as gravity,
       // so it reads as the fruit physically being drawn in.
       el.classList.remove('charge');
-      el.style.transitionDuration = '215ms';
+      el.style.transitionDuration = '185ms';
       el.style.transitionTimingFunction = 'cubic-bezier(.45,0,.7,.35)';
       el.classList.add('suck');
       place(t, target[0], target[1]);
@@ -3280,7 +3280,7 @@ async function clearCells(keys, cascade, from, zapFrom, suckTo, chain) {
       el.classList.add('pop');
     };
     if (delay) { setTimeout(fire, delay); } else fire();
-    setTimeout(() => el.remove(), (target ? 250 : 340) + delay);
+    setTimeout(() => el.remove(), (target ? 205 : 245) + delay);
     grid[r][c] = null;
   });
 
@@ -3294,8 +3294,14 @@ async function clearCells(keys, cascade, from, zapFrom, suckTo, chain) {
   const mid = [...keys][Math.floor(keys.size / 2)];
   scorePop(Math.floor(mid / C), mid % C, gained);
   paintHud();
-  // Long enough for the last wave — or the last bolt — to actually be seen.
-  await sleep(REDUCED ? 60 : lastDelay + (zapFrom ? 460 : from ? 520 : 400));
+  /* The tail. This is the gap you feel after a pop: the clear used to sit here
+     until the last burst had completely finished before handing over, so gravity
+     could not start until every popped tile had gone. It only ever needed to
+     wait long enough for the last wave to be READ, not to end — the cells are
+     already null, so the fall is free to begin underneath the tail of the
+     animation. Overlapping the two is what removes the dead beat, and it costs
+     nothing because a popping tile is shrinking out of the way as it happens. */
+  await sleep(REDUCED ? 40 : lastDelay + (zapFrom ? 250 : from ? 240 : 170));
 }
 
 async function gravity() {
@@ -3505,7 +3511,7 @@ async function resolve(origins) {
     };
     // 150ms of charge, then ~180ms of travel — the booster lands as they arrive.
     let promoteTimer = null;
-    if (spawns.length) promoteTimer = setTimeout(promote, REDUCED ? 0 : 235);
+    if (spawns.length) promoteTimer = setTimeout(promote, REDUCED ? 0 : 195);
 
     await clearCells(keys, cascade, blastFrom || (cascade === 1 ? touched : null), null, suckTo, chain);
 
