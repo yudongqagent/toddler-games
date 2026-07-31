@@ -500,7 +500,7 @@
   .tile.pop { z-index:6; }
   /* picks up exactly where .charge left off, so the flash and the burst are one
      continuous motion rather than two animations fighting */
-  .tile.pop .inner { animation:pop .22s cubic-bezier(.35,0,.5,1) forwards; }
+  .tile.pop .inner { animation:pop .28s cubic-bezier(.35,0,.5,1) forwards; }
   @keyframes pop {
     0%   { transform:scale(1.22); filter:brightness(2.1) saturate(.35); }
     30%  { transform:scale(1.45) rotate(11deg); filter:brightness(1.35); }
@@ -3092,7 +3092,7 @@ async function fireBombAgain() {
 }
 
 // One link of a chain reaction to the next.
-const CHAIN_STEP = 105;
+const CHAIN_STEP = 125;
 // A booster caught in a clear fires, and whatever it hits can fire too — but a
 // chain is a sequence of events, not one event. This walks it breadth-first so
 // every booster knows its DEPTH in the chain: link 0 goes off now, link 1 a
@@ -3230,7 +3230,7 @@ async function clearCells(keys, cascade, from, zapFrom, suckTo, chain) {
       // for the rest of the level, since paint() has no reason to strip it.
       if (t && !t.block && !t.ice) t.el.classList.add('charge');
     });
-    await sleep(105);
+    await sleep(125);
   }
 
   keys.forEach(key => {
@@ -3290,7 +3290,7 @@ async function clearCells(keys, cascade, from, zapFrom, suckTo, chain) {
       // --tr/--tc transform means this uses the same movement path as gravity,
       // so it reads as the fruit physically being drawn in.
       el.classList.remove('charge');
-      el.style.transitionDuration = '185ms';
+      el.style.transitionDuration = '215ms';
       el.style.transitionTimingFunction = 'cubic-bezier(.45,0,.7,.35)';
       el.classList.add('suck');
       place(t, target[0], target[1]);
@@ -3302,7 +3302,7 @@ async function clearCells(keys, cascade, from, zapFrom, suckTo, chain) {
       el.classList.add('pop');
     };
     if (delay) { setTimeout(fire, delay); } else fire();
-    setTimeout(() => el.remove(), (target ? 205 : 245) + delay);
+    setTimeout(() => el.remove(), (target ? 250 : 305) + delay);
     grid[r][c] = null;
   });
 
@@ -3323,7 +3323,7 @@ async function clearCells(keys, cascade, from, zapFrom, suckTo, chain) {
      already null, so the fall is free to begin underneath the tail of the
      animation. Overlapping the two is what removes the dead beat, and it costs
      nothing because a popping tile is shrinking out of the way as it happens. */
-  await sleep(REDUCED ? 40 : lastDelay + (zapFrom ? 250 : from ? 240 : 170));
+  await sleep(REDUCED ? 50 : lastDelay + (zapFrom ? 340 : from ? 330 : 250));
 }
 
 async function gravity() {
@@ -3534,7 +3534,7 @@ async function resolve(origins) {
     };
     // 150ms of charge, then ~180ms of travel — the booster lands as they arrive.
     let promoteTimer = null;
-    if (spawns.length) promoteTimer = setTimeout(promote, REDUCED ? 0 : 195);
+    if (spawns.length) promoteTimer = setTimeout(promote, REDUCED ? 0 : 225);
 
     await clearCells(keys, cascade, blastFrom || (cascade === 1 ? touched : null), null, suckTo, chain);
 
