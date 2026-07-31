@@ -622,46 +622,89 @@
     90% { transform:rotate(-4deg) scale(1.03); }
   }
 
-  /* ---- coconut: heavy, matte, and deliberately DULL next to the candy. It
-     ignores ordinary matches, so it should not look like something you could
-     match. ---- */
-  .tile.nut .shape {
-    background:linear-gradient(160deg,#d8b48c,#8a5a2b) !important;
-    box-shadow:inset 0 0 0 calc(var(--cell)*.03) rgba(255,255,255,.4),
-               inset 0 calc(var(--cell)*-.09) 0 rgba(60,30,5,.4);
-  }
-  .tile.nut .shape::after { display:none; }      /* no candy gloss on a coconut */
 
-  /* ---- coconut: matte and heavy, and it wears its prize where you can see it.
-     A half is smaller and tipped over, so whole-versus-half reads as a shape
-     change rather than as a number you have to remember. ---- */
-  .tile.nut .crown {
-    display:grid; align-items:end; justify-items:end;
-    padding:calc(var(--cell)*.06);
-    font-size:calc(var(--cell)*.3);
-    filter:drop-shadow(0 1px 2px rgba(0,0,0,.5));
-  }
-  .tile.nut.half .face { transform:scale(.74) rotate(-22deg); }
-  .tile.nut.half .shape { background:linear-gradient(160deg,#e6c9a6,#a5713f) !important; }
 
-  /* ---- the machine. Mechanical, not candy: it is the one thing on the board
-     that is a piece of equipment rather than something to eat. ---- */
+  /* ---- jelly: the only wobbling thing on a board of firm little squares, so
+     movement is what identifies it before colour does. Drawn in CSS rather than
+     given an emoji — a blob has no silhouette to lose, and a wobble reads at any
+     size. ---- */
+  .tile.jelly .shape {
+    background:radial-gradient(115% 115% at 38% 28%, #ffd2f2, #ff7bd5 45%, #b81f9c) !important;
+    box-shadow:inset 0 calc(var(--cell)*.07) 0 rgba(255,255,255,.55),
+               inset 0 calc(var(--cell)*-.1) 0 rgba(120,10,95,.4),
+               0 0 calc(var(--cell)*.14) rgba(255,120,220,.6);
+    animation:jellyWobble 1.6s ease-in-out infinite;
+  }
+  /* border-radius is what wobbles, not the box — the blob keeps its footprint,
+     so it never appears to lean into the tile beside it. */
+  @keyframes jellyWobble {
+    0%,100% { border-radius:46% 54% 52% 48% / 50% 46% 54% 50%; }
+    33%     { border-radius:54% 46% 44% 56% / 44% 56% 44% 56%; }
+    66%     { border-radius:48% 52% 58% 42% / 56% 48% 52% 44%; }
+  }
+  .tile.jelly .shape::after { display:none; }
+  /* a highlight that slides as it wobbles, which is what sells "wet" */
+  .tile.jelly .crown {
+    display:block; pointer-events:none;
+    background:radial-gradient(closest-side ellipse at 34% 24%, rgba(255,255,255,.85), transparent 70%);
+    animation:jellyShine 1.6s ease-in-out infinite;
+  }
+  @keyframes jellyShine {
+    0%,100% { transform:translate(0,0) scale(1); }
+    50%     { transform:translate(6%,4%) scale(.92); }
+  }
+
+  /* ---- the machine. A gumball machine: a glass dome you can see the next item
+     sitting in, and a chute underneath it. A child knows what a gumball machine
+     does without being told, which a generic grey box never manages — and the
+     shape says which way things come out, which is the one thing it has to
+     communicate. ---- */
   .tile.gen .shape {
-    background:linear-gradient(160deg,#8f9ec4,#4a5680) !important;
-    box-shadow:inset 0 0 0 calc(var(--cell)*.045) rgba(226,236,255,.8),
-               inset 0 calc(var(--cell)*-.1) 0 rgba(15,22,45,.45),
-               0 0 calc(var(--cell)*.12) rgba(120,150,220,.55);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0) 58%, #e8563f 58%, #a8281a 100%),
+      radial-gradient(120% 95% at 50% 22%, #fff6fb 0 38%, #ffd6ec 62%, #f2a6cf 100%) !important;
+    box-shadow:inset 0 0 0 calc(var(--cell)*.035) rgba(255,255,255,.75),
+               inset 0 calc(var(--cell)*-.05) 0 rgba(90,15,10,.35),
+               0 0 calc(var(--cell)*.13) rgba(255,150,120,.5);
   }
   .tile.gen .shape::after { display:none; }
-  /* a mouth at the bottom edge, so which way it dispenses is obvious */
   .tile.gen .crown {
-    display:block;
-    background:linear-gradient(180deg, transparent 62%, rgba(12,18,38,.55) 62%, rgba(12,18,38,.55) 78%, transparent 78%);
+    display:block; pointer-events:none;
+    background:
+      /* the chute mouth, dark and centred on the base */
+      linear-gradient(90deg, transparent 33%, rgba(60,8,4,.62) 33%, rgba(60,8,4,.62) 67%, transparent 67%),
+      /* glass: a bright sweep across the top of the dome */
+      linear-gradient(148deg, rgba(255,255,255,.9) 0 16%, transparent 16.5%);
+    background-size:100% 20%, 100% 100%;
+    background-position:0 78%, 0 0;
+    background-repeat:no-repeat;
     border-radius:30%;
   }
-  .tile.gen .face { font-size:calc(var(--cell)*.46); transform:translateY(-8%); }
-  .tile.gen.firing .inner { animation:genPop .45s cubic-bezier(.3,1.5,.5,1); }
-  @keyframes genPop { 35% { transform:translateY(7%) scale(1.1); } }
+  /* the item rides high, inside the dome, where you can see it waiting */
+  .tile.gen .face { font-size:calc(var(--cell)*.4); transform:translateY(-16%); }
+  /* Emitting: the whole machine recoils, the item drops through the base and out
+     of the bottom. You watch the thing LEAVE, which is the entire point of the
+     animation — a scale pulse said "something happened", not "one came out". */
+  .tile.gen.firing .face { animation:genDrop .5s cubic-bezier(.4,0,.7,1); }
+  @keyframes genDrop {
+    0%   { transform:translateY(-16%) scale(1); opacity:1; }
+    45%  { transform:translateY(26%) scale(.6); opacity:.9; }
+    62%  { transform:translateY(46%) scale(.34); opacity:0; }
+    63%  { transform:translateY(-46%) scale(.5); opacity:0; }
+    100% { transform:translateY(-16%) scale(1); opacity:1; }
+  }
+  .tile.gen.firing .shape { animation:genRecoil .5s cubic-bezier(.3,1.4,.5,1); }
+  @keyframes genRecoil {
+    0%,100% { transform:translateY(0) scaleY(1); }
+    40%     { transform:translateY(4%) scaleY(.93); }
+    70%     { transform:translateY(-2%) scaleY(1.03); }
+  }
+  .tile.gen.firing .crown { animation:genFlash .5s ease-out; }
+  @keyframes genFlash {
+    0%, 40% { filter:none; }
+    55%     { filter:brightness(2.1) drop-shadow(0 0 6px rgba(255,230,180,.9)); }
+    100%    { filter:none; }
+  }
 
   /* One hit taken, for either of them: a fracture across the face. Blocks never
      carry booster or frost markings, so .crown is free to be the damage layer. */
@@ -671,9 +714,6 @@
       linear-gradient(64deg,  transparent 45%, rgba(255,255,255,.9) 48%, transparent 51%),
       linear-gradient(-28deg, transparent 56%, rgba(255,255,255,.55) 58.5%, transparent 61%);
   }
-  .tile.nut.hit1 .crown { background:
-      linear-gradient(64deg,  transparent 45%, rgba(46,22,4,.75) 48%, transparent 51%),
-      linear-gradient(-28deg, transparent 56%, rgba(46,22,4,.5) 58.5%, transparent 61%); }
   .tile.blk.hit1 .face { transform:scale(.94) rotate(-5deg); }
 
   /* ---- frost: a layer OVER the fruit, in two thicknesses ----
@@ -1188,9 +1228,9 @@ const ICE_PER_MOVE      = 0.5;
 // Gifts open from a match beside them, like frost, but there are only ever one
 // or two on a board so they arrive far more slowly than ice does.
 const GIFTS_PER_MOVE    = 0.28;
-// A coconut only listens to a booster going off over it, and boosters land at
-// 0.25/move, so this is the rarest thing on the board by some distance.
-const NUTS_PER_MOVE     = 0.04;
+// Jelly clears from any match beside it but keeps making more of itself, so
+// what this really prices is net progress against the spread.
+const JELLY_PER_MOVE    = 0.5;
 // Combining needs two boosters alive AND adjacent, which essentially never
 // happens by accident: measured, zero in 132 moves of bot play. This is the same
 // shape of mistake as the old "make 3 bombs" goal, and it has the same fix — the
@@ -1270,7 +1310,7 @@ function levelFor(n) {
   // thing that happens on move two. The goal is opening SEVERAL, which is also
   // truer to what a gift is: a treat you go collecting.
   const gift  = () => ({ t: 'gift',  need: 4 + (n >= 45 ? 1 : 0) + (n >= 80 ? 1 : 0) });
-  const nut   = () => ({ t: 'nut',   need: 1 });
+  const jelly = () => ({ t: 'jelly', need: Math.min(12, 4 + Math.floor(n / 12)) });
   const combo = () => ({ t: 'combo', need: 1 });
   const chain = () => ({ t: 'chain', need: Math.min(4, 2 + Math.floor((n - 50) / 25)) });
 
@@ -1282,7 +1322,7 @@ function levelFor(n) {
   if (n >= 6)  menu.push('drop');
   if (n >= 8)  menu.push('ice');
   if (n >= 20) menu.push('gift');
-  if (n >= 30) menu.push('nut');
+  if (n >= 30) menu.push('jelly');
   if (n >= 40) menu.push('combo');
   if (n >= 50) menu.push('chain');
 
@@ -1305,7 +1345,7 @@ function levelFor(n) {
       : t === 'boost' ? boost()
       : t === 'drop'  ? drop()
       : t === 'gift'  ? gift()
-      : t === 'nut'   ? nut()
+      : t === 'jelly' ? jelly()
       : t === 'combo' ? combo()
       : t === 'chain' ? chain()
       : ice());
@@ -1322,7 +1362,7 @@ function levelFor(n) {
     : g.t === 'drop'  ? g.need / DROPS_PER_MOVE
     : g.t === 'ice'   ? g.need / ICE_PER_MOVE
     : g.t === 'gift'  ? g.need / GIFTS_PER_MOVE
-    : g.t === 'nut'   ? g.need / NUTS_PER_MOVE
+    : g.t === 'jelly' ? g.need / JELLY_PER_MOVE
     : g.t === 'combo' ? g.need / COMBOS_PER_MOVE
     : g.t === 'chain' ? g.need / CHAINS_PER_MOVE
     : 0;
@@ -1357,7 +1397,7 @@ function levelFor(n) {
         if (g.t === 'fruit') m.push({ t: 'fruit', k: g.k });
         if (g.t === 'gift')  m.push({ t: 'gift' });
         if (g.t === 'drop')  m.push({ t: 'duck' });
-        if (g.t === 'nut')   m.push({ t: 'nut' });
+        if (g.t === 'jelly') m.push({ t: 'jelly' });
       });
       return m.length ? { makes: m, rate: .5 } : null;
     })(),
@@ -1365,8 +1405,8 @@ function levelFor(n) {
     // them counts. Measured with two on the board it took 31 moves of a 38-move
     // budget to crack one — finishable, but a long errand for a three-year-old,
     // and the fix is more targets rather than a longer level.
-    nuts:   (() => { const need = (goals.find(g => g.t === 'nut') || {}).need || 0;
-                     return need ? need + 2 : (n >= 30 ? 1 : 0); })(),
+    // A couple of seed blobs; the spread does the rest.
+    jelly:  (goals.find(g => g.t === 'jelly') ? 2 : 0),
     pattern: pick(COVER_PATTERNS),
     // Single-layer frost early; thick blocks creep in later for texture.
     thickIce: Math.min(0.5, Math.max(0, (n - 10) * 0.05)),
@@ -1437,13 +1477,12 @@ function saveGame() {
     localStorage.setItem('match3-save', JSON.stringify({
       lv: levelNo, score, movesLeft, used: movesUsed, helped: usedHelp,
       got: goalGot, made: boostMade, home: ducksHome,
-      gift: giftsOpened, nut: nutsCracked, combo: combosMade, chain: bigChains,
+      gift: giftsOpened, jel: jellyCleared, combo: combosMade, chain: bigChains,
       cov: covers.map(row => row.slice()),
       blk: (() => { const o = []; for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) {
               const t = grid[r][c];
               if (t && t.block) o.push([r, c, t.block, t.hits || 0,
-                    t.block === 'nut' ? [t.half ? 1 : 0, t.prize || 0]
-                  : t.block === 'gen' ? [t.makes, t.rate, t.next] : 0]);
+                    t.block === 'gen' ? [t.makes, t.rate, t.next] : 0]);
               else if (t && t.ice) o.push([r, c, 'ice', t.ice]); } return o; })(),
       grid: grid.map(row => row.map(t => t ? [t.k, t.sp] : null)),
     }));
@@ -1753,7 +1792,10 @@ let covers = [], coversLeft = 0;
 let ducksHome = 0, iceLeft = 0;
 // Gifts opened, coconuts cracked, booster pairs combined, and how many moves
 // have set off a cascade of three or more.
-let giftsOpened = 0, nutsCracked = 0, combosMade = 0, bigChains = 0;
+let giftsOpened = 0, jellyCleared = 0, combosMade = 0, bigChains = 0;
+// Set when a move is spent, so jelly grows once per MOVE rather than once per
+// internal settle — several of which can happen inside one cascade.
+let jellySpreads = false;
 let busy = false, sel = null, over = false;
 let armed = null, toolPick = null;   // which helper tool is primed, and its first pick
 let idleTimer = null, nudged = [], handEl = null;
@@ -1794,19 +1836,15 @@ function makeTile(k, r, c, sp = SP_NONE) {
 }
 function paint(t) {
   const el = t.el;
-  el.classList.remove('sp1', 'sp2', 'sp3', 'blk', 'duck', 'gift', 'nut', 'gen',
-                      'half', 'hit1', 'ice', 'ice1', 'ice2');
+  el.classList.remove('sp1', 'sp2', 'sp3', 'blk', 'duck', 'gift', 'jelly', 'gen',
+                      'hit1', 'ice', 'ice1', 'ice2');
   t.crown.textContent = '';
   if (t.block) {
     t.shape.className = 'shape';
     t.shape.style.background = '';
     el.classList.add('blk', t.block);
     if (t.hits && t.hits < BLOCKS[t.block].hits) el.classList.add('hit1');
-    if (t.block === 'nut' && t.half) el.classList.add('half');
     t.face.textContent = t.block === 'gen' ? genFace(t) : BLOCKS[t.block].emoji;
-    // A coconut wears its prize where you can see it from the moment it appears,
-    // so the work has a visible point to it.
-    if (t.block === 'nut') t.crown.textContent = t.prize === SP_BOMB ? '💣' : '⭐';
     el.setAttribute('aria-label', BLOCKS[t.block].say(t));
     return;
   }
@@ -1871,9 +1909,9 @@ const isBlock = t => !!t && t.block;
    each one asks for a different kind of move.
 
    `hits`    how many knocks it takes, 0 meaning it isn't broken at all
-   `blastOnly` a coconut ignores ordinary matches entirely. Only a booster going
-             off over it counts, which is what makes late levels finally about
-             USING the boosters rather than hoarding them.
+   `blastOnly` ignores ordinary matches entirely; only a booster going off over
+             it counts. Nothing uses it right now, but the hook stays: it is the
+             one dial that makes an element care about boosters.
    `move`    only a duckling can be shoved sideways. Frost, gifts and coconuts
              are scenery until they break. */
 const BLOCKS = {
@@ -1881,13 +1919,14 @@ const BLOCKS = {
           say:() => 'duckling, can be moved but not matched' },
   gift: { emoji:'🎁', hits:1, blastOnly:false, move:true,
           say:() => 'gift box, match beside it to open it — it can also be moved' },
-  // One blast splits a whole coconut into two halves; one more on a half cracks
-  // it and the prize you could see inside all along drops out. Three blasts for
-  // two boosters, and a verb — splitting apart — that nothing else in the game
-  // has.
-  nut:  { emoji:'🥥', hits:1, blastOnly:true,  move:false,
-          say:t => t.half ? 'half a coconut, one more blast to open it'
-                          : 'coconut, blast it to split it in half' },
+  /* Jelly is the one thing on this board that makes MORE of itself. Everything
+     else sits waiting to be dealt with; jelly grows onto a neighbour every few
+     moves, so it is the only element with a reason to be handled NOW. One match
+     beside it clears a blob, and blobs are capped, so it can crowd you but never
+     take the board — this game has no fail state and jelly must not smuggle one
+     in through the back door. */
+  jelly:{ emoji:'',   hits:1, blastOnly:false, move:false,
+          say:() => 'wobbly jelly — match beside it to clear it, before it spreads' },
   // A machine. Never moves, never matches, never breaks — it is furniture, and
   // it makes the thing this level is asking for.
   gen:  { emoji:'🎰', hits:0, blastOnly:false, move:false,
@@ -1897,12 +1936,12 @@ const BLOCKS = {
 function genFace(t) {
   const m = t.next;
   return !m ? '❓' : m.t === 'fruit' ? KINDS[m.k].emoji : m.t === 'gift' ? '🎁'
-       : m.t === 'duck' ? '🐤' : '🥥';
+       : m.t === 'duck' ? '🐤' : '🍧';
 }
 function genLabel(t) {
   const m = t.next;
   return !m ? 'something' : m.t === 'fruit' ? plural(m.k) : m.t === 'gift' ? 'gifts'
-       : m.t === 'duck' ? 'ducklings' : 'coconuts';
+       : m.t === 'duck' ? 'ducklings' : 'jelly';
 }
 // Only a duckling may be swapped. Everything else stays put until it breaks.
 const canMove = t => !!t && (!t.block || BLOCKS[t.block].move) && !t.ice;
@@ -1911,7 +1950,6 @@ function makeBlock(kind, r, c) {
   const t = makeTile(0, r, c);
   t.k = BLOCK_K; t.block = kind;
   t.hits = BLOCKS[kind].hits;
-  if (kind === 'nut') { t.half = false; t.prize = Math.random() < .5 ? SP_STAR : SP_BOMB; }
   paint(t);
   return t;
 }
@@ -2218,8 +2256,11 @@ function hitIce(r, c) {
   paintGoals(true);
 }
 
-/* Gifts and coconuts take knocks the way frost does, and share its dedupe so one
-   clear counts once however many of its fruit happened to touch the same block.
+// At most this many blobs at once. The cap is what keeps jelly from ever
+// becoming a fail state: it can crowd the board, it can never take it.
+const JELLY_CAP = 7;
+/* Blocks take knocks the way frost does, and share its dedupe so one clear
+   counts once however many of its fruit happened to touch the same block.
    `blast` says the knock came from a booster going off over the block rather
    than from an ordinary match beside it — a coconut only listens to the former.
 
@@ -2237,59 +2278,21 @@ function hitBlock(r, c, blast) {
   t.hits--;
   if (t.hits > 0) {
     paint(t);
-    sfx(t.block === 'nut' ? 'crack' : 'tap');
-    fxSparks(r, c, t.block === 'nut' ? '#c89a63' : '#ffd0ea', 10, .9);
+    sfx('tap');
+    fxSparks(r, c, '#ffd0ea', 10, .9);
     return;
   }
-  if (t.block === 'nut' && !t.half) {
-    // First blast splits it. This tile becomes one half and a second half is
-    // born beside it, so the single target you were aiming at becomes two — the
-    // coconut gets harder to finish precisely by breaking, which is what makes
-    // splitting feel like an event rather than a health bar ticking down.
-    t.half = true; t.hits = 1; paint(t);
-    // Nearest eligible cell, not strictly an adjacent one. A leaf is only swept
-    // by popping the fruit standing on it and a blocker is never popped, so a
-    // half may not land on one — and on a leaf level that ruled out all four
-    // neighbours and the coconut split into a single half instead of two.
-    const ok = (rr, cc) => cellOk(rr, cc) && grid[rr][cc] && !grid[rr][cc].block
-                        && !grid[rr][cc].ice && grid[rr][cc].sp === SP_NONE
-                        && !(covers[rr] && covers[rr][cc]);
-    let spot = null, bestD = 1e9;
-    for (let rr = 0; rr < R; rr++) for (let cc = 0; cc < C; cc++) {
-      if (!ok(rr, cc)) continue;
-      const d = Math.abs(rr - r) + Math.abs(cc - c);
-      if (d < bestD) { bestD = d; spot = [rr, cc]; }
-    }
-    if (spot) {
-      const [rr, cc] = spot;
-      grid[rr][cc].el.remove();
-      // makeBlock builds the tile but does not put it in the grid — placeBlocks
-      // assigns it too. Without this line the old tile's element was gone while
-      // the model still pointed at it, so the DOM and the grid disagreed.
-      const h = grid[rr][cc] = makeBlock('nut', rr, cc);
-      h.half = true; h.hits = 1; h.prize = t.prize; paint(h);
-      h.el.classList.add('born');
-      setTimeout(() => h.el.classList.remove('born'), 340);
-    }
-    sfx('crack');
-    fxSparks(r, c, '#c89a63', 16, 1.2); fxShards(r, c, '#8a5a2b', 8);
-    buzz(22);
-    return;
-  }
-  if (t.block === 'nut') {
-    // A half cracks open and the prize drops out where it stood.
-    nutsCracked++;
-    t.block = null; t.hits = 0; t.half = false;
+  if (t.block === 'jelly') {
+    jellyCleared++;
+    t.block = null; t.hits = 0;
     t.k = Math.floor(Math.random() * KINDS.length);
-    t.sp = t.prize || SP_STAR; t.fired = false; t.twice = false; t.radius = 1;
+    t.sp = SP_NONE; t.fired = false;
     paint(t);
-    converge(r, c, t.k);
-    fxSparks(r, c, '#ffe6a0', 22, 1.5); fxShards(r, c, '#8a5a2b', 10);
-    fxRing(r, c, 2.4, 'rgba(255,220,150,.95)', 520);
-    sfx('crack'); sfx('make'); buzz(34);
+    fxSparks(r, c, '#ff9de0', 16, 1.1);
+    fxRing(r, c, 1.9, 'rgba(255,157,224,.9)', 420);
+    sfx('leaf');
     t.el.classList.remove('born'); void t.el.offsetWidth; t.el.classList.add('born');
     setTimeout(() => t.el.classList.remove('born'), 340);
-    toast('🥥 Cracked open!');
     paintGoals(true);
     return;
   }
@@ -2321,9 +2324,8 @@ function applyEmit(t, m) {
   if (m.t === 'fruit') { t.k = m.k; paint(t); return; }
   if (m.t === 'gift' && count('gift') >= 3) return;
   if (m.t === 'duck' && count('duck') >= 3) return;
-  if (m.t === 'nut'  && count('nut')  >= 4) return;
+  if (m.t === 'jelly' && count('jelly') >= JELLY_CAP) return;
   t.block = m.t; t.k = BLOCK_K; t.hits = BLOCKS[m.t].hits;
-  if (m.t === 'nut') { t.half = false; t.prize = Math.random() < .5 ? SP_STAR : SP_BOMB; }
   paint(t);
 }
 
@@ -2341,7 +2343,6 @@ function restoreBlocks(blk) {
     // A half coconut has to come back a half, and a machine has to come back
     // making the same thing — otherwise a save quietly repairs the whole board.
     if (BLOCKS[kind].hits) { t.hits = lvl; }
-    if (kind === 'nut' && Array.isArray(extra)) { t.half = !!extra[0]; t.prize = extra[1] || SP_STAR; }
     if (kind === 'gen' && Array.isArray(extra)) { t.makes = extra[0]; t.rate = extra[1]; t.next = extra[2]; }
     paint(t);
   });
@@ -2392,9 +2393,9 @@ function paintCells() {
 }
 // Ducklings start high (they have to travel) and ice starts low and central
 // (it has to be dug out). Both replace a fruit rather than adding a cell.
-function placeBlocks(nDucks, nIce, rng, thickChance, nGift, nNut, gen) {
+function placeBlocks(nDucks, nIce, rng, thickChance, nGift, nJelly, gen) {
   ducksHome = 0; iceLeft = 0;
-  giftsOpened = 0; nutsCracked = 0;
+  giftsOpened = 0; jellyCleared = 0;
   // The machine goes at the very top of a column, which is the one place it can
   // live without breaking anything: its output falls down that column, and it
   // never has to sit in the middle of a stack splitting it into two halves that
@@ -2433,14 +2434,13 @@ function placeBlocks(nDucks, nIce, rng, thickChance, nGift, nNut, gen) {
     // home in 25 moves. Three rows of travel is a journey you can finish.
     if (swap(colBot[c] - 3 - Math.floor(rng() * 2), c, 'duck')) placed++;
   }
-  // Gifts and coconuts go anywhere with room around them, spread across
-  // different columns so one column never has to be dug out twice. Both replace
-  // a fruit, so the board keeps every cell.
+  // Gifts and jelly go anywhere with room around them, spread across different
+  // columns. Both replace a fruit, so the board keeps every cell.
   const free = [];
   for (let c = 0; c < C; c++) for (let r = colTop[c] + 1; r <= colBot[c] - 1; r++) free.push([r, c]);
   for (let i = free.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [free[i], free[j]] = [free[j], free[i]]; }
   const usedCol = new Set();
-  for (const kind of [].concat(Array(nGift || 0).fill('gift'), Array(nNut || 0).fill('nut'))) {
+  for (const kind of [].concat(Array(nGift || 0).fill('gift'), Array(nJelly || 0).fill('jelly'))) {
     let put = false;
     for (const pass of [0, 1]) {                 // second pass drops the one-per-column rule
       if (put) break;
@@ -3888,7 +3888,39 @@ function fxSweep() {
   });
 }
 
+/* Jelly grows. Once per settled move each blob may copy itself onto ONE
+   neighbouring plain fruit, which is what gives jelly the only real urgency in
+   the game — every other element waits patiently to be dealt with.
+
+   Three things keep it from ever becoming a fail state, which this game does not
+   have and must not acquire by accident:
+     · a hard cap on blobs, so it can crowd you but never take the board
+     · only one new blob per move however many are sitting there, so it cannot
+       outrun a player who is actually clearing them
+     · never onto a leaf, a blocker or frozen fruit — a blob on a leaf would
+       strand the leaf goal, since a leaf is swept by popping the fruit standing
+       on it and a blocker is never popped. */
+async function spreadJelly() {
+  const blobs = grid.flat().filter(t => t && t.block === 'jelly');
+  if (!blobs.length || blobs.length >= JELLY_CAP) return;
+  const from = blobs[Math.floor(Math.random() * blobs.length)];
+  const spots = [[0,1],[0,-1],[1,0],[-1,0]]
+    .map(([dr, dc]) => [from.r + dr, from.c + dc])
+    .filter(([r, c]) => cellOk(r, c) && grid[r][c] && !grid[r][c].block
+                     && !grid[r][c].ice && grid[r][c].sp === SP_NONE
+                     && !(covers[r] && covers[r][c]));
+  if (!spots.length) return;
+  const [r, c] = spots[Math.floor(Math.random() * spots.length)];
+  grid[r][c].el.remove();
+  const b = grid[r][c] = makeBlock('jelly', r, c);
+  b.el.classList.add('born');
+  setTimeout(() => b.el.classList.remove('born'), 340);
+  fxSparks(r, c, '#ff9de0', 10, .9);
+  sfx('nope');
+}
+
 async function settle() {
+  if (jellySpreads) { jellySpreads = false; await spreadJelly(); }
   if (!anyMove()) await reshuffle();
   fxSweep();
   busy = false;
@@ -3991,6 +4023,7 @@ function armIdle(fast) {
 
 /* ---------------- HUD ---------------- */
 function spendMove() {
+  jellySpreads = true;
   if (freePlay) return;
   movesLeft--; movesUsed++;
   const box = $('moves-box');
@@ -4019,7 +4052,7 @@ function goalChip(g) {
              : g.t === 'score' ? '🏆'
              : g.t === 'drop' ? '🐤'
              : g.t === 'gift' ? '🎁'
-             : g.t === 'nut' ? '🥥'
+             : g.t === 'jelly' ? '🍧'
              : g.t === 'combo' ? '💥'
              : g.t === 'chain' ? '🔥'
              : g.t === 'ice' ? ''
@@ -4028,7 +4061,7 @@ function goalChip(g) {
            : g.t === 'score' ? 'linear-gradient(160deg,#ffe08a,#f5a524)'
            : g.t === 'drop' ? 'linear-gradient(160deg,#fff2c4,#ffd469)'
            : g.t === 'gift' ? 'linear-gradient(160deg,#ffd9ee,#ff7fbe)'
-           : g.t === 'nut' ? 'linear-gradient(160deg,#d8b48c,#8a5a2b)'
+           : g.t === 'jelly' ? 'linear-gradient(160deg,#ff9de0,#c026a8)'
            : g.t === 'combo' ? 'linear-gradient(160deg,#ffd0a0,#ff7a3c)'
            : g.t === 'chain' ? 'linear-gradient(160deg,#ffcf7a,#f2542d)'
            // Same rim-and-window build as the block on the board, but with the
@@ -4052,7 +4085,7 @@ function goalSummary(lv) {
     : g.t === 'drop'  ? g.need + '🐤'
     : g.t === 'ice'   ? g.need + '🧊'
     : g.t === 'gift'  ? g.need + '🎁'
-    : g.t === 'nut'   ? g.need + '🥥'
+    : g.t === 'jelly' ? g.need + '🍧'
     : g.t === 'combo' ? g.need + '💥'
     : g.t === 'chain' ? g.need + '🔥'
     : g.need + '✨');
@@ -4067,7 +4100,7 @@ function goalLabel(g) {
        : g.t === 'drop'  ? 'bring ' + q('duckling', 'ducklings') + ' down'
        : g.t === 'ice'   ? 'break ' + q('ice block', 'ice blocks')
        : g.t === 'gift'  ? 'open ' + q('gift', 'gifts')
-       : g.t === 'nut'   ? 'crack ' + q('coconut', 'coconuts')
+       : g.t === 'jelly' ? 'clear ' + q('jelly blob', 'jelly blobs')
        : g.t === 'combo' ? 'combine ' + q('pair of boosters', 'pairs of boosters')
        : g.t === 'chain' ? 'set off ' + q('big chain', 'big chains')
        : 'make ' + q('booster', 'boosters');
@@ -4091,7 +4124,7 @@ function goalHow(g) {
        : g.t === 'drop'  ? 'Clear the fruit under a duckling so it falls. You can slide a duckling sideways too.'
        : g.t === 'ice'   ? 'Match the frozen fruit itself, or any fruit right beside it.'
        : g.t === 'gift'  ? 'Match fruit right beside a gift to knock it open. A booster pops out!'
-       : g.t === 'nut'   ? 'Only a blast cracks a coconut. Set a booster off next to one.'
+       : g.t === 'jelly' ? 'Match right beside the jelly to clear it. Be quick — it spreads!'
        : g.t === 'combo' ? 'Swap one booster straight onto another one.'
        : g.t === 'chain' ? 'One clear that keeps going three times over. Big matches start them.'
        : 'Match 4 or 5 at once instead of 3 to make one.';
@@ -4145,7 +4178,7 @@ function goalProgress(g, i) {
   if (g.t === 'drop')  return ducksHome;
   if (g.t === 'ice')   return g.need - iceLeft;
   if (g.t === 'gift')  return giftsOpened;
-  if (g.t === 'nut')   return nutsCracked;
+  if (g.t === 'jelly') return jellyCleared;
   if (g.t === 'combo') return combosMade;
   if (g.t === 'chain') return bigChains;
   return goalGot[i] || 0;
@@ -4335,7 +4368,7 @@ function start(idx, resume, quiet) {
   score = 0; movesLeft = L.moves; movesUsed = 0; usedHelp = false; over = false; busy = false; sel = null;
   goalGot = L.goals.map(() => 0);
   boostMade = {}; ducksHome = 0; iceLeft = 0;
-  giftsOpened = 0; nutsCracked = 0; combosMade = 0; bigChains = 0;
+  giftsOpened = 0; jellyCleared = 0; combosMade = 0; bigChains = 0;
   bombAgain = [];               // never carry a pending blast into a new level
   hideTip();
   sinceBooster = 0;
@@ -4345,7 +4378,7 @@ function start(idx, resume, quiet) {
     usedHelp = !!resume.helped; goalGot = resume.got.slice();
     boostMade = resume.made || {};
     ducksHome = resume.home || 0;
-    giftsOpened = resume.gift || 0; nutsCracked = resume.nut || 0;
+    giftsOpened = resume.gift || 0; jellyCleared = resume.jel || 0;
     combosMade = resume.combo || 0; bigChains = resume.chain || 0;
   }
 
@@ -4373,13 +4406,13 @@ function start(idx, resume, quiet) {
       buildBoard();
       makeCovers(L.covers || 0, L.pattern);
       placeBlocks(L.ducks || 0, L.ice || 0, mulberry32(((levelNo || 1) * 40503) >>> 0), L.thickIce || 0,
-                L.gifts || 0, L.nuts || 0, L.gen);
+                L.gifts || 0, L.jelly || 0, L.gen);
     } else restoreBlocks(resume.blk);
   } else {
     buildBoard();
     makeCovers(L.covers || 0, L.pattern);
     placeBlocks(L.ducks || 0, L.ice || 0, mulberry32(((levelNo || 1) * 40503) >>> 0), L.thickIce || 0,
-                L.gifts || 0, L.nuts || 0, L.gen);
+                L.gifts || 0, L.jelly || 0, L.gen);
   }
   paintGoals(false);
   paintHud();

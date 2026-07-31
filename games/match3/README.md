@@ -175,7 +175,7 @@ fun. Levels get their identity from what's **on** the board instead:
 | 🧊 **frost** | holds a fruit in place; match that fruit, or anything beside it, to chip the ice away and get the fruit back |
 | 🐤 **duckling** | can't be matched, but *can* be swapped; falls with everything else and is home when it reaches the floor, so you have to clear its column out from under it |
 | 🎁 **gift** (level 20+) | one knock from a match beside it and it bursts open, leaving a **booster** behind; it can be swapped, like a duckling |
-| 🥥 **coconut** (level 30+) | ignores ordinary matches; one blast **splits it in half**, one more on a half cracks it open and the prize you could see inside drops out |
+| 🍧 **jelly** (level 30+) | one match beside it clears a blob — but every move it may **grow onto a neighbour** |
 | 🎰 **machine** (level 25+) | sits at the top of a column and drops the thing this level is asking for |
 
 A duckling is swappable and frost is not, which sounds inconsistent until you
@@ -313,31 +313,34 @@ reward it had just created. Measured before the fix: a star over a gift opened i
 and left **zero** boosters on the board. Block-ness is now a snapshot taken
 before the loop starts.
 
-**🥥 The coconut only listens to blasts, and it splits in half.** Ordinary
-matches beside it do nothing at all — it takes a booster going off over it, which
-finally makes the late game about *using* boosters instead of hoarding them. It
-is matte and dull next to the candy on purpose, because it must not look like
-something you could match.
+**🍧 Jelly is the only thing on the board that makes more of itself.** One match
+beside it clears a blob, which is easy — the interest is that every move a blob
+may grow onto a neighbour, so it is the one element with a reason to be handled
+*now*. Everything else sits waiting patiently to be dealt with.
 
-It was the least fun thing in the game before, and the diagnosis matters more
-than the fix: you could not **act** on it (you waited for a booster to happen to
-land near it, so it answered to luck rather than to your move), its verb was
-borrowed from frost and gifts ("hit it N times", just with a harder gate), and
-cracking it gave you *nothing* — so there was no reason to want one.
+The coconut it replaced was cut because it had become a second gift: break the
+wrapper, receive a booster. That is a difficulty knob, not an idea. Surveying
+what shipped match-3 games actually do, the genre runs on a handful of
+mechanical *categories* — container, spawner, spreader, mover, trigger-payload,
+blast-interactor — and this game had spent container twice over (gift, coconut)
+and spawner once (the machine). Jelly is the spreader, the category with the one
+verb nothing here had: it creates work rather than holding an item.
 
-So: the first blast **splits it into two halves**, which fall apart into the
-nearest cells that will take them; one more blast on a half cracks it open and
-the **prize drops out**. The coconut wears that prize from the moment it appears,
-so the work has a visible point to it. Three blasts for two boosters — and
-splitting apart is a verb nothing else in the game has. A whole coconut gets
-*harder* to finish by breaking, which is what makes the split feel like an event
-rather than a health bar ticking down.
+Three things stop it becoming a fail state, which this game does not have and
+must not acquire by accident: a hard **cap** on blobs, so it can crowd you but
+never take the board; only **one new blob per move** however many are sitting
+there, so it cannot outrun a player who is actually clearing them; and it never
+grows onto a leaf, a blocker or frozen fruit — a blob on a leaf would strand the
+leaf goal, since a leaf is swept by popping the fruit standing on it and a
+blocker is never popped. Measured on the first jelly level: goal met in 8 moves
+of a 34-move budget, spread firing on 4 of them, peaking at 5 blobs against a cap
+of 7.
 
-A half may not land on a leaf: a leaf is only swept by popping the fruit standing
-on it and a blocker is never popped, so a half sitting there would strand the
-leaf goal. That ruled out all four neighbours on the first leaf level it met and
-the coconut split into a single half, so a half now takes the nearest eligible
-cell anywhere rather than strictly an adjacent one.
+It is drawn in CSS rather than given an emoji, and it **wobbles** — on a board of
+firm little squares, movement identifies it before colour does, and a round blob
+against rounded squares is a real silhouette difference. The wobble animates
+`border-radius` rather than the box, so the blob keeps its footprint and never
+appears to lean into the tile beside it.
 
 ### 🎰 The machine
 
@@ -350,6 +353,14 @@ goal gives it that fruit, a gift goal gives it gifts, a duckling goal gives it
 ducklings, a coconut goal gives it coconuts. A level with none of those gets no
 machine, so it is never decoration — it is the level telling you where to work. A
 fruit goal stops being a waiting game and becomes a *place on the board*.
+
+It is drawn as a **gumball machine**: a glass dome with the next item sitting
+visibly inside it, and a chute underneath. A child knows what a gumball machine
+does without being told, which a generic grey box never manages — and the shape
+answers the one question it has to, which is *which way do things come out*. When
+it fires, the machine recoils and the item **drops down through the base and out
+of the bottom**, so you watch the thing leave; the scale-pulse it had before said
+"something happened", not "one came out".
 
 It sits at the **top of its column**, which is the one spot it can occupy without
 breaking anything. Mid-board it would split its column into two halves that can
