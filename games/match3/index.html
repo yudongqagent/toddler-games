@@ -500,11 +500,40 @@
   .tile.pop { z-index:6; }
   /* picks up exactly where .charge left off, so the flash and the burst are one
      continuous motion rather than two animations fighting */
+  /* A matched fruit used to scale up, spin and shrink to nothing — one object
+     vanishing, which reads as DELETED rather than destroyed. It comes apart now:
+     the candy shell bursts outward like a popped bubble while the fruit inside
+     squashes and goes, and there is a genuine wind-up before either. Three
+     things carry that:
+
+       · ANTICIPATION — a squash frame before the burst. A burst with no wind-up
+         has no weight, and the white flare we had is a colour change, not a
+         movement.
+       · SEPARATION — .shape and .face animate independently. One div scaling to
+         zero is the giveaway that this is a rectangle and not a sweet.
+       · A FLASH FRAME — two frames of blown-out silhouette at the moment of
+         destruction, which is what sells impact in every action game there is. */
   .tile.pop .inner { animation:pop .28s cubic-bezier(.35,0,.5,1) forwards; }
+  .tile.pop .shape { animation:shellBurst .28s cubic-bezier(.2,.7,.4,1) forwards; }
+  .tile.pop .face  { animation:fruitPop .28s cubic-bezier(.35,0,.5,1) forwards; }
+  @keyframes shellBurst {
+    0%   { transform:scale(1); opacity:1; filter:brightness(1); }
+    14%  { transform:scaleX(1.14) scaleY(.82); filter:brightness(2.6) saturate(.2); }
+    100% { transform:scale(1.55); opacity:0; filter:brightness(1.6); }
+  }
+  @keyframes fruitPop {
+    0%   { transform:scale(1) translateY(0); }
+    14%  { transform:scaleX(1.18) scaleY(.78) translateY(6%); }   /* squash: the wind-up */
+    34%  { transform:scale(1.24) translateY(-8%); }               /* and the release */
+    100% { transform:scale(0) rotate(-28deg); opacity:0; }
+  }
+  /* The inner now only carries the shared lift — the shell and the fruit do
+     their own thing on top of it. */
   @keyframes pop {
-    0%   { transform:scale(1.22); filter:brightness(2.1) saturate(.35); }
-    30%  { transform:scale(1.45) rotate(11deg); filter:brightness(1.35); }
-    100% { transform:scale(0) rotate(-34deg); opacity:0; filter:brightness(1); }
+    0%   { transform:scale(1.14); }
+    14%  { transform:scale(1.02); }
+    34%  { transform:scale(1.2); }
+    100% { transform:scale(1.06); opacity:0; }
   }
   .tile.born .inner { animation:born .24s cubic-bezier(.3,1.5,.5,1); }
   @keyframes born { 0%{transform:scale(.4); opacity:.4} 100%{transform:scale(1); opacity:1} }
@@ -2713,12 +2742,24 @@ function fxSparks(r, c, colour, n, power) {
   });
 }
 // Chunky rotating shards — gives a pop physical debris instead of only dust.
-function fxShards(r, c, colour, n) {
+/* `away` is a cell the debris should be thrown AWAY from — the tile you moved,
+   or the centre of the blast. Shards used to spray in a perfect circle, which is
+   the same picture whichever way the match ran; biasing them along the actual
+   direction of destruction is what makes a row read as a row and a blast read as
+   coming from somewhere. */
+function fxShards(r, c, colour, n, away) {
   const { x, y, cell } = fxAt(r, c);
   const seeds = [];
-  for (let i = 0; i < (n || 5); i++)
-    seeds.push({ a: Math.random() * Math.PI * 2, sp: (.6 + Math.random()) * cell * 1.9,
+  let bias = null;
+  if (away && (away[0] !== r || away[1] !== c)) bias = Math.atan2(r - away[0], c - away[1]);
+  for (let i = 0; i < (n || 5); i++) {
+    // Two thirds of a turn of spread around the bias, so it still scatters —
+    // debris that all flies the same way looks like a sprite, not a shatter.
+    const a = bias == null ? Math.random() * Math.PI * 2
+                           : bias + (Math.random() - .5) * 2.1;
+    seeds.push({ a, sp: (.6 + Math.random()) * cell * (bias == null ? 1.9 : 2.4),
                  rot: (Math.random() - .5) * 12, s: cell * (.1 + Math.random() * .1) });
+  }
   fxPush(620, (g, p) => {
     const e = easeOut(p), fade = 1 - p * p;
     g.globalAlpha = fade;
@@ -2926,11 +2967,11 @@ function cellCentre(r, c) {
 // throws more confetti than a plain three.
 // `boost` ramps the burst with cascade depth, so a long chain visibly throws
 // more than a plain three.
-function particles(r, c, kind, boost) {
+function particles(r, c, kind, boost, away) {
   const col = kind == null ? '#ffe9a8' : KINDS[kind].from;
   const b = boost || 0;
   fxSparks(r, c, col, Math.min(22, 10 + b * 4), 1 + b * .25);
-  fxShards(r, c, col, Math.min(9, 5 + b));
+  fxShards(r, c, col, Math.min(9, 5 + b), away);
   fxFlash(r, c, 1.6 + b * .2, 'rgba(255,235,170,');
 }
 // Particles that fly INWARD — the visual grammar of something being created
@@ -3303,7 +3344,9 @@ async function clearCells(keys, cascade, from, zapFrom, suckTo, chain) {
     } : () => {
       el.classList.remove('charge');
       if (zapFrom) { zap(zapFrom[0], zapFrom[1], r, c); sfx('zap'); }
-      particles(r, c, kind, cascade - 1); ring(r, c);
+      // Thrown away from wherever this clear started — the tile you moved, or
+      // the booster that went off.
+      particles(r, c, kind, cascade - 1, zapFrom || from); ring(r, c);
       el.classList.add('pop');
     };
     if (delay) { setTimeout(fire, delay); } else fire();

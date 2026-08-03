@@ -15,20 +15,25 @@ first three sections.
 
 ## 1. The disappearing animation — the biggest single gap
 
+> **1.1–1.4 done.** The tile comes apart now: the shell bursts outward while the
+> fruit squashes and goes, both with a wind-up frame and a blown-out flash at the
+> moment of destruction, and debris is thrown away from wherever the clear
+> started. 1.5 remains.
+
 Right now a matched fruit does one thing: the whole tile scales up, rotates and
 shrinks to nothing, with canvas sparks thrown behind it. It reads as *deleted*.
 A Candy Crush candy reads as *destroyed* — it comes apart.
 
-- [ ] **1.1 Anticipation.** The fruit should squash down a frame before it goes.
+- [x] **1.1 Anticipation.** *(done)* The fruit should squash down a frame before it goes.
       A burst with no wind-up has no weight. (We flash it white, which is a
       colour change, not a movement.)
-- [ ] **1.2 Break the tile into its parts.** The backing and the fruit should
+- [x] **1.2 Break the tile into its parts.** *(done)* The backing and the fruit should
       separate — the candy square shatters outward while the fruit itself pops.
       One object scaling to zero is the giveaway that this is a div, not a sweet.
-- [ ] **1.3 Debris with direction.** Shards currently spray symmetrically. They
+- [x] **1.3 Debris with direction.** *(done)* Shards currently spray symmetrically. They
       should inherit the direction of the match — a horizontal run throws
       sideways, a blast throws away from its centre.
-- [ ] **1.4 A real flash frame.** One or two frames of a bright silhouette at the
+- [x] **1.4 A real flash frame.** *(done)* One or two frames of a bright silhouette at the
       moment of destruction, which is what sells impact in every action game.
 - [ ] **1.5 Stagger within a match.** Three fruit in a run currently pop on a
       distance-based delay from the move. They should pop *along* the run, so you
