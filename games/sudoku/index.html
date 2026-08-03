@@ -294,6 +294,40 @@
   html.generating #tray { opacity:.45; }
   html.generating #hint-btn { opacity:.4; pointer-events:none; }
 
+  /* ---------- pencil marks + undo (Legend only) ---------- */
+  .cell .notes {
+    position:absolute; inset:9%;
+    display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,1fr);
+    pointer-events:none;
+  }
+  .cell .notes span {
+    display:flex; align-items:center; justify-content:center;
+    font-size:.40em; font-weight:800; color:#6f62b8; line-height:1;
+  }
+  /* a hint draws its own candidate marks; two sets at once is unreadable */
+  html.hinting .cell .notes { display:none; }
+
+  #tools { display:none; gap:10px; }
+  html.has-tools #tools { display:flex; }
+  .tool-btn {
+    border:none; cursor:pointer; font-family:inherit; font-weight:800;
+    border-radius:999px; padding:9px 16px;
+    font-size:clamp(13px,3.4vw,16px);
+    background:#ffffffe6; color:#5b3fd4;
+    box-shadow:0 4px 0 rgba(0,0,0,.15), inset 0 2px 0 rgba(255,255,255,.9);
+    display:flex; align-items:center; gap:6px; white-space:nowrap;
+  }
+  .tool-btn:active { transform:translateY(3px); box-shadow:0 1px 0 rgba(0,0,0,.15); }
+  .tool-btn:disabled { opacity:.4; box-shadow:none; transform:none; cursor:default; }
+  /* the notes toggle carries its state in words — a highlighted icon alone is
+     the classic "is it on?" trap when the mode changes what a tap does */
+  #notes-state {
+    font-size:.8em; border-radius:999px; padding:2px 7px;
+    background:#e8e3ff; color:#5b3fd4;
+  }
+  .tool-btn.on { background:linear-gradient(#ffe063,#ffce2c); color:#6b4b00; }
+  .tool-btn.on #notes-state { background:#6b4b00; color:#ffe89a; }
+
   #pwrap {
     height:16px; border-radius:999px;
     background:#ffffff66;
@@ -507,9 +541,13 @@
     grid-template-columns:auto auto;
     /* The board spans all three rows and so keeps the full height; the empty
        "top" row is the space the header floats over, on the panel side only. */
-    grid-template-rows:var(--appbar-h) 1fr auto;
+    /* the row is the header's height WITHOUT its safe-area part — the grid's
+       own padding-top already pays for that, and counting it twice cost the
+       board ~50px whenever there was a top inset */
+    grid-template-rows:calc(var(--chrome) + var(--cgap) * 2) auto 1fr auto;
     grid-template-areas:
       "board top"
+      "board tools"
       "board tray"
       "board prog";
     align-content:center; justify-content:center;
@@ -520,6 +558,7 @@
   html.land .appbar { left:var(--panel-x, 0px); }
   html.land #board-area { display:contents; }
   html.land #board { grid-area:board; align-self:center; }
+  html.land #tools { grid-area:tools; justify-content:center; }
   html.land #tray { grid-area:tray; align-self:center; }
   /* renderBoard() pins the bar to the board's width; beside the board it
      should track the panel instead */
@@ -724,6 +763,10 @@
     <div id="pwrap"><div id="pfill"><span id="pstar"></span></div></div>
     <div id="gen-note">Making a puzzle…</div>
   </div>
+  <div id="tools">
+    <button class="tool-btn" id="undo-btn" aria-label="Undo">↶ Undo</button>
+    <button class="tool-btn" id="notes-btn" aria-label="Pencil marks">✏️ Notes <span id="notes-state">OFF</span></button>
+  </div>
   <div id="tray"></div>
 </div>
 
@@ -833,6 +876,7 @@ const LEVELS = {
     // is set by the solver's technique set rather than by a target. tierMin 5
     // means every Legend needs a swordfish, an XYZ/W-wing or a colouring chain.
     { name:'Legend',   emoji:'👑', desc:'9×9 · grown-up hard', n:9, boxW:3, boxH:3, blanks:59,
+      notes:true,                       // pencil marks + undo, Legend only
       tune:{ clues:22, tierMin:5, tierMax:6, climb:true, floor:1600,
              minStalls:4, minHard:4, maxTail:26,
              slice:4000, budget:25000, seeds:5, ruin:12 } },
@@ -1599,6 +1643,35 @@ let eraserOn=false;                      // eraser tool selected
 let solvedFlag=false;
 let streak=0;                            // consecutive correct placements
 
+/* ---- pencil marks + undo (Legend only) ------------------------------------
+   Notes are a bitmask per cell, drawn as a fixed 3x3 of small digits so a 4 is
+   always in the same corner — that positional constancy is what makes a marked
+   grid scannable, and it is what every serious sudoku app does.
+
+   Undo records whole edits, not single cells: placing a digit also wipes that
+   cell's own marks and strikes the digit from every peer's marks, and undoing
+   has to put all of that back exactly as it was. */
+let notes=[];                            // candidate bitmask per cell
+let notesMode=false;                     // tray taps write marks, not answers
+let undoStack=[];
+const UNDO_MAX=200;
+function notesOn(){ return !!(L && L.notes); }
+function blankNotes(){ return new Array(L.n*L.n).fill(0); }
+// snapshot the cells an edit is about to touch, then keep whatever changed
+function editStart(){ return { cells:new Map() }; }
+function editTouch(ed,i){ if(!ed.cells.has(i)) ed.cells.set(i,{b0:board[i], n0:notes[i]}); }
+function editCommit(ed){
+  const ch=[];
+  for(const [i,before] of ed.cells){
+    if(before.b0!==board[i] || before.n0!==notes[i])
+      ch.push({i, b0:before.b0, n0:before.n0, b1:board[i], n1:notes[i]});
+  }
+  if(!ch.length) return;
+  undoStack.push(ch);
+  if(undoStack.length>UNDO_MAX) undoStack.shift();
+  updateTools();
+}
+
 const $=id=>document.getElementById(id);
 const boardEl=$('board'), trayEl=$('tray');
 
@@ -1687,8 +1760,9 @@ function layoutSizes(){
   const stackTs = Math.min(Math.floor((stackW-16-tgap*(stackCols-1))/stackCols), 84);
   const trayH = stackRows*stackTs + (stackRows-1)*tgap + 16;   // +16 = tray padding
   const g1 = Math.min(18, vh*0.025), g2 = Math.min(14, vh*0.02);
+  const toolsH = notesOn() ? 44 + g1 : 0;                       // the Legend tool row
   const stackAvail = vh - barH - Math.max(10, ins.b)
-                   - trayH - 16 - (g1 + g2);                   // 16 = progress bar
+                   - trayH - toolsH - 16 - (g1 + g2);          // 16 = progress bar
   const stackCell=cellFor(Math.min(stackW, stackAvail, 620));
   // side-by-side: board takes the height, the panel takes a slice of the width
   const sideCell=cellFor(Math.min(sideH, sideW-PANEL_MIN, 620));
@@ -1703,7 +1777,8 @@ function layoutSizes(){
     // it and the grid overflows, shoving the board off the left edge.
     const colGap=Math.min(26,Math.max(10,vw*0.022));
     const restW=sideW-boardWFor(cell)-(32+colGap);
-    const restH=vh-barH-Math.max(8,ins.t)-Math.max(8,ins.b)-PANEL_CHROME;
+    const restH=vh-(barH-ins.t)-Math.max(8,ins.t)-Math.max(8,ins.b)-PANEL_CHROME
+                -(notesOn()?52:0);                              // the Legend tool row
     // Pick the keypad shape. Big buttons matter most (small fingers), but a
     // shape is also better for spanning the panel instead of hugging one edge,
     // worse for a ragged last row, and worse for standing taller than it is
@@ -1768,6 +1843,7 @@ function renderBoard(){
     d.addEventListener('click',()=>onCellTap(i,d));
     boardEl.appendChild(d);
   }
+  paintAllNotes();
   const boardW=cell*n+sx*bgap+(n+sx-1)*gap+16;
   $('pwrap').style.width=boardW+'px';
   // Landscape: the header floats over the panel column, not the board, so the
@@ -1804,6 +1880,72 @@ function renderTray(){
   er.addEventListener('click',e=>{ e.preventDefault(); onEraserTap(); });
   trayEl.appendChild(er);
   updateTray();
+}
+
+/* ---- drawing pencil marks --------------------------------------------- */
+// A cell shows marks only while it is empty; placing an answer hides them
+// without destroying them, so undo can bring them straight back.
+function paintNotes(i){
+  const el=boardEl.children[i]; if(!el) return;
+  const old=el.querySelector('.notes'); if(old) old.remove();
+  if(!notesOn() || board[i]!==0 || !notes[i]) return;
+  let html='<div class="notes">';
+  for(let v=1;v<=L.n;v++) html+='<span>'+((notes[i]>>(v-1))&1 ? symbols[v-1] : '')+'</span>';
+  el.insertAdjacentHTML('beforeend', html+'</div>');
+}
+function paintAllNotes(){ for(let i=0;i<board.length;i++) paintNotes(i); }
+function toggleNote(i,v){
+  if(board[i]!==0 || puzzle[i]!==0) return false;
+  const ed=editStart(); editTouch(ed,i);
+  notes[i]^=1<<(v-1);
+  editCommit(ed);
+  paintNotes(i);
+  sfx('tap');
+  return true;
+}
+// Placing an answer clears the cell's own marks and strikes that digit out of
+// every peer — the bookkeeping a player would otherwise do by hand.
+function sweepNotes(ed,i,v){
+  if(!notesOn()) return;
+  editTouch(ed,i); notes[i]=0;
+  const bit=1<<(v-1);
+  for(const [,cells] of unitsOf(i)) for(const q of cells){
+    if(q===i || !(notes[q]&bit)) continue;
+    editTouch(ed,q); notes[q]&=~bit; paintNotes(q);
+  }
+}
+function updateTools(){
+  const on=notesOn();
+  document.documentElement.classList.toggle('has-tools', on);
+  if(!on) return;
+  $('undo-btn').disabled = undoStack.length===0;
+  $('notes-btn').classList.toggle('on', notesMode);
+  $('notes-state').textContent = notesMode ? 'ON' : 'OFF';
+}
+function setNotesMode(on){
+  notesMode=on;
+  if(on){ eraserOn=false; }
+  updateTools(); updateTray();
+}
+function undo(){
+  if(!undoStack.length) return;
+  clearHintFx();
+  const ch=undoStack.pop();
+  for(const c of ch){ board[c.i]=c.b0; notes[c.i]=c.n0; }
+  // a placement may have been the winning one; stepping back un-wins it
+  solvedFlag=false;
+  selectCell(-1);
+  for(const c of ch){
+    const el=boardEl.children[c.i];
+    const sym=el.querySelector('.sym');
+    sym.textContent = board[c.i] ? symbols[board[c.i]-1] : '';
+    sym.style.color = board[c.i] ? symColor(board[c.i]) : '';
+    el.classList.toggle('hole', board[c.i]===0);
+    paintNotes(c.i);
+  }
+  updateConflicts(); updateTray(); updateProgress(); updateTools();
+  saveGame();
+  sfx('poof');
 }
 
 function updateTray(){
@@ -1978,7 +2120,11 @@ function updateConflicts(){
 function tryPlace(i,v){
   clearHintFx();                  // the player is acting — hint served its purpose
   const el=boardEl.children[i];
+  const ed=editStart(); editTouch(ed,i);
   board[i]=v;
+  sweepNotes(ed,i,v);
+  paintNotes(i);
+  editCommit(ed);
   const s=el.querySelector('.sym');
   s.textContent=symbols[v-1]; s.style.color=symColor(v);
   el.classList.remove('hole');
@@ -2013,7 +2159,10 @@ function tryPlace(i,v){
 // Remove a symbol the player placed (eraser tool, or tapping a red cell).
 function eraseCell(i){
   clearHintFx();
-  board[i]=0;
+  const ed=editStart(); editTouch(ed,i);
+  board[i]=0; notes[i]=0;
+  paintNotes(i);
+  editCommit(ed);
   const el=boardEl.children[i];
   el.querySelector('.sym').textContent='';
   el.classList.add('hole');
@@ -2041,9 +2190,14 @@ function flashMatches(v){
 function onTrayTap(v){
   if(isGenerating()) return;
   eraserOn=false;
+  if(notesMode && selectedCell>=0){   // slot-first: mark the chosen cell
+    toggleNote(selectedCell,v);
+    return;
+  }
   const counts=new Array(L.n+1).fill(0);
   board.forEach(x=>{ if(x) counts[x]++; });
-  if(counts[v]>=L.n){ updateTray(); return; }
+  // a digit that is all used up can still be pencilled in while checking
+  if(counts[v]>=L.n && !notesMode){ updateTray(); return; }
   if(selectedCell>=0){            // slot-first mode: fill the chosen cell
     tryPlace(selectedCell,v);
     return;
@@ -2056,6 +2210,9 @@ function onTrayTap(v){
 function onEraserTap(){
   eraserOn=!eraserOn;
   selectedVal=0;
+  // the eraser and pencil marks both change what a tap does, so only one of
+  // them may be armed at a time
+  if(eraserOn && notesMode){ notesMode=false; updateTools(); }
   selectCell(-1);
   sfx('tap');
   updateTray();
@@ -2082,8 +2239,8 @@ function onCellTap(i,el){
     sfx('tap');
     return;
   }
-  if(selectedVal){                // stamp mode: place the chosen symbol
-    tryPlace(i,selectedVal);
+  if(selectedVal){                // stamp mode: place (or pencil in) the symbol
+    if(notesMode) toggleNote(i,selectedVal); else tryPlace(i,selectedVal);
     return;
   }
   // slot-first mode: highlight this cell, next tray tap fills it
@@ -2114,6 +2271,7 @@ function clearHintFx(){
   hintTimers.forEach(clearTimeout);
   hintTimers=[];
   hintStory=null; hintStep=0; hintPlaced=false; hintCounter=false;
+  document.documentElement.classList.remove('hinting');
   $('hint-bubble').classList.remove('show');
   $('hint-bubble').style.minHeight='';
   const svg=$('hint-arrows'); if(svg){ svg.style.display='none'; svg.innerHTML=''; }
@@ -2519,6 +2677,7 @@ function renderHintStep(){
 function showStory(steps){
   hintStory=steps.filter(Boolean);
   if(!hintStory.length){ hintStory=null; return; }
+  document.documentElement.classList.add('hinting');
   hintStep=0; hintPlaced=false;
   renderHintStep();
 }
@@ -2930,7 +3089,7 @@ function onHint(){
 function saveGame(){
   if(solvedFlag) return;
   try{ localStorage.setItem('sudoku-save', JSON.stringify(
-    { styleKey, levelIdx, symbols, puzzle, solution, board })); }catch(e){}
+    { styleKey, levelIdx, symbols, puzzle, solution, board, notes })); }catch(e){}
 }
 function loadSave(){ try{ return JSON.parse(localStorage.getItem('sudoku-save')||'null'); }catch(e){ return null; } }
 function clearSave(){ localStorage.removeItem('sudoku-save'); }
@@ -2964,7 +3123,7 @@ function showGenerating(){
   document.documentElement.classList.add('generating');
   pickSymbols();
   puzzle=new Array(L.n*L.n).fill(0);
-  solution=puzzle.slice(); board=puzzle.slice();
+  solution=puzzle.slice(); board=puzzle.slice(); notes=blankNotes();
   renderBoard(); renderTray();
 }
 function endGenerating(){ document.documentElement.classList.remove('generating'); }
@@ -2994,7 +3153,9 @@ async function enterLevel(key, idx, forceFresh){
     endGenerating();
     symbols=sv.symbols.slice(); puzzle=sv.puzzle.slice();
     solution=sv.solution.slice(); board=sv.board.slice();
-    renderBoard(); renderTray();
+    notes=(Array.isArray(sv.notes)&&sv.notes.length===board.length) ? sv.notes.slice() : blankNotes();
+    undoStack=[]; notesMode=false;
+    renderBoard(); renderTray(); updateTools();
     // Only ask when the saved game has real progress worth keeping or
     // discarding (a level just opened but untouched has nothing to resume).
     const hasProgress = sv.board.some((v,i)=> sv.puzzle[i]===0 && v!==0);
@@ -3004,7 +3165,8 @@ async function enterLevel(key, idx, forceFresh){
     await makeFresh();
     if(token!==genToken) return;        // the player moved on; drop this board
     endGenerating();
-    renderBoard(); renderTray();
+    notes=blankNotes(); undoStack=[]; notesMode=false;
+    renderBoard(); renderTray(); updateTools();
   }
   // Deliberately no saveGame() here: opening a level must not overwrite the
   // one save slot. Placing or erasing a symbol saves, so merely browsing the
@@ -3021,7 +3183,8 @@ async function restartCurrent(){
   await makeFresh();
   if(token!==genToken) return;
   endGenerating();
-  renderBoard(); renderTray();
+  notes=blankNotes(); undoStack=[]; notesMode=false;
+  renderBoard(); renderTray(); updateTools();
   saveGame();
 }
 
@@ -3154,6 +3317,8 @@ $('style-animal').addEventListener('click',()=>setStyle('animal'));
 $('style-classic').addEventListener('click',()=>setStyle('classic'));
 // One back button for the whole app: it steps up a level, so from anywhere
 // you reach the game picker — mid-puzzle that's board -> levels -> all games.
+$('undo-btn').addEventListener('click',()=>{ if(!isGenerating()) undo(); });
+$('notes-btn').addEventListener('click',()=>{ if(!isGenerating()){ sfx('tap'); setNotesMode(!notesMode); } });
 $('chrome-back').addEventListener('click',()=>{
   sfx('tap');
   if($('game').classList.contains('hidden')) location.href='../../';
