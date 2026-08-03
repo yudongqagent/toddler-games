@@ -650,48 +650,53 @@
 
 
 
-  /* ---- bubblegum. It is the tile's own BACKING, not a film laid over the top:
-     the fruit sits on it exactly as it sits on its normal candy square, so
-     nothing is ever obscured and there is no "sticker" reading at all. Coating
-     the fruit was the wrong instinct — what is stuck is the SQUARE.
+  /* ---- bubblegum. The gum IS the tile's backing, and that backing is exactly
+     the same box as every other tile's — same inset, same radius, same bevel
+     language. That matters twice: the fruit sits at its normal size against it
+     rather than being dwarfed by an oversized square, and a piece of gum is the
+     same SHAPE whether or not it has neighbours.
 
-     The backing bleeds to the full cell, cancelling the tile's padding, so two
-     neighbouring pieces of gum touch edge to edge. Squaring off the touching
-     corners then fuses them into one blob, which is the whole point: you can see
-     at a glance that a patch of gum is one growing thing rather than a handful
-     of separate stickers. ---- */
+     Bleeding the backing to the full cell so neighbours could touch was the
+     wrong trade. It shrank the fruit against a bigger square and forced the
+     corners to square off when joined, so gum changed shape depending on what
+     happened to be beside it. The join is drawn as a NECK across the gap
+     instead, which leaves the tiles themselves completely alone. ---- */
   .tile.jelly .shape {
-    /* A hair past the padding, so neighbouring pieces overlap by a fraction of a
-       pixel. Meeting exactly edge-to-edge left a faint seam at fractional device
-       ratios, which is precisely the thing this is meant to hide. */
-    inset:calc(var(--cell) * -.065);
-    background:radial-gradient(125% 125% at 34% 24%, #ffc9ec, #ff86d4 46%, #e0338f) !important;
-    box-shadow:inset 0 calc(var(--cell)*.05) 0 rgba(255,255,255,.5),
-               inset 0 calc(var(--cell)*-.06) calc(var(--cell)*.06) rgba(150,10,90,.3);
-    border-radius:32%;
-    z-index:0;
+    background:linear-gradient(176deg, #ffb3e2 0%, #ff7ecb 42%, #e64bab 78%, #c8318f 100%) !important;
+    box-shadow:
+      inset 0 calc(var(--cell)*.075) 0 rgba(255,255,255,.5),
+      inset 0 calc(var(--cell)*-.09) 0 rgba(150,15,95,.34),
+      inset 0 0 0 calc(var(--cell)*.022) rgba(255,220,242,.6),
+      0 calc(var(--cell)*.045) calc(var(--cell)*.08) rgba(140,30,100,.3);
   }
-  /* no candy gloss — gum is matte-soft, not a boiled sweet */
-  .tile.jelly .shape::after { display:none; }
-  /* Square off every edge that meets more gum, so the seam disappears. */
-  .tile.jelly.j-u .shape { border-top-left-radius:0; border-top-right-radius:0; }
-  .tile.jelly.j-d .shape { border-bottom-left-radius:0; border-bottom-right-radius:0; }
-  .tile.jelly.j-l .shape { border-top-left-radius:0; border-bottom-left-radius:0; }
-  .tile.jelly.j-r .shape { border-top-right-radius:0; border-bottom-right-radius:0; }
-  /* A lone blob breathes; a joined one stays put, because a whole patch pulsing
-     in step reads as a rendering fault rather than as something alive. */
-  .tile.jelly:not(.j-u):not(.j-d):not(.j-l):not(.j-r) .shape {
-    animation:gumBreathe 1.9s ease-in-out infinite;
+  /* Softer than a boiled sweet: gum has a wide diffuse sheen, not a hard glint. */
+  .tile.jelly .shape::after {
+    inset:12% 16% auto 16% !important; height:26% !important;
+    border-radius:50% !important;
+    background:radial-gradient(closest-side ellipse, rgba(255,255,255,.62), transparent 76%) !important;
+    opacity:1 !important;
   }
-  @keyframes gumBreathe {
-    0%,100% { border-radius:32%; }
-    50%     { border-radius:44% 38% 42% 36% / 38% 44% 36% 42%; }
+
+  /* The necks. Each tile draws only its RIGHT and DOWN join, so every connection
+     is drawn exactly once, by the upper-left of the pair — two pseudo-elements
+     between them cover all four directions. They reach across the whole gap
+     (.12 cell of padding) with a hair to spare. */
+  .tile.jelly .crown { display:block; }
+  .tile.jelly.j-r .crown::before,
+  .tile.jelly.j-d .crown::after {
+    content:''; position:absolute;
+    background:linear-gradient(176deg, #ff8ed3, #ee5cb6 70%, #d93ea0);
+    box-shadow:inset 0 calc(var(--cell)*.03) 0 rgba(255,255,255,.4);
   }
-  /* one soft highlight, sitting on the gum rather than over the fruit */
-  .tile.jelly .shape::before {
-    content:''; position:absolute; left:16%; top:11%; width:30%; height:22%;
-    border-radius:50%;
-    background:radial-gradient(closest-side circle, rgba(255,255,255,.7), transparent 72%);
+  .tile.jelly.j-r .crown::before {
+    right:calc(var(--cell) * -.13); width:calc(var(--cell) * .14);
+    top:27%; bottom:27%;
+    border-radius:calc(var(--cell) * .05);
+  }
+  .tile.jelly.j-d .crown::after {
+    bottom:calc(var(--cell) * -.13); height:calc(var(--cell) * .14);
+    left:27%; right:27%;
+    border-radius:calc(var(--cell) * .05);
   }
 
   /* ---- the machine. Built as a HOUSING with a lit window and a chute, which

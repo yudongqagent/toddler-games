@@ -342,13 +342,18 @@ obscured and there is no "sticker" reading at all. Coating the fruit was the
 wrong instinct — what is stuck is the **square**. It is not something a machine
 can make, because it grows on fruit already standing there.
 
-**Neighbouring gum fuses into one blob.** The backing bleeds a hair past the
-tile's padding so two adjacent pieces overlap, and every edge that meets more gum
-is squared off, which erases the seam. That is the whole point: a patch has to
-read as one growing thing rather than a handful of separate stickers, or
-"it spreads" is something you're told rather than something you can see. A lone
-blob breathes gently; a joined one holds still, because a whole patch pulsing in
-step reads as a rendering fault rather than as something alive.
+The gum's backing is **exactly the same box as every other tile's** — same
+inset, same radius, same bevel language. That matters twice over: the fruit sits
+at its normal size against it rather than being dwarfed by an oversized square,
+and a piece of gum is the same *shape* whether or not it has neighbours.
+
+**Neighbouring gum joins with a neck** drawn across the gap. Bleeding the backing
+out to the full cell so that neighbours could touch was the wrong trade: it
+shrank the fruit against a bigger square, and it forced the corners to square off
+when joined, so gum changed shape depending on what happened to be beside it. A
+neck leaves the tiles completely alone. Each tile draws only its *right* and
+*down* join, so every connection is drawn exactly once by the upper-left of the
+pair, and two pseudo-elements between them cover all four directions.
 
 The goal is **"clear the board of jelly"**, not a quota. A fixed number is
 meaningless against something that makes more of itself: the count is how many it
