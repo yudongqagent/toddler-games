@@ -50,9 +50,17 @@ We lean on hue and a glyph, which are the two weakest cues.
 - [ ] **2.1 A distinct silhouette per fruit.** Six shapes, one per kind. This is
       the single biggest visual upgrade available and it also fixes colour-blind
       accessibility, which hue-only never can.
-- [ ] **2.2 Idle life.** Candy Crush candies blink and shift while you think. Our
-      board is frozen except the duckling and the gum. A slow, staggered idle
-      keeps it from looking like a spreadsheet.
+- [x] **2.2 Idle life.** ~~Candy Crush candies blink and shift while you think.
+      Our board is frozen except the duckling and the gum.~~
+      **TRIED AND REVERTED — do not redo this.** A staggered idle bob was built,
+      shipped and pulled the same day. It is not a tuning problem, it is the
+      wrong idea for this game: *motion competes with visual search*. While a
+      player is scanning the board for a move, anything that moves pulls the eye
+      away from the thing they are hunting for, and the player here is three
+      years old and already working hard to find a match. Delight and search are
+      in direct conflict on a match-3 board and search has to win. If the board
+      ever needs life, it should come at moments when nobody is searching — the
+      level intro, or after a win — not underneath the core task.
 - [ ] **2.3 Selection should lift.** Tapping wiggles the tile in place. A
       selected piece should lift toward the player with a shadow underneath it.
 - [ ] **2.4 Drag should follow the finger.** Currently a swipe past a threshold
