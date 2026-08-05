@@ -498,6 +498,31 @@
      STUCK never also changes shape — one signal per idea. */
   .tile.blk .shape, .tile.ice .shape, .tile.jelly .shape { border-radius:30% !important; }
 
+  /* ---- idle life ----
+     The board was frozen solid while you thought about a move — 0 of 64 tiles
+     animating. A shelf of sweets should breathe a little.
+
+     Two things keep this from becoming noise. It is mostly NOTHING: a long cycle
+     that sits still for nine tenths of it and then gives one small bob, so any
+     individual fruit is at rest almost always. And every tile is offset by a
+     random negative delay, so they are scattered through the cycle rather than
+     moving in step — a board pulsing in unison reads as a rendering fault, which
+     is the same lesson the bubblegum taught.
+
+     It rides .shape rather than .inner because .inner already carries selection,
+     nudge, swap and pop. Declared here, ahead of .tile.pop .shape, so a tile
+     that is actually bursting overrides it at equal specificity. */
+  .tile.idle .shape {
+    animation:idleBob 3.6s ease-in-out infinite;
+    animation-delay:var(--idle, 0s);
+  }
+  @keyframes idleBob {
+    0%, 86%, 100% { transform:translateY(0) scale(1); }
+    91%           { transform:translateY(-3.5%) scale(1.025); }
+    96%           { transform:translateY(0.5%) scale(.995); }
+  }
+  @media (prefers-reduced-motion: reduce) { .tile.idle .shape { animation:none; } }
+
   .tile .shape {
     position:absolute; inset:0;
     border-radius:30%;
@@ -1968,6 +1993,11 @@ function makeTile(k, r, c, sp = SP_NONE) {
   const crown = document.createElement('div'); crown.className = 'crown';
   inner.append(shape, face, crown);
   el.appendChild(inner);
+  // A random negative delay drops each tile at a different point in the idle
+  // cycle. Set once at birth rather than derived from position, because
+  // position changes every time gravity runs and restarting the animation
+  // mid-flight would make the board twitch.
+  el.style.setProperty('--idle', (-Math.random() * 3.6).toFixed(2) + 's');
   const t = { k, sp, r, c, el, shape, face, crown };
   paint(t);
   // Append before placing: place(…, true) forces a reflow to pin the starting
@@ -1983,6 +2013,9 @@ function paint(t) {
                       'k0', 'k1', 'k2', 'k3', 'k4', 'k5');
   // The fruit's own outline. Rainbows (k < 0) and blockers have no kind shape.
   if (t.k >= 0 && t.k < KINDS.length) el.classList.add('k' + t.k);
+  // Only a plain, free fruit breathes. Anything stuck, blocked or charged has
+  // something more important to say with its movement.
+  el.classList.toggle('idle', !t.block && !t.ice && !t.jelly && t.sp === SP_NONE && t.k >= 0);
   t.crown.textContent = '';
   if (t.block) {
     t.shape.className = 'shape';
