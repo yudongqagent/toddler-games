@@ -1105,16 +1105,39 @@
   /* The end-of-level tally. A toast was the wrong container for this — it is
      small, it sits at the edge, and it vanishes before a child has read it. This
      is the one moment in the level worth stopping for, so it stops. */
-  #tally .panel { max-width:min(88vw, 380px); }
-  #tally h2 { margin-bottom:10px; }
+  #tally .panel { max-width:min(88vw, 390px); }
+  /* Drawn rather than typed. A pasted emoji renders differently on every device,
+     sits on its own baseline, and is the one thing on a designed panel that
+     always looks pasted in. */
+  #tally h2 { margin-bottom:4px; }
+  #tally-rule {
+    height:4px; border-radius:2px; margin:0 auto 12px; width:64%;
+    background:linear-gradient(90deg, transparent, #ffc65c 18%, #ff8a5c 50%, #ffc65c 82%, transparent);
+  }
   .tally-row {
-    display:flex; align-items:center; gap:10px;
-    padding:6px 4px;
+    display:flex; align-items:center; gap:11px;
+    padding:8px 6px;
     font-size:clamp(14px,3.9vw,17px); font-weight:800; color:#5a3a12; text-align:left;
     opacity:0; transform:translateX(-10px);
     transition:opacity .22s ease, transform .22s cubic-bezier(.3,1.4,.5,1);
   }
+  .tally-row + .tally-row { border-top:2px solid rgba(160,110,40,.1); }
   .tally-row.in { opacity:1; transform:none; }
+  .tally-row .tick {
+    flex:none; position:relative;
+    width:clamp(22px,5.6vw,26px); height:clamp(22px,5.6vw,26px);
+    border-radius:50%;
+    background:linear-gradient(160deg,#8ce89a,#27a24b);
+    box-shadow:0 2px 0 rgba(18,86,38,.4), inset 0 1px 0 rgba(255,255,255,.55);
+    transform:scale(0); transition:transform .3s cubic-bezier(.3,1.7,.5,1) .12s;
+  }
+  .tally-row.in .tick { transform:scale(1); }
+  .tally-row .tick::after {
+    content:''; position:absolute; left:35%; top:20%;
+    width:24%; height:45%;
+    border:solid #fff; border-width:0 3px 3px 0; border-radius:1px;
+    transform:rotate(42deg);
+  }
   .tally-row .mini { width:clamp(26px,7vw,32px); height:clamp(26px,7vw,32px); flex:none; position:relative; }
   .tally-row .mini .shape { position:absolute; inset:0; }
   .tally-row .mini .face { position:absolute; inset:0; display:grid; place-items:center;
@@ -1272,7 +1295,8 @@
 
 <div class="overlay" id="tally">
   <div class="panel">
-    <h2 id="tally-title">🎉 All goals done!</h2>
+    <h2 id="tally-title">All goals done!</h2>
+    <div id="tally-rule"></div>
     <div id="tally-rows"></div>
     <p id="tally-bonus"></p>
   </div>
@@ -4605,7 +4629,7 @@ async function finale(spare) {
   rows.innerHTML = L.goals.map(g =>
     '<div class="tally-row">' + goalChip(g)
     + '<span class="lbl">' + goalTitle(g) + '</span>'
-    + '<span class="tick">✅</span></div>').join('');
+    + '<span class="tick"></span></div>').join('');
   $('tally-bonus').textContent = '';
   $('tally-bonus').classList.remove('in');
   $('tally').classList.add('show');
@@ -4618,7 +4642,7 @@ async function finale(spare) {
   }
   const n = Math.min(6, spare);
   if (n > 0) {
-    $('tally-bonus').textContent = '✨ ' + spare + (spare === 1 ? ' move left — bonus!' : ' moves left — bonus!');
+    $('tally-bonus').textContent = spare + (spare === 1 ? ' move left — bonus!' : ' moves left — bonus!');
     $('tally-bonus').classList.add('in');
     sfx('make');
     await sleep(REDUCED ? 20 : 900);
@@ -4628,40 +4652,65 @@ async function finale(spare) {
   $('tally').classList.remove('show');
   await sleep(REDUCED ? 10 : 260);
   if (n <= 0) return;
-  // The counter drains as the blasts fire, which is the whole explanation: you
-  // WATCH your moves being spent. It is capped at six blasts, so each one takes
-  // a share of what is left rather than exactly one — otherwise fifteen spare
-  // moves would fire six times and leave nine on the clock unexplained.
+  /* Two phases, because a move that converts and detonates in the same breath is
+     not a conversion you can see. First every spare move flies out of the
+     counter and BECOMES a booster sitting on a random tile, so the board fills
+     up with what you earned and you get a moment to look at it. Only then do
+     they all go off.
+
+     The blasts run on the real tiles but deliberately do not re-enter resolve():
+     the level is over, the outro is about to sweep the board, and going back
+     through the match pipeline after `over` is set is how a board ends up
+     half-settled behind a win card. */
+  const placed = [];
   for (let i = 0; i < n; i++) {
-    const take = Math.ceil(movesLeft / (n - i));
-    const live = grid.flat().filter(t => t && !t.block);
-    if (!live.length) break;
-    const at = live[rnd(live.length)], r = at.r, c = at.c;
-    // The counter drops as the move leaves, and the blast waits for it to land.
-    movesLeft = Math.max(0, movesLeft - take);
+    const free = grid.flat().filter(t => t && !t.block && t.sp === SP_NONE);
+    if (!free.length) break;
+    const at = free[rnd(free.length)];
+    // The counter drops as the move leaves, so you watch it being spent.
+    movesLeft = Math.max(0, movesLeft - Math.ceil(movesLeft / (n - i)));
     paintHud();
     sfx('swap');
-    await flyMove(r, c);
-    bombBlast(r, c, 3);
+    await flyMove(at.r, at.c);
+    at.sp = Math.random() < .5 ? SP_STAR : SP_BOMB;
+    at.radius = 1; at.fired = false; at.twice = false;
+    paint(at);
+    at.el.classList.remove('born'); void at.el.offsetWidth; at.el.classList.add('born');
+    setTimeout(() => at.el.classList.remove('born'), 260);
+    converge(at.r, at.c, at.k);
+    sfx('make'); buzz(18);
+    placed.push(at);
+    await sleep(REDUCED ? 10 : 130);
+  }
+  movesLeft = 0;
+  paintHud();
+  // A beat to take in the boosters sitting there before any of them fire.
+  await sleep(REDUCED ? 20 : 480);
+
+  for (let i = 0; i < placed.length; i++) {
+    const t = placed[i];
+    if (!grid[t.r] || grid[t.r][t.c] !== t) continue;
+    const r = t.r, c = t.c;
+    if (t.sp === SP_STAR) starBeams(r, c); else bombBlast(r, c, 3);
     ring(r, c, Math.min(i, 4));
     sfx('blast', Math.min(i, 4));
-    buzz(22);
-    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
-      const rr = r + dr, cc = c + dc;
-      const x = cellOk(rr, cc) && grid[rr][cc];
-      if (!x || x.block) continue;
+    buzz(24);
+    const hit = new Set();
+    blastCells(r, c, t.sp, t.k, hit, 1);
+    hit.forEach(key => {
+      const rr = Math.floor(key / C), cc = key % C;
+      const x = grid[rr][cc];
+      if (!x || x.block) return;
       particles(rr, cc, x.k >= 0 ? x.k : null, 2, [r, c]);
       x.el.classList.add('pop');
       const el = x.el;
       setTimeout(() => el.remove(), 260);
       grid[rr][cc] = null;
       score += 60;
-    }
+    });
     paintHud();
-    await sleep(REDUCED ? 15 : 120);
+    await sleep(REDUCED ? 15 : 150);
   }
-  movesLeft = 0;
-  paintHud();
   await sleep(REDUCED ? 20 : 260);
 }
 
