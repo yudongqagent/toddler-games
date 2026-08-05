@@ -4531,10 +4531,26 @@ function goalMet() { return L.goals.every((g, i) => goalProgress(g, i) >= g.need
    Capped at six. Fifteen blasts is a screensaver, not a reward, and a
    three-year-old has already moved on. */
 async function finale(spare) {
+  /* Say what happened before doing anything about it. The blasts on their own
+     read as the board spontaneously going off for no reason — the player never
+     learns that the goals are done, nor that their spare moves are what is
+     firing. Three beats instead: the goals are met, the moves are the bonus,
+     then the bonus goes off. */
+  toast('🎉 All goals done!');
+  sfx('goal');
+  await sleep(REDUCED ? 30 : 800);
   const n = Math.min(6, spare);
   if (n <= 0) return;
-  toast('✨ Bonus!');
+  toast('✨ ' + spare + (spare === 1 ? ' move left!' : ' moves left!'));
+  sfx('make');
+  await sleep(REDUCED ? 20 : 620);
+  // The counter drains as the blasts fire, which is the whole explanation: you
+  // WATCH your moves being spent. It is capped at six blasts, so each one takes
+  // a share of what is left rather than exactly one — otherwise fifteen spare
+  // moves would fire six times and leave nine on the clock unexplained.
   for (let i = 0; i < n; i++) {
+    const take = Math.ceil(movesLeft / (n - i));
+    movesLeft = Math.max(0, movesLeft - take);
     const live = grid.flat().filter(t => t && !t.block);
     if (!live.length) break;
     const at = live[rnd(live.length)], r = at.r, c = at.c;
@@ -4554,9 +4570,11 @@ async function finale(spare) {
       score += 60;
     }
     paintHud();
-    await sleep(REDUCED ? 15 : 165);
+    await sleep(REDUCED ? 15 : 175);
   }
-  await sleep(REDUCED ? 20 : 220);
+  movesLeft = 0;
+  paintHud();
+  await sleep(REDUCED ? 20 : 260);
 }
 
 function checkWin() {
@@ -4597,8 +4615,7 @@ function checkWin() {
     // into the running total.
     const spare = freePlay ? 0 : Math.max(0, movesLeft);
     const before = score;
-    movesLeft = 0;
-    await finale(spare);
+    await finale(spare);      // drains movesLeft itself, so the count is visible
     if (score > before) addTotal(score - before);
     $('win-sub').textContent = score.toLocaleString() + ' points · 🏆 '
       + totalScore().toLocaleString() + ' total';
