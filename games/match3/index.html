@@ -4516,6 +4516,49 @@ function paintGoals(animate) {
 function goalMet() { return L.goals.every((g, i) => goalProgress(g, i) >= g.need); }
 
 /* ---------------- win ---------------- */
+/* Leftover moves used to be thrown away. Finishing a level with fifteen moves
+   still in hand looked exactly like scraping it with none, which wastes the one
+   moment the game has to say "you did that well".
+
+   Each spare move now goes off on the board as a blast before the card appears.
+   It runs on the real tiles rather than as a canvas flourish over the top —
+   fruit genuinely pop and genuinely score — but it deliberately does NOT go back
+   through resolve(): no gravity, no refills, no cascades. The level is over, the
+   board is about to be swept away by the outro anyway, and re-entering the match
+   pipeline after `over` is set is exactly the kind of thing that leaves a board
+   half-settled behind a win card.
+
+   Capped at six. Fifteen blasts is a screensaver, not a reward, and a
+   three-year-old has already moved on. */
+async function finale(spare) {
+  const n = Math.min(6, spare);
+  if (n <= 0) return;
+  toast('✨ Bonus!');
+  for (let i = 0; i < n; i++) {
+    const live = grid.flat().filter(t => t && !t.block);
+    if (!live.length) break;
+    const at = live[rnd(live.length)], r = at.r, c = at.c;
+    bombBlast(r, c, 3);
+    ring(r, c, Math.min(i, 4));
+    sfx('blast', Math.min(i, 4));
+    buzz(22);
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+      const rr = r + dr, cc = c + dc;
+      const x = cellOk(rr, cc) && grid[rr][cc];
+      if (!x || x.block) continue;
+      particles(rr, cc, x.k >= 0 ? x.k : null, 2, [r, c]);
+      x.el.classList.add('pop');
+      const el = x.el;
+      setTimeout(() => el.remove(), 260);
+      grid[rr][cc] = null;
+      score += 60;
+    }
+    paintHud();
+    await sleep(REDUCED ? 15 : 165);
+  }
+  await sleep(REDUCED ? 20 : 220);
+}
+
 function checkWin() {
   if (freePlay || over || !goalMet()) return false;
   over = true;
@@ -4548,6 +4591,17 @@ function checkWin() {
   // Clear the board away first — the celebration lands on an empty stage
   // instead of covering up a board still full of fruit.
   (async () => {
+    // Spend what is left before the stage is cleared. addTotal() has already
+    // banked the score as it stood, so only the BONUS gets banked here —
+    // otherwise the finale's points show on the card and quietly never make it
+    // into the running total.
+    const spare = freePlay ? 0 : Math.max(0, movesLeft);
+    const before = score;
+    movesLeft = 0;
+    await finale(spare);
+    if (score > before) addTotal(score - before);
+    $('win-sub').textContent = score.toLocaleString() + ' points · 🏆 '
+      + totalScore().toLocaleString() + ' total';
     await playOutro();
     confettiBurst(); cannon('left'); cannon('right');
     $('win').classList.add('show');
