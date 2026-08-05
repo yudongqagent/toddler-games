@@ -3019,9 +3019,11 @@ function cellCentre(r, c) {
 function particles(r, c, kind, boost, away) {
   const col = kind == null ? '#ffe9a8' : KINDS[kind].from;
   const b = boost || 0;
-  fxSparks(r, c, col, Math.min(40, 10 + b * 7), 1 + b * .3);
-  fxShards(r, c, col, Math.min(18, 5 + Math.round(b * 2.5)), away);
-  fxFlash(r, c, 1.7 + b * .4, 'rgba(255,235,170,');
+  fxSparks(r, c, col, Math.min(34, 10 + b * 6), 1 + b * .28);
+  fxShards(r, c, col, Math.min(15, 5 + Math.round(b * 2)), away);
+  // The flash takes the chain's colour too, so the whole burst warms together
+  // rather than one part of it going off on its own.
+  fxFlash(r, c, 1.7 + b * .22, b ? heat(b).replace(/,[^,]*\)$/, ',') : 'rgba(255,235,170,');
 }
 // Particles that fly INWARD — the visual grammar of something being created
 // rather than destroyed.
@@ -3031,11 +3033,33 @@ function converge(r, c, kind) {
 }
 // Halo left where a fruit was. Lives inside the board so it scrolls/resizes
 // with it, unlike the fixed-position particles.
-// The ring is the part you read from across the board, so it is the part that
-// most needs to grow with the chain — it was the only piece not scaling at all.
+/* How a chain gets louder. Size was the wrong lever — a wider ring is just a
+   wider ring, and scale on its own is not excitement. Two things that do read:
+
+   TEMPERATURE. The burst heats up as the chain runs, white through gold to a hot
+   magenta. Colour is a cue the eye resolves fast, it costs nothing, and "getting
+   hotter" is a thing everyone already understands without being taught.
+
+   REPETITION. From the third link a second ring chases the first. A shockwave
+   reads as something REPEATING; a single ring growing reads as something
+   inflating. That difference is most of why one feels like impact and the other
+   feels like a balloon.
+
+   The width still creeps, but barely — a quarter of what it was — because some
+   growth stops the deep ones feeling identical to the shallow ones. */
+const CHAIN_HEAT = [
+  'rgba(255,255,255,.95)',   // 1 — plain white
+  'rgba(255,243,196,.95)',   // 2 — warm
+  'rgba(255,208,112,.96)',   // 3 — gold
+  'rgba(255,152,92,.96)',    // 4 — hot
+  'rgba(255,112,172,.96)',   // 5+ — magenta
+];
+const heat = b => CHAIN_HEAT[Math.min(b, CHAIN_HEAT.length - 1)];
 function ring(r, c, boost) {
   const b = boost || 0;
-  fxRing(r, c, 2.1 + b * .45, 'rgba(255,255,255,.95)', 500 + b * 70);
+  const col = heat(b);
+  fxRing(r, c, 2.1 + b * .11, col, 500 + b * 45);
+  if (b >= 2) setTimeout(() => fxRing(r, c, 1.45 + b * .1, col, 400), 75);
 }
 function dust(r, c) { fxDust(r, c); }
 // The number doesn't just float off — it flies to the score counter and lands
