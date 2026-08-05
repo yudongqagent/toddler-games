@@ -458,6 +458,46 @@
      backdrop per kind as a colour-blind fallback, but the fruit emoji is
      already a distinct silhouette — the polygons were a redundant third
      channel that made the board look busy. Gloss and depth instead. */
+  /* ---- one silhouette per fruit ----
+     Every piece used to be the same rounded square with a different emoji on it,
+     so the board leaned on hue and a glyph — the two cues the eye resolves
+     LAST. Shape is the one it resolves first, which is why every match-3 worth
+     copying gives each colour its own outline. It also fixes colour-blind
+     readability, which hue can never do on its own.
+
+     Done with border-radius rather than clip-path on purpose: clip-path would
+     take the candy bevel with it, since box-shadow is clipped away along with
+     everything else outside the path. Six radii, all keeping their bevel. */
+  /* Three rules hold this set together, and the first attempt broke all three.
+     ECHO: each outline is the silhouette of the fruit standing on it, so the
+     shape is a reason rather than a decoration. SYMMETRY: every one is mirrored
+     on at least one axis, so it sits square in the grid — the diagonal petal in
+     the first attempt fought the grid and read as a rendering fault. FAMILY: all
+     six are drawn from one vocabulary of squares, pastilles and domes, so the
+     board looks like an assortment of sweets rather than six unrelated outlines.
+
+       🍓 tapers to a point   → round-bottomed dome
+       🍌 long                → wide pastille
+       🍇 a bunch, hanging    → round-topped dome
+       🍏 blocky and solid    → rounded square
+       🍊 perfectly round     → circle
+       🫐 small and tall      → upright pastille                             */
+  .tile.k0 .shape { border-radius:30% 30% 48% 48%; }   /* strawberry */
+  .tile.k1 .shape { border-radius:50% / 34%; }         /* banana */
+  .tile.k2 .shape { border-radius:48% 48% 30% 30%; }   /* grapes */
+  .tile.k3 .shape { border-radius:26%; }               /* green apple */
+  .tile.k4 .shape { border-radius:50%; }               /* orange */
+  .tile.k5 .shape { border-radius:34% / 50%; }         /* blueberry */
+  /* A circle of the same box reads SMALLER than a square — it loses the four
+     corners. The round ones are grown a touch so the set has even optical
+     weight, which is the difference between a designed assortment and six
+     shapes that merely have the same bounding box. */
+  .tile.k4 .shape { inset:-3%; }
+  .tile.k1 .shape, .tile.k5 .shape { inset:-1.5%; }
+  /* Blockers, frozen fruit and gum keep the plain square, so a piece that is
+     STUCK never also changes shape — one signal per idea. */
+  .tile.blk .shape, .tile.ice .shape, .tile.jelly .shape { border-radius:30% !important; }
+
   .tile .shape {
     position:absolute; inset:0;
     border-radius:30%;
@@ -1939,7 +1979,10 @@ function makeTile(k, r, c, sp = SP_NONE) {
 function paint(t) {
   const el = t.el;
   el.classList.remove('sp1', 'sp2', 'sp3', 'blk', 'duck', 'gift', 'gen', 'hit1',
-                      'ice', 'ice1', 'ice2', 'jelly', 'j-u', 'j-d', 'j-l', 'j-r');
+                      'ice', 'ice1', 'ice2', 'jelly', 'j-u', 'j-d', 'j-l', 'j-r',
+                      'k0', 'k1', 'k2', 'k3', 'k4', 'k5');
+  // The fruit's own outline. Rainbows (k < 0) and blockers have no kind shape.
+  if (t.k >= 0 && t.k < KINDS.length) el.classList.add('k' + t.k);
   t.crown.textContent = '';
   if (t.block) {
     t.shape.className = 'shape';
