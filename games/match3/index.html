@@ -27,9 +27,16 @@
   /* The gradient lives on <html>, not <body>: the root background is painted
      over the whole canvas, so it reaches under the home indicator instead of
      stopping at the body box and leaving a white strip when installed. */
+  /* Every level was the same sunset. Board SHAPES were tried as the source of
+     variety and rejected — a clipped board is a smaller board — so variety has
+     to come from behind the board instead, where it costs nothing and takes
+     nothing away from the play area.
+     The gradient is driven by three custom properties, so a theme is three
+     colours and the transition between levels is free. */
   html {
-    background:linear-gradient(160deg,#ffb37a 0%,#ff8fa8 45%,#c98bff 100%);
+    background:linear-gradient(160deg, var(--bg1,#ffb37a) 0%, var(--bg2,#ff8fa8) 45%, var(--bg3,#c98bff) 100%);
     background-attachment:fixed;
+    transition:--bg1 .6s linear, --bg2 .6s linear, --bg3 .6s linear;
   }
   html, body {
     height:100%; overflow:hidden;
@@ -1920,6 +1927,29 @@ function buzz(ms) { if (vibeOn && navigator.vibrate) try { navigator.vibrate(ms)
 
 /* ---------------- game state ---------------- */
 let L = null, levelNo = 0, freePlay = false;
+
+/* Somewhere new every ten levels. Named rather than generated, because a hand
+   picked set stays appetising while a hue-rotate eventually lands on colours
+   that fight the fruit — and the fruit have to stay the most readable thing on
+   the screen. Each one keeps a warm-to-cool sweep so the board's translucent
+   tray sits on it the same way every time. */
+const THEMES = [
+  ['#ffb37a', '#ff8fa8', '#c98bff'],   // sunset — the original
+  ['#8fd4ff', '#7fb0ff', '#b58cff'],   // morning sky
+  ['#ffd98a', '#ffa86b', '#ff7fa6'],   // orchard
+  ['#9be8c8', '#5fc9b0', '#4f9ed8'],   // meadow
+  ['#c7a7ff', '#9d7df0', '#5f6bd8'],   // dusk
+  ['#ffc2d6', '#ff9ec4', '#c489ff'],   // blossom
+  ['#8ee3e8', '#63b8d6', '#7c8fe0'],   // lagoon
+  ['#ffcf9e', '#ff9f8a', '#d183c9'],   // peach
+];
+function setTheme(n) {
+  const t = THEMES[Math.max(0, Math.floor(((n || 1) - 1) / 10)) % THEMES.length];
+  const st = document.documentElement.style;
+  st.setProperty('--bg1', t[0]);
+  st.setProperty('--bg2', t[1]);
+  st.setProperty('--bg3', t[2]);
+}
 let R = 0, C = 0, KN = 4;
 let grid = [];               // grid[r][c] = tile | null
 // The board's silhouette: rows [colTop[c] .. colBot[c]] exist in column c, the rest
@@ -4629,6 +4659,7 @@ function showMenu() {
 function start(idx, resume, quiet) {
   freePlay = idx === 'free';
   levelNo = freePlay ? 0 : idx;
+  setTheme(levelNo);
   L = freePlay ? FREE : levelFor(idx);
   R = L.rows; C = L.cols; KN = L.kinds;
   score = 0; movesLeft = L.moves; movesUsed = 0; usedHelp = false; over = false; busy = false; sel = null;
