@@ -3246,6 +3246,21 @@ async function clearCells(keys, cascade, from, zapFrom, suckTo, chain) {
   const wasBlock = new Set();
   keys.forEach(k => { const b = grid[Math.floor(k / C)][k % C]; if (b && b.block) wasBlock.add(k); });
   let order = null, step = 0, lastDelay = 0;
+  /* A cascade match has no `from` and no chain, so every cell got a delay of
+     zero and the whole run vanished on one frame — the one case where a line of
+     five reads as tiles blinking out rather than as a line being cleared. Fall
+     back to the run's OWN long axis: take the bounding box of the cells and
+     stagger along whichever side is longer, so the pop travels down the line and
+     you can read which way the match ran. */
+  let selfAxis = null;
+  if (!order && !chain && !from && keys.size > 1) {
+    let minR = 99, maxR = -1, minC = 99, maxC = -1;
+    keys.forEach(k => { const r = Math.floor(k / C), c = k % C;
+      if (r < minR) minR = r; if (r > maxR) maxR = r;
+      if (c < minC) minC = c; if (c > maxC) maxC = c; });
+    selfAxis = (maxC - minC) >= (maxR - minR) ? { by: 'c', min: minC } : { by: 'r', min: minR };
+    lastDelay = Math.max(lastDelay, Math.max(maxC - minC, maxR - minR) * 42);
+  }
   if (zapFrom) {
     const d = k => Math.hypot(Math.floor(k / C) - zapFrom[0], (k % C) - zapFrom[1]);
     order = new Map();
@@ -3323,6 +3338,7 @@ async function clearCells(keys, cascade, from, zapFrom, suckTo, chain) {
     const delay = order ? order.get(key) * step
                 : chain ? chainDelay(key)
                 : from  ? Math.min(210, (Math.abs(r - from[0]) + Math.abs(c - from[1])) * 33)
+                : selfAxis ? (selfAxis.by === 'c' ? c - selfAxis.min : r - selfAxis.min) * 42
                 : 0;
     const el = t.el;
     const kind = t.sp === SP_RAIN ? null : t.k;
