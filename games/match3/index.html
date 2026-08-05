@@ -3010,12 +3010,18 @@ function cellCentre(r, c) {
 // throws more confetti than a plain three.
 // `boost` ramps the burst with cascade depth, so a long chain visibly throws
 // more than a plain three.
+/* A deep cascade should LOOK bigger than a shallow one. The audio already
+   climbs a ten-step ladder as a chain runs; the picture did not follow — the
+   same four layers came out at every depth, the ring was a flat 2.1 across and
+   500ms long however far the chain had gone, and the debris caps bit at depth 3
+   so everything past that was identical. Every part of the burst scales now, and
+   the caps sit far enough out that a five-deep chain still has somewhere to go. */
 function particles(r, c, kind, boost, away) {
   const col = kind == null ? '#ffe9a8' : KINDS[kind].from;
   const b = boost || 0;
-  fxSparks(r, c, col, Math.min(22, 10 + b * 4), 1 + b * .25);
-  fxShards(r, c, col, Math.min(9, 5 + b), away);
-  fxFlash(r, c, 1.6 + b * .2, 'rgba(255,235,170,');
+  fxSparks(r, c, col, Math.min(40, 10 + b * 7), 1 + b * .3);
+  fxShards(r, c, col, Math.min(18, 5 + Math.round(b * 2.5)), away);
+  fxFlash(r, c, 1.7 + b * .4, 'rgba(255,235,170,');
 }
 // Particles that fly INWARD — the visual grammar of something being created
 // rather than destroyed.
@@ -3025,7 +3031,12 @@ function converge(r, c, kind) {
 }
 // Halo left where a fruit was. Lives inside the board so it scrolls/resizes
 // with it, unlike the fixed-position particles.
-function ring(r, c) { fxRing(r, c, 2.1, 'rgba(255,255,255,.95)', 500); }
+// The ring is the part you read from across the board, so it is the part that
+// most needs to grow with the chain — it was the only piece not scaling at all.
+function ring(r, c, boost) {
+  const b = boost || 0;
+  fxRing(r, c, 2.1 + b * .45, 'rgba(255,255,255,.95)', 500 + b * 70);
+}
 function dust(r, c) { fxDust(r, c); }
 // The number doesn't just float off — it flies to the score counter and lands
 // on it, which is what actually connects the burst to the number going up.
@@ -3405,7 +3416,7 @@ async function clearCells(keys, cascade, from, zapFrom, suckTo, chain) {
       if (zapFrom) { zap(zapFrom[0], zapFrom[1], r, c); sfx('zap'); }
       // Thrown away from wherever this clear started — the tile you moved, or
       // the booster that went off.
-      particles(r, c, kind, cascade - 1, zapFrom || from); ring(r, c);
+      particles(r, c, kind, cascade - 1, zapFrom || from); ring(r, c, cascade - 1);
       el.classList.add('pop');
     };
     if (delay) { setTimeout(fire, delay); } else fire();
