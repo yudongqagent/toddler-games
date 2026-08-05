@@ -1102,6 +1102,31 @@
   }
 
   /* ---------------- overlays ---------------- */
+  /* The end-of-level tally. A toast was the wrong container for this — it is
+     small, it sits at the edge, and it vanishes before a child has read it. This
+     is the one moment in the level worth stopping for, so it stops. */
+  #tally .panel { max-width:min(88vw, 380px); }
+  #tally h2 { margin-bottom:10px; }
+  .tally-row {
+    display:flex; align-items:center; gap:10px;
+    padding:6px 4px;
+    font-size:clamp(14px,3.9vw,17px); font-weight:800; color:#5a3a12; text-align:left;
+    opacity:0; transform:translateX(-10px);
+    transition:opacity .22s ease, transform .22s cubic-bezier(.3,1.4,.5,1);
+  }
+  .tally-row.in { opacity:1; transform:none; }
+  .tally-row .mini { width:clamp(26px,7vw,32px); height:clamp(26px,7vw,32px); flex:none; position:relative; }
+  .tally-row .mini .shape { position:absolute; inset:0; }
+  .tally-row .mini .face { position:absolute; inset:0; display:grid; place-items:center;
+                           font-size:clamp(15px,4vw,19px); }
+  .tally-row .lbl { flex:1; min-width:0; }
+  .tally-row .tick { font-size:clamp(17px,4.6vw,21px); }
+  #tally-bonus {
+    margin-top:12px; font-size:clamp(15px,4.2vw,19px); font-weight:800; color:#c2410c;
+    opacity:0; transition:opacity .25s;
+  }
+  #tally-bonus.in { opacity:1; }
+
   .overlay {
     position:fixed; inset:0; z-index:70;
     background:rgba(90,30,60,.42); -webkit-backdrop-filter:blur(3px); backdrop-filter:blur(3px);
@@ -1242,6 +1267,14 @@
       <button class="big-btn alt" id="again-btn">↺ Again</button>
       <button class="big-btn ghost" id="menu-btn">🏠 Levels</button>
     </div>
+  </div>
+</div>
+
+<div class="overlay" id="tally">
+  <div class="panel">
+    <h2 id="tally-title">🎉 All goals done!</h2>
+    <div id="tally-rows"></div>
+    <p id="tally-bonus"></p>
   </div>
 </div>
 
@@ -3127,6 +3160,34 @@ function toast(msg) {
 }
 // A collected fruit flies from the board to its goal chip — the clearest
 // possible "that one counted" signal for a kid who can't read the number yet.
+/* A spare move leaving the counter and travelling to the cell it detonates.
+   Without this the counter drops and, separately, something explodes — two
+   events the player has to connect for themselves. Watching the move ARRIVE and
+   then go off is the whole difference between "the board is doing something"
+   and "my move did that". Resolves when it lands, so the caller can fire the
+   blast on arrival rather than guessing at a delay. */
+function flyMove(r, c) {
+  return new Promise(resolve => {
+    const box = $('moves-box');
+    if (!box || REDUCED) { resolve(); return; }
+    const from = box.getBoundingClientRect(), to = cellCentre(r, c);
+    const size = Math.max(22, board.clientWidth / C * .5);
+    const el = document.createElement('div');
+    el.className = 'fly';
+    el.textContent = '✨';
+    el.style.font = size + 'px/1 sans-serif';
+    el.style.left = (from.left + from.width / 2 - size / 2) + 'px';
+    el.style.top = (from.top + from.height / 2 - size / 2) + 'px';
+    el.style.width = el.style.height = size + 'px';
+    el.style.transition = 'transform .34s cubic-bezier(.45,0,.55,1), opacity .34s';
+    document.body.appendChild(el);
+    requestAnimationFrame(() => {
+      el.style.transform = 'translate(' + (to.x - (from.left + from.width / 2)) + 'px,'
+                                        + (to.y - (from.top + from.height / 2)) + 'px) scale(1.25)';
+    });
+    setTimeout(() => { el.remove(); resolve(); }, 340);
+  });
+}
 function flyToGoal(r, c, gi) {
   const chip = document.querySelector('#goals .goal[data-i="' + gi + '"] .mini');
   if (!chip || REDUCED) return;
@@ -4534,26 +4595,53 @@ async function finale(spare) {
   /* Say what happened before doing anything about it. The blasts on their own
      read as the board spontaneously going off for no reason — the player never
      learns that the goals are done, nor that their spare moves are what is
-     firing. Three beats instead: the goals are met, the moves are the bonus,
-     then the bonus goes off. */
-  toast('🎉 All goals done!');
-  sfx('goal');
-  await sleep(REDUCED ? 30 : 800);
+     firing.
+
+     A toast was the wrong container for it: small, at the edge, and gone before
+     a child has read it. This is a proper panel that lists every goal and ticks
+     them off one at a time, so "all goals done" is something you WATCH being
+     true rather than a claim you have to take on trust. */
+  const rows = $('tally-rows');
+  rows.innerHTML = L.goals.map(g =>
+    '<div class="tally-row">' + goalChip(g)
+    + '<span class="lbl">' + goalTitle(g) + '</span>'
+    + '<span class="tick">✅</span></div>').join('');
+  $('tally-bonus').textContent = '';
+  $('tally-bonus').classList.remove('in');
+  $('tally').classList.add('show');
+  await sleep(REDUCED ? 20 : 260);
+  const kids = [...rows.children];
+  for (let i = 0; i < kids.length; i++) {
+    kids[i].classList.add('in');
+    sfx('goal');
+    await sleep(REDUCED ? 15 : 330);
+  }
   const n = Math.min(6, spare);
+  if (n > 0) {
+    $('tally-bonus').textContent = '✨ ' + spare + (spare === 1 ? ' move left — bonus!' : ' moves left — bonus!');
+    $('tally-bonus').classList.add('in');
+    sfx('make');
+    await sleep(REDUCED ? 20 : 900);
+  } else {
+    await sleep(REDUCED ? 20 : 550);
+  }
+  $('tally').classList.remove('show');
+  await sleep(REDUCED ? 10 : 260);
   if (n <= 0) return;
-  toast('✨ ' + spare + (spare === 1 ? ' move left!' : ' moves left!'));
-  sfx('make');
-  await sleep(REDUCED ? 20 : 620);
   // The counter drains as the blasts fire, which is the whole explanation: you
   // WATCH your moves being spent. It is capped at six blasts, so each one takes
   // a share of what is left rather than exactly one — otherwise fifteen spare
   // moves would fire six times and leave nine on the clock unexplained.
   for (let i = 0; i < n; i++) {
     const take = Math.ceil(movesLeft / (n - i));
-    movesLeft = Math.max(0, movesLeft - take);
     const live = grid.flat().filter(t => t && !t.block);
     if (!live.length) break;
     const at = live[rnd(live.length)], r = at.r, c = at.c;
+    // The counter drops as the move leaves, and the blast waits for it to land.
+    movesLeft = Math.max(0, movesLeft - take);
+    paintHud();
+    sfx('swap');
+    await flyMove(r, c);
     bombBlast(r, c, 3);
     ring(r, c, Math.min(i, 4));
     sfx('blast', Math.min(i, 4));
@@ -4570,7 +4658,7 @@ async function finale(spare) {
       score += 60;
     }
     paintHud();
-    await sleep(REDUCED ? 15 : 175);
+    await sleep(REDUCED ? 15 : 120);
   }
   movesLeft = 0;
   paintHud();
