@@ -1354,7 +1354,17 @@
    ======================================================================= */
 
 const $ = id => document.getElementById(id);
-const sleep = ms => new Promise(r => setTimeout(r, ms));
+/* One knob for the whole game's pacing. The finale winds this up as its chain
+   runs on, which is what makes a long cascade accelerate instead of plodding
+   through at the same cadence for ten seconds. Kept modest — CSS animation
+   durations do NOT scale with it, so pushing it far would let the JS outrun the
+   animations it is waiting on. Always reset when a level starts. */
+let timeScale = 1;
+// Set only while the end-of-level finale is running, so resolve() knows it may
+// wind the clock up as its cascade deepens. Normal play is never accelerated —
+// the pacing there was tuned by hand and should stay where it is.
+let finaleRunning = false;
+const sleep = ms => new Promise(r => setTimeout(r, ms / timeScale));
 const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /* ---------------- background bubbles ---------------- */
@@ -3676,6 +3686,7 @@ async function resolve(origins) {
     const gs = groups();
     if (!gs.length) break;
     cascade++;
+    if (finaleRunning) timeScale = Math.min(1.9, 1 + cascade * 0.16);
 
     const keys = new Set();
     const spawns = [];              // [key, spKind, fruitKind, cell]
@@ -4634,16 +4645,16 @@ async function finale(spare) {
      the level is over, the outro is about to sweep the board, and going back
      through the match pipeline after `over` is set is how a board ends up
      half-settled behind a win card. */
+  /* One move, one tile. Every spare move turns a random fruit into a booster and
+     they all stay on the board, so what you earned is laid out in front of you
+     before any of it goes off. */
+  finaleRunning = true;
   const placed = [];
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < spare; i++) {
     const free = grid.flat().filter(t => t && !t.block && t.sp === SP_NONE);
     if (!free.length) break;
     const at = free[rnd(free.length)];
-    // The counter drops as the move is spent and the booster appears in the same
-    // beat. A token flying from the counter to the tile was tried and removed:
-    // it was too small and too quick to notice, and it put a third of a second
-    // of dead air between the number changing and anything happening.
-    movesLeft = Math.max(0, movesLeft - Math.ceil(movesLeft / (n - i)));
+    movesLeft = Math.max(0, movesLeft - 1);
     paintHud();
     at.sp = Math.random() < .5 ? SP_STAR : SP_BOMB;
     at.radius = 1; at.fired = false; at.twice = false;
@@ -4651,39 +4662,40 @@ async function finale(spare) {
     at.el.classList.remove('born'); void at.el.offsetWidth; at.el.classList.add('born');
     setTimeout(() => at.el.classList.remove('born'), 260);
     converge(at.r, at.c, at.k);
-    sfx('make'); buzz(18);
+    sfx('make'); buzz(16);
     placed.push(at);
-    await sleep(REDUCED ? 10 : 130);
+    // The laying-out speeds up as it goes, so fifteen moves is not fifteen times
+    // as long a wait as one.
+    await sleep(REDUCED ? 8 : Math.max(55, 130 - i * 6));
   }
   movesLeft = 0;
   paintHud();
-  // A beat to take in the boosters sitting there before any of them fire.
-  await sleep(REDUCED ? 20 : 480);
+  await sleep(REDUCED ? 20 : 460);
 
-  for (let i = 0; i < placed.length; i++) {
-    const t = placed[i];
-    if (!grid[t.r] || grid[t.r][t.c] !== t) continue;
-    const r = t.r, c = t.c;
-    if (t.sp === SP_STAR) starBeams(r, c); else bombBlast(r, c, 3);
-    ring(r, c, Math.min(i, 4));
-    sfx('blast', Math.min(i, 4));
-    buzz(24);
-    const hit = new Set();
-    blastCells(r, c, t.sp, t.k, hit, 1);
-    hit.forEach(key => {
-      const rr = Math.floor(key / C), cc = key % C;
-      const x = grid[rr][cc];
-      if (!x || x.block) return;
-      particles(rr, cc, x.k >= 0 ? x.k : null, 2, [r, c]);
-      x.el.classList.add('pop');
-      const el = x.el;
-      setTimeout(() => el.remove(), 260);
-      grid[rr][cc] = null;
-      score += 60;
-    });
-    paintHud();
-    await sleep(REDUCED ? 15 : 150);
+  /* Everything on the board goes off, not just what was placed — a booster you
+     never got round to using is still yours, and leaving it sitting there while
+     the rest detonate around it is the one thing that would look like a bug.
+     This runs through the real machinery, so a blast that catches another
+     booster chains into it exactly as it would mid-level. */
+  const live = grid.flat().filter(t => t && t.sp !== SP_NONE);
+  if (live.length) {
+    const keys = new Set(live.map(t => t.r * C + t.c));
+    live.forEach(t => { t.fired = false; t.twice = false; });
+    const chain = expand(keys);
+    sfx('blast'); buzz(40);
+    await sleep(REDUCED ? 0 : 95);
+    await clearCells(keys, 2, [live[0].r, live[0].c], null, null, chain);
+    await gravity();
   }
+
+  /* And then let it run. resolve() already loops until the board stops producing
+     matches, so it is called once — the acceleration happens INSIDE it, keyed to
+     how deep its cascade has actually gone. Wrapping it in an outer loop was the
+     first attempt and did nothing: by the second pass there was never anything
+     left to speed up. */
+  await resolve(null);
+  timeScale = 1;
+  finaleRunning = false;
   await sleep(REDUCED ? 20 : 260);
 }
 
@@ -4848,6 +4860,7 @@ function start(idx, resume, quiet) {
   boostMade = {}; ducksHome = 0; iceLeft = 0;
   giftsOpened = 0; jellyCleared = 0; combosMade = 0; bigChains = 0;
   bombAgain = [];               // never carry a pending blast into a new level
+  timeScale = 1;                // and never carry the finale's wound-up clock
   hideTip();
   sinceBooster = 0;
 
