@@ -1363,7 +1363,7 @@ let timeScale = 1;
 // Set only while the end-of-level finale is running, so resolve() knows it may
 // wind the clock up as its cascade deepens. Normal play is never accelerated —
 // the pacing there was tuned by hand and should stay where it is.
-let finaleRunning = false;
+let finaleRunning = false, finaleRound = 0;
 const sleep = ms => new Promise(r => setTimeout(r, ms / timeScale));
 const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -3686,7 +3686,9 @@ async function resolve(origins) {
     const gs = groups();
     if (!gs.length) break;
     cascade++;
-    if (finaleRunning) timeScale = Math.min(1.9, 1 + cascade * 0.16);
+    // Later rounds start already wound up, so a long tail runs out quickly
+    // rather than replaying the same cadence four times over.
+    if (finaleRunning) timeScale = Math.min(2.2, 1 + finaleRound * .22 + cascade * .16);
 
     const keys = new Set();
     const spawns = [];              // [key, spKind, fruitKind, cell]
@@ -4675,27 +4677,36 @@ async function finale(spare) {
   /* Everything on the board goes off, not just what was placed — a booster you
      never got round to using is still yours, and leaving it sitting there while
      the rest detonate around it is the one thing that would look like a bug.
-     This runs through the real machinery, so a blast that catches another
-     booster chains into it exactly as it would mid-level. */
-  const live = grid.flat().filter(t => t && t.sp !== SP_NONE);
-  if (live.length) {
-    const keys = new Set(live.map(t => t.r * C + t.c));
-    live.forEach(t => { t.fired = false; t.twice = false; });
-    const chain = expand(keys);
-    sfx('blast'); buzz(40);
-    await sleep(REDUCED ? 0 : 95);
-    await clearCells(keys, 2, [live[0].r, live[0].c], null, null, chain);
-    await gravity();
-  }
 
-  /* And then let it run. resolve() already loops until the board stops producing
-     matches, so it is called once — the acceleration happens INSIDE it, keyed to
-     how deep its cascade has actually gone. Wrapping it in an outer loop was the
-     first attempt and did nothing: by the second pass there was never anything
-     left to speed up. */
-  await resolve(null);
+     And it keeps going round, because the cascade MAKES boosters: a run of four
+     during the finale is still a star. The first version fired once and then let
+     the chain run, which left whatever the chain had just created standing on
+     the board at the end — measured, one booster still sitting there when the
+     card came up. Now each round fires everything present, lets the board
+     cascade, and looks again. Bounded, because a finale has to end. */
+  /* Four rounds, not eight. At eight this ran for 24 SECONDS on a board with
+     seventeen boosters on it, which is not a celebration, it is a screensaver a
+     three-year-old has already walked away from. Four still empties the board of
+     boosters in every case measured, because each round's cascade is what feeds
+     the next one and they die out fast. */
+  for (let round = 0; round < 4; round++) {
+    finaleRound = round;
+    const armed = grid.flat().filter(t => t && t.sp !== SP_NONE);
+    if (!armed.length) break;
+    const keys = new Set(armed.map(t => t.r * C + t.c));
+    armed.forEach(t => { t.fired = false; t.twice = false; });
+    const chain = expand(keys);
+    sfx('blast', Math.min(round, 4));
+    buzz(round ? 26 : 40);
+    await sleep(REDUCED ? 0 : 70);
+    await clearCells(keys, 2 + round, [armed[0].r, armed[0].c], null, null, chain);
+    await gravity();
+    // Let the board match whatever the blast left behind. resolve() loops until
+    // it settles on its own, and winds the clock up as its cascade deepens.
+    await resolve(null);
+  }
   timeScale = 1;
-  finaleRunning = false;
+  finaleRunning = false; finaleRound = 0;
   await sleep(REDUCED ? 20 : 260);
 }
 
@@ -4861,6 +4872,7 @@ function start(idx, resume, quiet) {
   giftsOpened = 0; jellyCleared = 0; combosMade = 0; bigChains = 0;
   bombAgain = [];               // never carry a pending blast into a new level
   timeScale = 1;                // and never carry the finale's wound-up clock
+  finaleRunning = false; finaleRound = 0;
   hideTip();
   sinceBooster = 0;
 
