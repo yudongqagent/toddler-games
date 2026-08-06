@@ -3184,34 +3184,6 @@ function toast(msg) {
 }
 // A collected fruit flies from the board to its goal chip — the clearest
 // possible "that one counted" signal for a kid who can't read the number yet.
-/* A spare move leaving the counter and travelling to the cell it detonates.
-   Without this the counter drops and, separately, something explodes — two
-   events the player has to connect for themselves. Watching the move ARRIVE and
-   then go off is the whole difference between "the board is doing something"
-   and "my move did that". Resolves when it lands, so the caller can fire the
-   blast on arrival rather than guessing at a delay. */
-function flyMove(r, c) {
-  return new Promise(resolve => {
-    const box = $('moves-box');
-    if (!box || REDUCED) { resolve(); return; }
-    const from = box.getBoundingClientRect(), to = cellCentre(r, c);
-    const size = Math.max(22, board.clientWidth / C * .5);
-    const el = document.createElement('div');
-    el.className = 'fly';
-    el.textContent = '✨';
-    el.style.font = size + 'px/1 sans-serif';
-    el.style.left = (from.left + from.width / 2 - size / 2) + 'px';
-    el.style.top = (from.top + from.height / 2 - size / 2) + 'px';
-    el.style.width = el.style.height = size + 'px';
-    el.style.transition = 'transform .34s cubic-bezier(.45,0,.55,1), opacity .34s';
-    document.body.appendChild(el);
-    requestAnimationFrame(() => {
-      el.style.transform = 'translate(' + (to.x - (from.left + from.width / 2)) + 'px,'
-                                        + (to.y - (from.top + from.height / 2)) + 'px) scale(1.25)';
-    });
-    setTimeout(() => { el.remove(); resolve(); }, 340);
-  });
-}
 function flyToGoal(r, c, gi) {
   const chip = document.querySelector('#goals .goal[data-i="' + gi + '"] .mini');
   if (!chip || REDUCED) return;
@@ -4667,11 +4639,12 @@ async function finale(spare) {
     const free = grid.flat().filter(t => t && !t.block && t.sp === SP_NONE);
     if (!free.length) break;
     const at = free[rnd(free.length)];
-    // The counter drops as the move leaves, so you watch it being spent.
+    // The counter drops as the move is spent and the booster appears in the same
+    // beat. A token flying from the counter to the tile was tried and removed:
+    // it was too small and too quick to notice, and it put a third of a second
+    // of dead air between the number changing and anything happening.
     movesLeft = Math.max(0, movesLeft - Math.ceil(movesLeft / (n - i)));
     paintHud();
-    sfx('swap');
-    await flyMove(at.r, at.c);
     at.sp = Math.random() < .5 ? SP_STAR : SP_BOMB;
     at.radius = 1; at.fired = false; at.twice = false;
     paint(at);
