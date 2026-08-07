@@ -1105,8 +1105,47 @@
   /* The end-of-level tally. A toast was the wrong container for this — it is
      small, it sits at the edge, and it vanishes before a child has read it. This
      is the one moment in the level worth stopping for, so it stops. */
+  /* ---- the score screen ----
+     The old card gave every element the same weight: mascot, title, stars,
+     a line of small text carrying the score, the prize, then three buttons all
+     the same size. On a screen whose whole job is to report a score, the score
+     was the smallest thing on it.
+
+     Three principles fix most of that. HIERARCHY: one focal point, and here it
+     can only be the number, so it is set large and everything else defers to it.
+     PROXIMITY: the score, its unit and the thresholds it is measured against are
+     one block with its own surface, because they are one idea — read apart they
+     are three unrelated numbers. And ACTION WEIGHT: of three buttons, only one
+     is what nearly everybody wants next, so it stays full width and loud while
+     the other two shrink and go quiet. */
+  .score-block {
+    margin:6px 0 2px; padding:12px 14px 10px;
+    border-radius:20px;
+    background:linear-gradient(#fff8ec,#ffeccd);
+    box-shadow:inset 0 0 0 2px rgba(190,140,50,.16);
+  }
+  .score-num {
+    font-size:clamp(38px,11vw,54px); font-weight:800; line-height:1;
+    color:#c2410c; letter-spacing:-.5px;
+    font-variant-numeric:tabular-nums;   /* so counting up does not jitter */
+  }
+  .score-cap {
+    font-size:clamp(11px,3vw,13px); font-weight:800; letter-spacing:1.5px;
+    text-transform:uppercase; color:#b08a52; margin-top:2px;
+  }
+  #win-sub { font-size:clamp(12px,3.3vw,15px); font-weight:700; color:#a8815a; margin:8px 0 2px; }
+  #win-prize {
+    display:inline-block; margin:10px auto 4px; padding:7px 15px;
+    border-radius:999px; font-size:clamp(13px,3.6vw,16px); font-weight:800;
+    background:linear-gradient(160deg,#e8f7ff,#c8e8ff); color:#1f5f8a;
+    box-shadow:0 2px 0 rgba(30,90,130,.2);
+  }
+  #win-prize:empty { display:none; }
+  /* secondary actions step back so the primary one reads first */
+  #win .btn-row .big-btn { font-size:clamp(13px,3.6vw,16px); padding:11px 14px; }
+
   /* The star thresholds, said out loud on the card. */
-  #win-bar { display:flex; gap:8px; justify-content:center; margin:2px 0 10px; flex-wrap:wrap; }
+  #win-bar { display:flex; gap:7px; justify-content:center; margin:10px 0 0; flex-wrap:wrap; }
   #win-bar .thr {
     font-size:clamp(12px,3.3vw,15px); font-weight:800;
     padding:4px 11px; border-radius:999px;
@@ -1295,9 +1334,13 @@
     <div class="win-mascot" id="win-mascot">🐻</div>
     <h2 id="win-title">Yay! You did it!</h2>
     <div class="starrow" id="starrow"><span>⭐</span><span>⭐</span><span>⭐</span></div>
+    <div class="score-block">
+      <div class="score-num" id="win-score">0</div>
+      <div class="score-cap">points</div>
+      <div id="win-bar"></div>
+    </div>
     <p id="win-sub">3200 points</p>
-    <div id="win-bar"></div>
-    <p id="win-prize"></p>
+    <div id="win-prize"></div>
     <button class="big-btn" id="next-btn">Next game ▸</button>
     <div class="btn-row">
       <button class="big-btn alt" id="again-btn">↺ Again</button>
@@ -3229,6 +3272,26 @@ function toast(msg) {
 }
 // A collected fruit flies from the board to its goal chip — the clearest
 // possible "that one counted" signal for a kid who can't read the number yet.
+/* Ease-out count, so it sprints then settles rather than ticking linearly.
+
+   Driven by a timer rather than by requestAnimationFrame, and the final value is
+   written by a guaranteed timeout regardless. rAF does not run at all in a
+   backgrounded tab — the effects layer already carries a comment about that —
+   which for a decorative effect means it pauses, but for the headline number on
+   the score screen it would mean a player who glanced away came back to a score
+   frozen at zero. The number has to arrive whether or not anything is painting. */
+function countUp(el, to, ms) {
+  if (!el) return;
+  const done = () => { el.textContent = to.toLocaleString(); };
+  if (REDUCED) { done(); return; }
+  const t0 = Date.now();
+  const iv = setInterval(() => {
+    const p = Math.min(1, (Date.now() - t0) / ms);
+    el.textContent = Math.round(to * (1 - Math.pow(1 - p, 3))).toLocaleString();
+    if (p >= 1) clearInterval(iv);
+  }, 33);
+  setTimeout(() => { clearInterval(iv); done(); }, ms + 60);
+}
 function flyToGoal(r, c, gi) {
   const chip = document.querySelector('#goals .goal[data-i="' + gi + '"] .mini');
   if (!chip || REDUCED) return;
@@ -4787,8 +4850,11 @@ function checkWin() {
     paintMenu();
     sfx('win'); buzz([80, 60, 80, 60, 160]);
     $('win-title').textContent = n === 3 ? 'Perfect!' : n === 2 ? 'Great job!' : 'You did it!';
-    $('win-sub').textContent = score.toLocaleString() + ' points · 🏆 '
-      + totalScore().toLocaleString() + ' total';
+    // The headline number counts up rather than simply being there. A score
+    // that appears is a fact; a score that climbs is an event, and it buys the
+    // half second the stars need to land one after another. (TODO 6.4)
+    countUp($('win-score'), score, 900);
+    $('win-sub').textContent = '🏆 ' + totalScore().toLocaleString() + ' total';
     // Say what the stars were for. Two stars and no explanation is the actual
     // complaint here — a threshold you cannot see may as well be a mood.
     $('win-bar').innerHTML =
