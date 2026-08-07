@@ -113,5 +113,10 @@ same pink rectangle with different chips at the top.
 - [ ] **6.2 Score should fly to the counter**, not fade in place.
 - [ ] **6.3 Reshuffle is abrupt** — the board re-deals with a spin; it should
       explain itself.
-- [ ] **6.4 Star fill on the win card** should count up, not appear.
+- [x] **6.4 Star fill on the win card** ~~should count up, not appear.~~ *(done)*
+      Better than counting up: the number, a bar and the stars now run off one
+      clock, so each star lights at the instant the fill crosses its threshold
+      mark. The bar is the visible *cause* of the stars rather than a caption
+      under them, and falling short reads the same way — the fill stops in plain
+      view, short of a mark that is right there.
 - [ ] **6.5 No-moves state.** Currently silently reshuffles. Say something.

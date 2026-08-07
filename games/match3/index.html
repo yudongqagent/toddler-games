@@ -225,9 +225,25 @@
     text-shadow:0 2px 0 rgba(170,60,90,.3);
     overflow:hidden; text-overflow:ellipsis; min-width:0;
   }
-  .title-wrap .sc { font-size:clamp(11px,3vw,14px); font-weight:800; color:#ffffffcc; flex:none; }
-  .title-wrap .sc.bump { animation:scoreBump .32s cubic-bezier(.3,1.7,.5,1); }
-  @keyframes scoreBump { 50% { transform:scale(1.35); color:#fff; } }
+  /* The score used to sit in the header, pressed up against the level name in
+     small grey type. Two unrelated facts sharing one line: the header is
+     identity and navigation, the score is live state. It belongs with the other
+     things you glance at while playing, so it moved down to sit with the goals,
+     and at that size it can simply be read instead of squinted at. */
+  .scoreline {
+    display:flex; align-items:baseline; gap:7px;
+    color:#fff; text-shadow:0 2px 0 rgba(170,60,90,.28);
+  }
+  .scoreline b {
+    font-size:clamp(21px,5.8vw,27px); font-weight:800; letter-spacing:-.5px;
+    font-variant-numeric:tabular-nums;   /* so it does not jitter as it climbs */
+  }
+  .scoreline .u {
+    font-size:clamp(10px,2.6vw,12px); font-weight:800; letter-spacing:1.4px;
+    text-transform:uppercase; opacity:.72;
+  }
+  .scoreline.bump b { animation:scoreBump .32s cubic-bezier(.3,1.7,.5,1); }
+  @keyframes scoreBump { 50% { transform:scale(1.22); } }
 
   .moves {
     flex:none; min-width:clamp(56px,15vw,74px);
@@ -1144,17 +1160,66 @@
   /* secondary actions step back so the primary one reads first */
   #win .btn-row .big-btn { font-size:clamp(13px,3.6vw,16px); padding:11px 14px; }
 
-  /* The star thresholds, said out loud on the card. */
-  #win-bar { display:flex; gap:7px; justify-content:center; margin:10px 0 0; flex-wrap:wrap; }
-  #win-bar .thr {
-    font-size:clamp(12px,3.3vw,15px); font-weight:800;
-    padding:4px 11px; border-radius:999px;
-    background:rgba(140,110,60,.13); color:#8a6a34;
+  /* ---- the star bar ----
+     Two pills reading "★★ 8,000 / ★★★ 14,400" stated the thresholds but never
+     connected them to the score above, so the card showed a number, and
+     separately some stars, and left a five-year-old to do the arithmetic.
+
+     A bar is the right shape for this because it is the one diagram that shows
+     a value and the marks it is judged against in the same object. The track
+     runs from zero to the three-star score, the two marks sit where they
+     actually fall along it, and it fills in step with the number counting up —
+     so each star lights AT THE INSTANT the fill reaches its mark. That
+     simultaneity is the whole point: it makes the bar the visible cause of the
+     stars rather than a footnote under them. Falling short reads just as
+     clearly — the fill stops short of a mark you can see. */
+  .sbar { margin:13px 1px 0; }
+  .sbar-track {
+    position:relative; height:15px; border-radius:999px;
+    background:rgba(150,110,50,.17);
+    box-shadow:inset 0 2px 3px rgba(120,80,20,.2);
   }
-  #win-bar .thr.hit {
-    background:linear-gradient(160deg,#ffe9a2,#ffc94d); color:#6b4a00;
-    box-shadow:0 2px 0 rgba(150,100,0,.25);
+  .sbar-fill {
+    position:absolute; top:0; bottom:0; left:0; width:0;
+    border-radius:999px;
+    background:linear-gradient(180deg,#ffdc7a,#ffa32e 58%,#ff7d16);
+    box-shadow:0 0 11px rgba(255,166,54,.65);
   }
+  /* a highlight along the top so the fill reads as a filled tube, not a block */
+  .sbar-fill::after {
+    content:''; position:absolute; left:4px; right:4px; top:3px; height:3px;
+    border-radius:999px; background:rgba(255,255,255,.55);
+  }
+  .sbar-pin {
+    position:absolute; top:-4px; bottom:-4px; width:3px; margin-left:-1.5px;
+    border-radius:2px; background:rgba(120,85,25,.32);
+    transition:background .18s ease, box-shadow .18s ease;
+  }
+  .sbar-pin.hit { background:#fff; box-shadow:0 0 9px rgba(255,214,122,.95); }
+  .sbar-labs { position:relative; height:32px; margin-top:7px; }
+  .sbar-lab {
+    position:absolute; top:0; display:flex; flex-direction:column;
+    align-items:center; line-height:1.2; color:#b09168;
+    transition:color .18s ease;
+  }
+  .sbar-lab b { font-size:clamp(11px,3vw,13px); letter-spacing:-1.5px; }
+  .sbar-lab .v {
+    font-size:clamp(10px,2.7vw,12px); font-weight:800;
+    font-variant-numeric:tabular-nums;
+  }
+  .sbar-lab.hit { color:#c2410c; }
+  .sbar-lab.hit b { color:#f0930c; }
+  .sbar-lab.pop b { animation:labPop .5s cubic-bezier(.3,1.7,.5,1); }
+  @keyframes labPop { 40% { transform:scale(1.45); } }
+  /* the ends anchor to the ends so neither label can hang off the card */
+  #sb-l1 { left:0; align-items:flex-start; }
+  #sb-l3 { right:0; align-items:flex-end; }
+  #sb-l2 { transform:translateX(-50%); }
+  .sbar-note {
+    font-size:clamp(11px,2.9vw,13px); font-weight:800; color:#a8815a;
+    margin-top:2px;
+  }
+  .sbar-note:empty { display:none; }
 
   #tally .panel { max-width:min(88vw, 390px); }
   /* Drawn rather than typed. A pasted emoji renders differently on every device,
@@ -1316,6 +1381,7 @@
 <!-- ---------------- GAME ---------------- -->
 <div class="screen hidden" id="game">
   <div class="side">
+    <div class="scoreline" id="scoreline"><b id="score">0</b><span class="u">points</span></div>
     <div class="goals" id="goals"></div>
     <div class="tools" id="tools">
       <button class="tool" data-t="hammer"><span class="ic">🔨</span><span class="ct"></span></button>
@@ -1337,7 +1403,18 @@
     <div class="score-block">
       <div class="score-num" id="win-score">0</div>
       <div class="score-cap">points</div>
-      <div id="win-bar"></div>
+      <div class="sbar" id="sbar">
+        <div class="sbar-track">
+          <div class="sbar-fill" id="sb-fill"></div>
+          <span class="sbar-pin" id="sb-p2"></span>
+        </div>
+        <div class="sbar-labs">
+          <span class="sbar-lab" id="sb-l1"><b>★</b><span class="v">Finish</span></span>
+          <span class="sbar-lab" id="sb-l2"><b>★★</b><span class="v">0</span></span>
+          <span class="sbar-lab" id="sb-l3"><b>★★★</b><span class="v">0</span></span>
+        </div>
+      </div>
+      <div class="sbar-note" id="sb-note"></div>
     </div>
     <p id="win-sub">3200 points</p>
     <div id="win-prize"></div>
@@ -1384,7 +1461,6 @@
   <div class="appbar-mid" id="appbar-mid">
     <div class="title-wrap">
       <div class="lv" id="lv-name">Berry Patch</div>
-      <div class="sc" id="score">0 points</div>
     </div>
     <div class="moves" id="moves-box">
       <div class="n" id="moves-n">20</div>
@@ -3259,7 +3335,8 @@ function scorePop(r, c, n) {
   setTimeout(() => { el.remove(); bumpScore(); }, 840);
 }
 function bumpScore() {
-  const s = $('score');
+  const s = $('scoreline');
+  if (!s) return;
   s.classList.remove('bump'); void s.offsetWidth; s.classList.add('bump');
   setTimeout(() => s.classList.remove('bump'), 320);
 }
@@ -3292,6 +3369,73 @@ function countUp(el, to, ms) {
   }, 33);
   setTimeout(() => { clearInterval(iv); done(); }, ms + 60);
 }
+
+/* The score screen's headline number, its star bar and the star row, all run
+   from one clock.
+
+   Keeping them on separate timers was the old bug in miniature: the number
+   counted, and some time later a fixed number of stars appeared, and nothing
+   on screen ever said the second was caused by the first. Here a star can only
+   light at the moment the fill crosses its mark, which makes the bar the
+   visible reason for the result. Falling short is legible for the same reason —
+   the fill stops in plain view, short of a mark that is right there.
+
+   Timer-driven with a guaranteed final write, for the same reason countUp is:
+   rAF does not run in a backgrounded tab, and a player who glances away must
+   not come back to a half-filled bar and one star. */
+function runScoreBar(val, stars, ms) {
+  ms = ms || 1150;
+  const bar = $('sbar');
+  if (bar) bar.style.display = freePlay || !L ? 'none' : '';
+  const rows = $('starrow').children;
+  for (const s of rows) s.classList.remove('on');
+  if (!bar || freePlay || !L) { countUp($('win-score'), val, 900); return; }
+
+  const t2 = star2(L), t3 = star3(L) || 1;
+  const fill = $('sb-fill'), pin = $('sb-p2');
+  const labs = [$('sb-l1'), $('sb-l2'), $('sb-l3')];
+  // Marks sit where they actually fall along the track, so the gap you have to
+  // cover for the last star is a real distance rather than a claim.
+  const at2 = Math.max(6, Math.min(94, t2 / t3 * 100));
+  pin.style.left = at2 + '%';
+  labs[1].style.left = at2 + '%';
+  labs[1].querySelector('.v').textContent = t2.toLocaleString();
+  labs[2].querySelector('.v').textContent = t3.toLocaleString();
+  labs.forEach(e => e.classList.remove('hit', 'pop'));
+  pin.classList.remove('hit');
+  fill.style.width = '0%';
+  $('win-score').textContent = '0';
+  // Extra moves cap the run at one star no matter what the score did, so the
+  // card has to say so — otherwise a full bar sitting under a single star reads
+  // as a bug rather than as a rule.
+  $('sb-note').textContent = usedHelp ? 'Extra moves used — one star this time' : '';
+
+  const lit = [false, false, false];
+  const light = i => {
+    if (lit[i]) return;
+    lit[i] = true;
+    labs[i].classList.add('hit', 'pop');
+    if (i === 1) pin.classList.add('hit');
+    if (i < stars) { rows[i].classList.add('on'); sfx('star', i); }
+  };
+  const step = p => {
+    const v = Math.round(val * (1 - Math.pow(1 - p, 3)));
+    $('win-score').textContent = v.toLocaleString();
+    fill.style.width = Math.min(100, v / t3 * 100) + '%';
+    if (v > 0 || p >= 1) light(0);
+    if (v >= t2) light(1);
+    if (v >= t3) light(2);
+  };
+  if (REDUCED) { step(1); return; }
+  const t0 = Date.now();
+  const iv = setInterval(() => {
+    const p = Math.min(1, (Date.now() - t0) / ms);
+    step(p);
+    if (p >= 1) clearInterval(iv);
+  }, 33);
+  setTimeout(() => { clearInterval(iv); step(1); }, ms + 80);
+}
+
 function flyToGoal(r, c, gi) {
   const chip = document.querySelector('#goals .goal[data-i="' + gi + '"] .mini');
   if (!chip || REDUCED) return;
@@ -4491,7 +4635,7 @@ function spendMove() {
 let footBase = '';
 function setFoot(msg) { $('foot').textContent = msg || footBase; }
 function paintHud() {
-  $('score').textContent = score.toLocaleString() + ' points';
+  $('score').textContent = score.toLocaleString();
   $('moves-n').textContent = freePlay ? '∞' : Math.max(0, movesLeft);
   $('moves-box').classList.toggle('low', !freePlay && movesLeft <= 3);
 }
@@ -4850,21 +4994,14 @@ function checkWin() {
     paintMenu();
     sfx('win'); buzz([80, 60, 80, 60, 160]);
     $('win-title').textContent = n === 3 ? 'Perfect!' : n === 2 ? 'Great job!' : 'You did it!';
-    // The headline number counts up rather than simply being there. A score
-    // that appears is a fact; a score that climbs is an event, and it buys the
-    // half second the stars need to land one after another. (TODO 6.4)
-    countUp($('win-score'), score, 900);
     $('win-sub').textContent = '🏆 ' + totalScore().toLocaleString() + ' total';
-    // Say what the stars were for. Two stars and no explanation is the actual
-    // complaint here — a threshold you cannot see may as well be a mood.
-    $('win-bar').innerHTML =
-      '<span class="thr' + (n >= 2 ? ' hit' : '') + '">★★ ' + star2(L).toLocaleString() + '</span>'
-      + '<span class="thr' + (n >= 3 ? ' hit' : '') + '">★★★ ' + star3(L).toLocaleString() + '</span>';
     await playOutro();
     confettiBurst(); cannon('left'); cannon('right');
     $('win').classList.add('show');
     setTimeout(() => { if ($('win').classList.contains('show')) { cannon('left'); cannon('right'); } }, 850);
-    for (let i = 0; i < n; i++) setTimeout(() => { row[i].classList.add('on'); sfx('star', i); }, 420 + i * 340);
+    // The number, the bar and the stars all run off one clock, so a star lands
+    // exactly as the fill reaches its mark. (TODO 6.4)
+    setTimeout(() => runScoreBar(score, n), 380);
   })();
   return true;
 }
