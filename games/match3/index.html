@@ -1659,8 +1659,17 @@ const FREE = { name:'Free Play', emoji:'🎈', rows:ROWS, cols:COLS, kinds:5, mo
 
    Thresholds scale with the move budget, which is itself derived from the goals,
    so a bigger level asks for a bigger score. */
-const star2 = L => Math.round(L.moves * 900 / 100) * 100;
-const star3 = L => Math.round(L.moves * 1600 / 100) * 100;
+/* Halved from 900/1600. Three stars was out of reach — measured, a level
+   finishing on 18,300 needed 22,400 — and a top rank nobody reaches is just a
+   greyed-out row. Both come down together: halving only the three-star bar would
+   have put it BELOW the two-star one. */
+const star2 = L => Math.round(L.moves * 450 / 100) * 100;
+const star3 = L => Math.round(L.moves * 800 / 100) * 100;
+// What a spare move is worth the moment it becomes a booster, before that
+// booster has blown anything up. Unused moves should feel banked, not merely
+// spent — the blast that follows is a bonus on top of this, not the whole
+// reward.
+const SPARE_MOVE_BONUS = 500;
 
 /* ---------------- storage (all keys namespaced match3-) ---------------- */
 function stars() {
@@ -4690,6 +4699,9 @@ async function finale(spare) {
     at.el.classList.remove('born'); void at.el.offsetWidth; at.el.classList.add('born');
     setTimeout(() => at.el.classList.remove('born'), 260);
     converge(at.r, at.c, at.k);
+    score += SPARE_MOVE_BONUS;
+    scorePop(at.r, at.c, SPARE_MOVE_BONUS);
+    paintHud();
     sfx('make'); buzz(16);
     placed.push(at);
     // The laying-out speeds up as it goes, so fifteen moves is not fifteen times
