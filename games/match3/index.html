@@ -1105,57 +1105,6 @@
   /* The end-of-level tally. A toast was the wrong container for this — it is
      small, it sits at the edge, and it vanishes before a child has read it. This
      is the one moment in the level worth stopping for, so it stops. */
-  /* ---- the score bar ----
-     Loose text reading "3,200 points" in the header told you a number and
-     nothing else: no sense of whether it was good, and no connection to the
-     stars it would eventually be judged against. It is a BAR now, running the
-     width of the board with the two star thresholds marked on it, so the score
-     is always shown against what it is for. Passing a mark lights it, which is
-     the moment worth celebrating and previously happened silently at the end of
-     the level.
-
-     The same component appears on the win card, where it fills in step with the
-     counting number — so the thing you watched during the level is the thing
-     that settles your stars, rather than two separate presentations of one
-     idea. */
-  .scorebar { display:flex; align-items:center; gap:9px; width:100%; margin:0 0 6px; }
-  .sb-track {
-    position:relative; flex:1; height:clamp(13px,3.4vw,17px);
-    border-radius:999px;
-    background:rgba(255,255,255,.3);
-    box-shadow:inset 0 2px 4px rgba(120,40,80,.2);
-    overflow:visible;
-  }
-  .sb-fill {
-    position:absolute; left:0; top:0; bottom:0; width:0;
-    border-radius:999px;
-    background:linear-gradient(90deg,#ffd166,#ff8c42 60%,#ff5f6d);
-    box-shadow:0 0 8px rgba(255,150,80,.6);
-    transition:width .45s cubic-bezier(.3,1.1,.5,1);
-  }
-  /* the marks sit ON the track, so the bar reads as a route with two waypoints */
-  .sb-mark {
-    position:absolute; top:50%; transform:translate(-50%,-50%) scale(.9);
-    font-size:clamp(8px,2.2vw,10px); letter-spacing:-1px;
-    padding:2px 5px; border-radius:999px; white-space:nowrap;
-    background:rgba(255,255,255,.75); color:#b9a48a;
-    box-shadow:0 1px 0 rgba(0,0,0,.12);
-    transition:transform .3s cubic-bezier(.3,1.7,.5,1), background .3s, color .3s;
-  }
-  .sb-mark.hit {
-    background:linear-gradient(160deg,#fff0a8,#ffc93c); color:#7a5200;
-    transform:translate(-50%,-50%) scale(1.18);
-    box-shadow:0 2px 0 rgba(150,100,0,.3), 0 0 10px rgba(255,200,80,.8);
-  }
-  .sb-num {
-    flex:none; font-size:clamp(13px,3.6vw,16px); font-weight:800; color:#fff;
-    text-shadow:0 2px 0 rgba(120,40,80,.35);
-    font-variant-numeric:tabular-nums; min-width:4.2em; text-align:right;
-  }
-  .scorebar.win { margin:10px 0 0; }
-  .scorebar.win .sb-track { background:rgba(160,120,60,.16); box-shadow:inset 0 2px 4px rgba(140,100,40,.18); }
-  .scorebar.win .sb-mark { background:rgba(255,255,255,.9); }
-
   /* ---- the score screen ----
      The old card gave every element the same weight: mascot, title, stars,
      a line of small text carrying the score, the prize, then three buttons all
@@ -1192,17 +1141,20 @@
     box-shadow:0 2px 0 rgba(30,90,130,.2);
   }
   #win-prize:empty { display:none; }
-  /* Each tool lands separately after the bar has settled, so winning two reads
-     as two things rather than as one longer sentence. */
-  .prize-ic {
-    display:inline-block; font-size:1.25em;
-    transform:scale(0) rotate(-40deg); opacity:0;
-    transition:transform .38s cubic-bezier(.3,1.8,.5,1), opacity .2s;
-  }
-  .prize-ic.pop { transform:none; opacity:1; }
   /* secondary actions step back so the primary one reads first */
   #win .btn-row .big-btn { font-size:clamp(13px,3.6vw,16px); padding:11px 14px; }
 
+  /* The star thresholds, said out loud on the card. */
+  #win-bar { display:flex; gap:7px; justify-content:center; margin:10px 0 0; flex-wrap:wrap; }
+  #win-bar .thr {
+    font-size:clamp(12px,3.3vw,15px); font-weight:800;
+    padding:4px 11px; border-radius:999px;
+    background:rgba(140,110,60,.13); color:#8a6a34;
+  }
+  #win-bar .thr.hit {
+    background:linear-gradient(160deg,#ffe9a2,#ffc94d); color:#6b4a00;
+    box-shadow:0 2px 0 rgba(150,100,0,.25);
+  }
 
   #tally .panel { max-width:min(88vw, 390px); }
   /* Drawn rather than typed. A pasted emoji renders differently on every device,
@@ -1364,14 +1316,6 @@
 <!-- ---------------- GAME ---------------- -->
 <div class="screen hidden" id="game">
   <div class="side">
-    <div class="scorebar" id="scorebar">
-      <div class="sb-track">
-        <div class="sb-fill" id="sb-fill"></div>
-        <span class="sb-mark" id="sb-m2">★★</span>
-        <span class="sb-mark" id="sb-m3">★★★</span>
-      </div>
-      <div class="sb-num" id="score">0</div>
-    </div>
     <div class="goals" id="goals"></div>
     <div class="tools" id="tools">
       <button class="tool" data-t="hammer"><span class="ic">🔨</span><span class="ct"></span></button>
@@ -1393,13 +1337,7 @@
     <div class="score-block">
       <div class="score-num" id="win-score">0</div>
       <div class="score-cap">points</div>
-      <div class="scorebar win" id="win-bar">
-        <div class="sb-track">
-          <div class="sb-fill" id="wb-fill"></div>
-          <span class="sb-mark" id="wb-m2">★★</span>
-          <span class="sb-mark" id="wb-m3">★★★</span>
-        </div>
-      </div>
+      <div id="win-bar"></div>
     </div>
     <p id="win-sub">3200 points</p>
     <div id="win-prize"></div>
@@ -1446,6 +1384,7 @@
   <div class="appbar-mid" id="appbar-mid">
     <div class="title-wrap">
       <div class="lv" id="lv-name">Berry Patch</div>
+      <div class="sc" id="score">0 points</div>
     </div>
     <div class="moves" id="moves-box">
       <div class="n" id="moves-n">20</div>
@@ -4551,24 +4490,8 @@ function spendMove() {
 }
 let footBase = '';
 function setFoot(msg) { $('foot').textContent = msg || footBase; }
-/* Drives either score bar from a score. The track runs to the three-star mark,
-   so a full bar means top marks — beyond that it simply stays full rather than
-   rescaling, because a bar that keeps moving after you have won everything is
-   telling you about nothing. Marks are placed by proportion, so they slide with
-   the level's own thresholds. */
-function paintScoreBar(fillEl, m2El, m3El, val) {
-  if (!fillEl || !L) return;
-  const t2 = star2(L), t3 = star3(L) || 1;
-  fillEl.style.width = Math.min(100, val / t3 * 100) + '%';
-  if (m2El) { m2El.style.left = Math.min(96, t2 / t3 * 100) + '%';
-              m2El.classList.toggle('hit', val >= t2); }
-  if (m3El) { m3El.style.left = '100%';
-              m3El.classList.toggle('hit', val >= t3); }
-}
 function paintHud() {
-  $('score').textContent = score.toLocaleString();
-  if (!freePlay) paintScoreBar($('sb-fill'), $('sb-m2'), $('sb-m3'), score);
-  $('scorebar').style.display = freePlay ? 'none' : '';
+  $('score').textContent = score.toLocaleString() + ' points';
   $('moves-n').textContent = freePlay ? '∞' : Math.max(0, movesLeft);
   $('moves-box').classList.toggle('low', !freePlay && movesLeft <= 3);
 }
@@ -4921,13 +4844,9 @@ function checkWin() {
     setStar(levelNo, n);
     const won2 = n === 3 ? TOOL_IDS[(levelNo + 1) % TOOL_IDS.length] : null;
     if (won2) grantTool(won2);
-    const prizes = won2 ? [won1, won2] : [won1];
-    $('win-prize').innerHTML = 'You won '
-      + prizes.map(t => '<b class="prize-ic">' + TOOL_ICON[t] + '</b>').join(' ');
-    prizes.forEach((_, i) => setTimeout(() => {
-      const ic = $('win-prize').querySelectorAll('.prize-ic')[i];
-      if (ic) ic.classList.add('pop');
-    }, 1100 + i * 220));
+    $('win-prize').textContent = won2
+      ? 'You won ' + TOOL_ICON[won1] + ' and ' + TOOL_ICON[won2] + '!'
+      : 'You won a ' + TOOL_ICON[won1] + '!';
     paintMenu();
     sfx('win'); buzz([80, 60, 80, 60, 160]);
     $('win-title').textContent = n === 3 ? 'Perfect!' : n === 2 ? 'Great job!' : 'You did it!';
@@ -4935,23 +4854,12 @@ function checkWin() {
     // that appears is a fact; a score that climbs is an event, and it buys the
     // half second the stars need to land one after another. (TODO 6.4)
     countUp($('win-score'), score, 900);
-    // The bar climbs with the number, so a threshold lighting up lands at the
-    // same moment the number crosses it.
-    paintScoreBar($('wb-fill'), $('wb-m2'), $('wb-m3'), 0);
-    (() => { const t0 = Date.now(), iv = setInterval(() => {
-        const p = Math.min(1, (Date.now() - t0) / 900);
-        paintScoreBar($('wb-fill'), $('wb-m2'), $('wb-m3'),
-                      Math.round(score * (1 - Math.pow(1 - p, 3))));
-        if (p >= 1) clearInterval(iv);
-      }, 33);
-      setTimeout(() => { clearInterval(iv);
-        paintScoreBar($('wb-fill'), $('wb-m2'), $('wb-m3'), score); }, 980); })();
     $('win-sub').textContent = '🏆 ' + totalScore().toLocaleString() + ' total';
-    // The thresholds are the bar's own marks now. This used to blow the bar's
-    // markup away and replace it with a pair of static pills, which left the
-    // fill element it had just been told to animate detached from the document.
-    $('wb-m2').textContent = '★★ ' + star2(L).toLocaleString();
-    $('wb-m3').textContent = '★★★ ' + star3(L).toLocaleString();
+    // Say what the stars were for. Two stars and no explanation is the actual
+    // complaint here — a threshold you cannot see may as well be a mood.
+    $('win-bar').innerHTML =
+      '<span class="thr' + (n >= 2 ? ' hit' : '') + '">★★ ' + star2(L).toLocaleString() + '</span>'
+      + '<span class="thr' + (n >= 3 ? ' hit' : '') + '">★★★ ' + star3(L).toLocaleString() + '</span>';
     await playOutro();
     confettiBurst(); cannon('left'); cannon('right');
     $('win').classList.add('show');
