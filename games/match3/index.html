@@ -1105,6 +1105,18 @@
   /* The end-of-level tally. A toast was the wrong container for this — it is
      small, it sits at the edge, and it vanishes before a child has read it. This
      is the one moment in the level worth stopping for, so it stops. */
+  /* The star thresholds, said out loud on the card. */
+  #win-bar { display:flex; gap:8px; justify-content:center; margin:2px 0 10px; flex-wrap:wrap; }
+  #win-bar .thr {
+    font-size:clamp(12px,3.3vw,15px); font-weight:800;
+    padding:4px 11px; border-radius:999px;
+    background:rgba(140,110,60,.13); color:#8a6a34;
+  }
+  #win-bar .thr.hit {
+    background:linear-gradient(160deg,#ffe9a2,#ffc94d); color:#6b4a00;
+    box-shadow:0 2px 0 rgba(150,100,0,.25);
+  }
+
   #tally .panel { max-width:min(88vw, 390px); }
   /* Drawn rather than typed. A pasted emoji renders differently on every device,
      sits on its own baseline, and is the one thing on a designed panel that
@@ -1284,6 +1296,7 @@
     <h2 id="win-title">Yay! You did it!</h2>
     <div class="starrow" id="starrow"><span>⭐</span><span>⭐</span><span>⭐</span></div>
     <p id="win-sub">3200 points</p>
+    <div id="win-bar"></div>
     <p id="win-prize"></p>
     <button class="big-btn" id="next-btn">Next game ▸</button>
     <div class="btn-row">
@@ -1633,8 +1646,21 @@ const FREE = { name:'Free Play', emoji:'🎈', rows:ROWS, cols:COLS, kinds:5, mo
 // finishable by a child swapping more or less at random, but at 0.75 that same
 // random play also three-starred the late levels, which made the stars
 // meaningless. The budget is the safety net; par is the actual challenge.
-const par3 = L => Math.round(L.moves * 0.62);
-const par2 = L => Math.round(L.moves * 0.85);
+/* Stars are earned on SCORE, not on how few moves it took. Moves-used is the
+   steadier measure — measured, one level cleared its goals in a single lucky
+   swap for 21,300 while another took six careful moves for 8,280 — but steadier
+   is not the same as better here. This game has no fail state, and a lucky
+   cascade paying out in stars is generous rather than unfair, which is the right
+   trade for a three-year-old.
+
+   Efficiency still counts, because the judgement happens AFTER the finale: every
+   spare move becomes a booster, every booster scores, so finishing early feeds
+   straight back into the number the stars are read from.
+
+   Thresholds scale with the move budget, which is itself derived from the goals,
+   so a bigger level asks for a bigger score. */
+const star2 = L => Math.round(L.moves * 900 / 100) * 100;
+const star3 = L => Math.round(L.moves * 1600 / 100) * 100;
 
 /* ---------------- storage (all keys namespaced match3-) ---------------- */
 function stars() {
@@ -4715,29 +4741,16 @@ function checkWin() {
   over = true;
   clearNudge();
   clearSave();
-  let n = 3;
-  if (usedHelp) n = 1;
-  else if (movesUsed > par2(L)) n = 1;
-  else if (movesUsed > par3(L)) n = 2;
-  setStar(levelNo, n);
   addTotal(score);              // points are kept forever
-  unlockLevel(levelNo + 1);     // there is always a next level
-  // Every level pays out a tool, rotating so the stock stays balanced, plus a
-  // bonus one for three stars. This is the only way to get them — no shop.
-  const won1 = TOOL_IDS[levelNo % TOOL_IDS.length];
-  grantTool(won1);
-  const won2 = n === 3 ? TOOL_IDS[(levelNo + 1) % TOOL_IDS.length] : null;
-  if (won2) grantTool(won2);
-  $('win-prize').textContent = won2
-    ? 'You won ' + TOOL_ICON[won1] + ' and ' + TOOL_ICON[won2] + '!'
-    : 'You won a ' + TOOL_ICON[won1] + '!';
-  paintMenu();
-  sfx('win'); buzz([80, 60, 80, 60, 160]);
-  $('win-title').textContent = n === 3 ? 'Perfect!' : n === 2 ? 'Great job!' : 'You did it!';
-  $('win-sub').textContent = score.toLocaleString() + ' points · 🏆 ' + totalScore().toLocaleString() + ' total';
-  $('win-mascot').textContent = ['🐻', '🐰', '🦊', '🐸', '🐨'][rnd(5)];
   const row = $('starrow').children;
   for (let i = 0; i < 3; i++) row[i].classList.remove('on');
+  unlockLevel(levelNo + 1);     // there is always a next level
+  // Every level pays out a tool, rotating so the stock stays balanced. The
+  // BONUS tool for three stars has to wait until the finale has run, since the
+  // stars are now read off the final score rather than off moves used.
+  const won1 = TOOL_IDS[levelNo % TOOL_IDS.length];
+  grantTool(won1);
+  $('win-mascot').textContent = ['🐻', '🐰', '🦊', '🐸', '🐨'][rnd(5)];
   $('next-btn').textContent = 'Level ' + (levelNo + 1) + ' ▸';
   // Clear the board away first — the celebration lands on an empty stage
   // instead of covering up a board still full of fruit.
@@ -4750,8 +4763,25 @@ function checkWin() {
     const before = score;
     await finale(spare);      // drains movesLeft itself, so the count is visible
     if (score > before) addTotal(score - before);
+    // Only now is the score final, so only now can the stars be read from it.
+    let n = score >= star3(L) ? 3 : score >= star2(L) ? 2 : 1;
+    if (usedHelp) n = 1;        // extra moves were taken; the run is not a clean one
+    setStar(levelNo, n);
+    const won2 = n === 3 ? TOOL_IDS[(levelNo + 1) % TOOL_IDS.length] : null;
+    if (won2) grantTool(won2);
+    $('win-prize').textContent = won2
+      ? 'You won ' + TOOL_ICON[won1] + ' and ' + TOOL_ICON[won2] + '!'
+      : 'You won a ' + TOOL_ICON[won1] + '!';
+    paintMenu();
+    sfx('win'); buzz([80, 60, 80, 60, 160]);
+    $('win-title').textContent = n === 3 ? 'Perfect!' : n === 2 ? 'Great job!' : 'You did it!';
     $('win-sub').textContent = score.toLocaleString() + ' points · 🏆 '
       + totalScore().toLocaleString() + ' total';
+    // Say what the stars were for. Two stars and no explanation is the actual
+    // complaint here — a threshold you cannot see may as well be a mood.
+    $('win-bar').innerHTML =
+      '<span class="thr' + (n >= 2 ? ' hit' : '') + '">★★ ' + star2(L).toLocaleString() + '</span>'
+      + '<span class="thr' + (n >= 3 ? ' hit' : '') + '">★★★ ' + star3(L).toLocaleString() + '</span>';
     await playOutro();
     confettiBurst(); cannon('left'); cannon('right');
     $('win').classList.add('show');
