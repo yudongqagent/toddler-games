@@ -576,14 +576,19 @@
      viewer belongs bigger with a longer, softer shadow in that same direction.
      Translating it up would light it from nowhere. */
   .tile.sel { z-index:5; }             /* over its neighbours, under a popping tile */
+  /* Scale is the loud part of the lift and it was overdone at 1.17 — a tile that
+     big crowds its neighbours, which is bad here because the neighbours are
+     exactly what the player is reading next. Pulled back below where it started,
+     leaving the shadow to carry the elevation. Size says "this one"; height is
+     the shadow's job. */
   .tile.sel .inner {
-    transform:scale(1.17);
+    transform:scale(1.09);
     animation:selLift .3s cubic-bezier(.28,1.55,.5,1);
     /* drop-shadow, not box-shadow: each fruit carries its own border-radius
        (2.1), and this follows whatever silhouette is actually there */
     filter:drop-shadow(0 calc(var(--cell)*.1) calc(var(--cell)*.075) rgba(72,26,66,.42));
   }
-  @keyframes selLift { 0%{transform:scale(1)} 55%{transform:scale(1.24)} 100%{transform:scale(1.17)} }
+  @keyframes selLift { 0%{transform:scale(1)} 55%{transform:scale(1.14)} 100%{transform:scale(1.09)} }
   .tile.sel .shape {
     box-shadow:
       inset 0 calc(var(--cell)*.07) 0 rgba(255,255,255,.34),
