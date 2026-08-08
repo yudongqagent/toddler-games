@@ -549,9 +549,47 @@
   }
   .tile.jelly .face { position:relative; z-index:1; }
 
-  .tile.sel .inner { transform:scale(1.12); animation:wiggle .5s ease-in-out infinite; }
-  @keyframes wiggle { 0%,100%{rotate:-4deg} 50%{rotate:4deg} }
-  .tile.sel .shape { box-shadow:0 0 0 calc(var(--cell)*.055) #fff, 0 0 calc(var(--cell)*.2) rgba(255,255,255,.9); }
+  /* ---- selection: the piece lifts, it does not wiggle ----
+     A selected tile grew 12% and then wiggled for as long as it was held. Two
+     things wrong with that.
+
+     The wiggle is motion underneath the player's search. Once a piece is picked
+     the eye moves to its NEIGHBOURS to choose a target, and the one thing still
+     moving on the board keeps dragging it back to the decision already made.
+     This is the same rule that killed the idle bob in 2.2 — motion competes with
+     visual search — and it applies just as much to one tile as to fifty.
+
+     And the highlight REPLACED the shape's box-shadow with a flat white ring
+     plus a glow, so the selected piece lost the inset shading and the cast
+     shadow that gave every other tile its depth. It got brighter while becoming
+     flatter, which is the opposite of picking something up.
+
+     It lifts now: scaled up with a real shadow cast down onto the board, its own
+     shading kept and the ring added on top rather than instead. One spring
+     settles it, then it holds still — an object picked up and held, which is the
+     state it is actually in.
+
+     The lift is scale-and-shadow with NO upward translate, for two reasons that
+     agree. #board is overflow:hidden, so a tile in the top row would have its
+     lifted edge sliced off by the tray. And the board is lit from above-front —
+     every .shape casts its shadow downward — so an object raised toward the
+     viewer belongs bigger with a longer, softer shadow in that same direction.
+     Translating it up would light it from nowhere. */
+  .tile.sel { z-index:5; }             /* over its neighbours, under a popping tile */
+  .tile.sel .inner {
+    transform:scale(1.17);
+    animation:selLift .3s cubic-bezier(.28,1.55,.5,1);
+    /* drop-shadow, not box-shadow: each fruit carries its own border-radius
+       (2.1), and this follows whatever silhouette is actually there */
+    filter:drop-shadow(0 calc(var(--cell)*.1) calc(var(--cell)*.075) rgba(72,26,66,.42));
+  }
+  @keyframes selLift { 0%{transform:scale(1)} 55%{transform:scale(1.24)} 100%{transform:scale(1.17)} }
+  .tile.sel .shape {
+    box-shadow:
+      inset 0 calc(var(--cell)*.07) 0 rgba(255,255,255,.34),
+      inset 0 calc(var(--cell)*-.09) 0 rgba(0,0,0,.2),
+      0 0 0 calc(var(--cell)*.05) #fff;
+  }
   .tile.nudge .inner { animation:nudge 1s ease-in-out infinite; }
   @keyframes nudge { 0%,100%{transform:scale(1)} 40%{transform:scale(1.16)} }
   .tile.nope .inner { animation:nope .34s ease; }

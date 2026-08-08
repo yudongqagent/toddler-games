@@ -15,13 +15,13 @@ first three sections.
 
 ## 1. The disappearing animation — the biggest single gap
 
-> **1.1–1.4 done.** The tile comes apart now: the shell bursts outward while the
-> fruit squashes and goes, both with a wind-up frame and a blown-out flash at the
-> moment of destruction, and debris is thrown away from wherever the clear
-> started. 1.5 remains.
+> **Section complete.** The tile comes apart now: the shell bursts outward while
+> the fruit squashes and goes, both with a wind-up frame and a blown-out flash at
+> the moment of destruction, debris is thrown away from wherever the clear
+> started, and the pop travels along the run so you can read the line.
 
-Right now a matched fruit does one thing: the whole tile scales up, rotates and
-shrinks to nothing, with canvas sparks thrown behind it. It reads as *deleted*.
+Originally a matched fruit did one thing: the whole tile scaled up, rotated and
+shrank to nothing, with canvas sparks thrown behind it. It read as *deleted*.
 A Candy Crush candy reads as *destroyed* — it comes apart.
 
 - [x] **1.1 Anticipation.** *(done)* The fruit should squash down a frame before it goes.
@@ -35,9 +35,12 @@ A Candy Crush candy reads as *destroyed* — it comes apart.
       sideways, a blast throws away from its centre.
 - [x] **1.4 A real flash frame.** *(done)* One or two frames of a bright silhouette at the
       moment of destruction, which is what sells impact in every action game.
-- [ ] **1.5 Stagger within a match.** Three fruit in a run currently pop on a
-      distance-based delay from the move. They should pop *along* the run, so you
-      read the line.
+- [x] **1.5 Stagger within a match.** *(done)* ~~Three fruit in a run pop on a
+      distance-based delay from the move.~~ A cascade match has no origin cell, so
+      every cell got a delay of zero and the run vanished on one frame. It now
+      falls back to the run's OWN long axis — bounding box, stagger along the
+      longer side — so the pop travels down the line and you can read which way
+      the match ran.
 
 ## 2. Tile identity — the readability gap
 
@@ -47,9 +50,10 @@ pentagon). That is not decoration: shape is the fastest cue the eye resolves, an
 it is the reason their board is legible at speed and to a colour-blind player.
 We lean on hue and a glyph, which are the two weakest cues.
 
-- [ ] **2.1 A distinct silhouette per fruit.** Six shapes, one per kind. This is
-      the single biggest visual upgrade available and it also fixes colour-blind
-      accessibility, which hue-only never can.
+- [x] **2.1 A distinct silhouette per fruit.** *(done)* Six border-radius
+      profiles, one per kind. Blockers, frozen fruit and gum keep the plain
+      square, so a piece that is STUCK never also changes shape — one signal per
+      idea.
 - [x] **2.2 Idle life.** ~~Candy Crush candies blink and shift while you think.
       Our board is frozen except the duckling and the gum.~~
       **TRIED AND REVERTED — do not redo this.** A staggered idle bob was built,
@@ -61,8 +65,14 @@ We lean on hue and a glyph, which are the two weakest cues.
       in direct conflict on a match-3 board and search has to win. If the board
       ever needs life, it should come at moments when nobody is searching — the
       level intro, or after a win — not underneath the core task.
-- [ ] **2.3 Selection should lift.** Tapping wiggles the tile in place. A
-      selected piece should lift toward the player with a shadow underneath it.
+- [x] **2.3 Selection should lift.** *(done)* The wiggle was motion underneath
+      the player's search — the same rule that killed 2.2 — and the highlight
+      REPLACED the shape's shading with a flat ring, so the piece got brighter
+      while losing every cue that gave it depth. It scales up now, keeps its own
+      shading with the ring added on top, and casts a real shadow onto the board.
+      Scale-and-shadow with no upward translate: #board is overflow:hidden so a
+      top-row tile would be sliced, and the board is lit from above-front, so a
+      raised object belongs bigger with a longer shadow in that same direction.
 - [ ] **2.4 Drag should follow the finger.** Currently a swipe past a threshold
       triggers a swap. The piece should move *with* the finger and snap back if
       released short — the difference between operating a UI and handling an
@@ -73,11 +83,13 @@ We lean on hue and a glyph, which are the two weakest cues.
 A three-chain and a one-chain look nearly identical apart from a toast. The pitch
 ladder does the work in audio; the visuals do not follow.
 
-- [ ] **3.1 Scale the burst with cascade depth.** More debris, bigger flash,
-      longer ring at depth 3 than at depth 1.
-- [ ] **3.2 A finale.** Candy Crush's "Sugar Crush" spends leftover moves as
-      fireworks. Finishing a level here just shows a card. Leftover moves should
-      *do* something.
+- [x] **3.1 Scale the burst with cascade depth.** *(done)* A five-stop heat
+      ramp: the ring grows and shifts white → gold → orange → pink with depth,
+      with a second inner ring from depth 3.
+- [x] **3.2 A finale.** *(done)* Goals tally up, then each spare move converts
+      one tile into a booster, then every booster on the board fires and the
+      board chains — accelerating over long chains, and re-firing boosters the
+      chain itself creates.
 - [ ] **3.3 Board-level reaction.** The tray should respond to a big cascade —
       a pulse of light across it, not a shake (shake was removed deliberately and
       should stay removed).
@@ -98,8 +110,8 @@ Board shapes were tried and removed on purpose (a clipped board is a smaller
 board). So variety has to come from elsewhere, and right now every level is the
 same pink rectangle with different chips at the top.
 
-- [ ] **5.1 Themed backgrounds by level range.** Every ten levels should look
-      like somewhere new. Cheap to do with the existing gradient and bubbles.
+- [x] **5.1 Themed backgrounds by level range.** *(done)* Eight gradient themes
+      driven off the level number.
 - [ ] **5.2 The tray should be dressed.** It is a plain translucent rectangle.
       A frame with some character costs nothing at runtime.
 - [ ] **5.3 A level intro that says what is new.** When a level introduces
