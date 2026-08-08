@@ -446,6 +446,10 @@
     box-shadow:inset 0 2px 10px rgba(120,40,80,.18), 0 8px 22px rgba(120,40,80,.2);
     padding:0;
     overflow:hidden;
+    /* The board owns every gesture that starts on it. Nothing on this page
+       scrolls, so there is nothing to give up, and this guarantees a drag is
+       never cut short by the browser deciding mid-gesture that it was a pan. */
+    touch-action:none;
   }
   #cells { position:absolute; inset:0; z-index:0; pointer-events:none; }
   .cellbg {
@@ -465,7 +469,14 @@
     position:absolute; left:0; top:0;
     width:var(--cell); height:var(--cell);
     padding:calc(var(--cell) * .06);
-    transform:translate3d(calc(var(--tc) * var(--cell)), calc(var(--tr) * var(--cell)), 0);
+    /* --dx/--dy are the live drag offset (2.4). Folding them into the SAME
+       transform that carries the grid position is what lets a piece be dragged
+       and then swapped without the two fighting: on release the offset returns
+       to zero while the grid position changes, and both interpolate together as
+       one movement rather than a snap-back followed by a swap. */
+    transform:translate3d(
+      calc(var(--tc) * var(--cell) + var(--dx, 0px)),
+      calc(var(--tr) * var(--cell) + var(--dy, 0px)), 0);
     /* The curve is the original one, with its little overshoot on arrival —
        that bounce is most of the character of the movement, and flattening it
        into a hard accelerate/decelerate made everything feel businesslike. Only
@@ -473,6 +484,12 @@
     transition:transform .21s cubic-bezier(.34,1.2,.5,1);
     cursor:pointer; z-index:2;
   }
+  /* While a finger is on it the piece tracks 1:1 with no easing — a transition
+     here would put the tile behind the finger, which is the exact feeling this
+     is meant to remove. Above its neighbours so it slides over them, but the
+     rule sits BEFORE .tile.sel so the dragged piece keeps sel's higher z and
+     stays on top of the partner it is pushing. */
+  .tile.dragging { transition:none; z-index:4; }
   .tile .inner {
     position:relative; width:100%; height:100%;
     transition:transform .12s ease;
@@ -4598,31 +4615,89 @@ board.addEventListener('pointerdown', ev => {
     useSwap(a, t);
     return;
   }
-  drag = { t, x: ev.clientX, y: ev.clientY, done: false };
+  drag = { t, x: ev.clientX, y: ev.clientY, done: false, axis: null, partner: null, nope: false };
   if (sel && sel !== t && adjacent(sel, t)) { const s = sel; drag.done = true; trySwap(s, t); return; }
   if (sel === t) { drag.done = true; if (t.sp !== SP_NONE) activate(t); else select(null); return; }
   select(t);
 });
 let drag = null;
+
+/* ---- 2.4: the piece travels with the finger ----
+   A swipe past a threshold used to fire the swap and nothing moved before that
+   instant, so the board was a control surface: you made an input, and some time
+   later a result appeared. Pieces you can push feel like objects instead, and
+   the whole difference is in the part BEFORE the commit.
+
+   Three things carry it. The piece tracks the finger 1:1 rather than waiting for
+   a verdict. The neighbour it is being pushed into moves the opposite way by the
+   same amount, so the pair reads as two things trading places rather than one
+   thing sliding over another. And an illegal push — the board edge, frost, two
+   blockers — still answers, but stiffly and barely: the piece tells you it is
+   stuck by refusing to keep up, which says more than not moving at all. */
+const DRAG_COMMIT = .42;                 // fraction of a cell, unchanged
+function dragMove(t, ax, off) {
+  if (!t) return;
+  t.el.classList.add('dragging');
+  t.el.style.setProperty(ax === 'x' ? '--dx' : '--dy', off + 'px');
+}
+// Drop the offset and let .tile's own transition carry whatever happens next —
+// a snap back to zero on release, or the swap that was just committed.
+function dragRelease(t) {
+  if (!t || !t.el) return;
+  t.el.classList.remove('dragging');
+  t.el.style.removeProperty('--dx');
+  t.el.style.removeProperty('--dy');
+}
+function endDrag() {
+  if (!drag) return;
+  dragRelease(drag.t); dragRelease(drag.partner);
+  drag = null;
+}
 board.addEventListener('pointermove', ev => {
   if (!drag || drag.done || busy || armed) return;
   const dx = ev.clientX - drag.x, dy = ev.clientY - drag.y;
   const cell = board.clientWidth / C;
-  if (Math.hypot(dx, dy) < cell * .42) return;
-  drag.done = true;
-  const [dr, dc] = Math.abs(dx) > Math.abs(dy) ? [0, Math.sign(dx)] : [Math.sign(dy), 0];
+  // Lock the axis as soon as the gesture has a direction. Without this the
+  // piece flips between horizontal and vertical while the finger wanders, and
+  // a three-year-old's finger wanders.
+  if (!drag.axis) {
+    if (Math.hypot(dx, dy) < 3) return;
+    drag.axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+  }
+  const raw = drag.axis === 'x' ? dx : dy;
+  const dir = Math.sign(raw);
+  if (!dir) return;
+  const [dr, dc] = drag.axis === 'x' ? [0, dir] : [dir, 0];
   const r2 = drag.t.r + dr, c2 = drag.t.c + dc;
-  if (r2 < 0 || r2 >= R || c2 < 0 || c2 >= C) return;
-  const target = grid[r2][c2];
+  const target = (r2 >= 0 && r2 < R && c2 >= 0 && c2 < C) ? grid[r2][c2] : null;
   // The tap path refused frozen fruit; the DRAG path did not, so you could
   // swipe a fruit straight into a block of ice.
-  if (!target) { sfx('nope'); return; }
-  if (drag.t.block && target.block) { sfx('nope'); return; }
-  if (!canMove(drag.t) || !canMove(target)) { sfx('nope'); return; }
-  trySwap(drag.t, target);
+  const legal = !!target && !(drag.t.block && target.block)
+             && canMove(drag.t) && canMove(target);
+
+  // Reversing direction mid-gesture hands the push to the tile on the other
+  // side, so the one that was being pushed has to be let go of first.
+  if (drag.partner && drag.partner !== target) { dragRelease(drag.partner); drag.partner = null; }
+
+  const cap = cell * DRAG_COMMIT;
+  const off = legal ? dir * Math.min(Math.abs(raw), cap)
+                    : dir * Math.min(Math.abs(raw) * .3, cell * .14);
+  dragMove(drag.t, drag.axis, off);
+  if (legal) { drag.partner = target; dragMove(target, drag.axis, -off); }
+  else if (Math.abs(raw) >= cap && !drag.nope) { drag.nope = true; sfx('nope'); }
+
+  if (legal && Math.abs(raw) >= cap) {
+    const a = drag.t, b = target;
+    drag.done = true;
+    endDrag();                 // clears both offsets while the swap sets up
+    trySwap(a, b);
+  }
 });
-board.addEventListener('pointerup', () => { drag = null; });
-board.addEventListener('pointercancel', () => { drag = null; });
+board.addEventListener('pointerup', endDrag);
+board.addEventListener('pointercancel', endDrag);
+// A mouse released off the board never fires pointerup on it, which would strand
+// the offset and leave a tile parked half a cell out of its column.
+window.addEventListener('pointerup', endDrag);
 
 function tileFromEl(el) {
   for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) if (grid[r][c] && grid[r][c].el === el) return grid[r][c];

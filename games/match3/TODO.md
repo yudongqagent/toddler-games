@@ -73,10 +73,13 @@ We lean on hue and a glyph, which are the two weakest cues.
       Scale-and-shadow with no upward translate: #board is overflow:hidden so a
       top-row tile would be sliced, and the board is lit from above-front, so a
       raised object belongs bigger with a longer shadow in that same direction.
-- [ ] **2.4 Drag should follow the finger.** Currently a swipe past a threshold
-      triggers a swap. The piece should move *with* the finger and snap back if
-      released short — the difference between operating a UI and handling an
-      object.
+- [x] **2.4 Drag should follow the finger.** *(done)* The piece tracks the finger
+      1:1 and snaps back if released short, and the neighbour it is pushed into
+      moves the opposite way by the same amount, so the pair reads as two things
+      trading places. An illegal push — board edge, frost, two blockers — still
+      answers but stiffly, capped at a seventh of a cell: the piece says it is
+      stuck by refusing to keep up. The axis locks once the gesture has a
+      direction, past a 3px deadzone so a wobbly tap is still a tap.
 
 ## 3. Escalation — cascades should build
 
