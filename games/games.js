@@ -60,6 +60,23 @@ const GAMES = [
     },
   },
 
+  {
+    id: 'chess',
+    name: 'Chess',
+    tagline: 'Outsmart the computer \u2014 and learn as you play',
+    emoji: '\u265e',
+    cast: ['\u265c', '\u265d', '\u265b', '\ud83d\udc51'],
+    colors: ['#2f9e44', '#1098ad'],
+    ink: 'light',
+    progress() {
+      try {
+        const r = JSON.parse(localStorage.getItem('chess-record') || 'null');
+        if (!r || !(r.w + r.d + r.l)) return '';
+        return '\ud83c\udfc6 ' + r.w + 'W ' + r.d + 'D ' + r.l + 'L';
+      } catch (e) { return ''; }
+    },
+  },
+
   // ↓ new games go here ↓
 
 ];
