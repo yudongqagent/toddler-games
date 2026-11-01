@@ -140,6 +140,38 @@
   .promo-pick button{font-size:44px; padding:6px 14px; line-height:1;}
   footer{margin-top:18px; text-align:center; color:var(--muted); font-size:12px;}
   footer a{color:var(--accent);}
+  /* ---- mode toggle + polish ---- */
+  .seg{display:flex; background:var(--bg1); border:1px solid #33465f; border-radius:12px; padding:3px; gap:3px;}
+  .seg button{border:none; background:transparent; padding:8px 14px; border-radius:9px; font-weight:600; color:var(--muted);}
+  .seg button.on{background:#1971c2; color:#fff;}
+  .seg button:hover{background:#2c3f5e;} .seg button.on:hover{background:#1864ab;}
+  #optRow{display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px;}
+  .playerbar{display:flex; gap:8px; width:100%; max-width:calc(var(--sq)*8);}
+  .player{background:var(--panel); border:1px solid #33465f; border-radius:10px; padding:7px 10px;
+    font-size:13px; flex:1; display:flex; align-items:center; gap:8px; color:var(--muted); min-width:0;}
+  .player .tdot{width:10px; height:10px; border-radius:50%; background:#3a4a63; flex:none;}
+  .player.turn{color:var(--ink); border-color:var(--accent);}
+  .player.turn .tdot{background:var(--good); box-shadow:0 0 6px var(--good);}
+  .player .pname{white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .player .tag{margin-left:auto; font-size:11px; color:var(--muted); flex:none;}
+  .sec-title{font-size:11px; text-transform:uppercase; letter-spacing:.8px; color:var(--muted);}
+  .btn-grid{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  .btn-grid button{padding:11px 8px; font-weight:600; display:flex; align-items:center; justify-content:center; gap:6px; font-size:14px;}
+  .switch{display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;}
+  .switch input{width:18px; height:18px; accent-color:#1971c2;}
+  #mobilebar{display:none;}
+  @media (max-width:760px){
+    #mobilebar{display:flex; position:sticky; bottom:0; z-index:30; gap:8px;
+      padding:10px 2px calc(10px + env(safe-area-inset-bottom));
+      background:linear-gradient(transparent, rgba(10,15,25,.94) 35%);}
+    #mobilebar button{flex:1; padding:13px 4px; font-weight:700; font-size:15px;}
+  }
+  .sq .piece{transition:transform .1s ease;}
+  @keyframes pop{0%{transform:scale(.55);}60%{transform:scale(1.14);}100%{transform:scale(1);}}
+  .sq.last .piece{animation:pop .18s ease;}
+  @media (prefers-reduced-motion: reduce){ .sq.last .piece{animation:none;} }
+  #board{transition:box-shadow .2s;}
+  .coach-warn{color:var(--gold);}
 </style>
 </head>
 <body>
@@ -147,28 +179,42 @@
   <header class="top">
     <div class="logo">♞ Chess<span class="sub">Toddler Games arcade · learn as you play</span></div>
     <div class="spacer"></div>
-    <label class="row" style="gap:6px;"><span style="font-size:12px;color:var(--muted)">Level</span>
-      <select id="diffSel" aria-label="AI difficulty">
-        <option value="0">🌱 Learning</option>
-        <option value="1" selected>🙂 Friendly</option>
-        <option value="2">🧠 Sharp</option>
-        <option value="3">♞ Grandmaster</option>
-      </select>
-    </label>
-    <label class="row" style="gap:6px;"><span style="font-size:12px;color:var(--muted)">You play</span>
-      <select id="sideSel" aria-label="Your color">
-        <option value="1" selected>White</option>
-        <option value="-1">Black</option>
-        <option value="0">Random</option>
-      </select>
-    </label>
-    <button id="soundBtn" class="ghost" aria-label="Toggle sound">🔊</button>
-    <button id="flipBtn" class="ghost" aria-label="Flip board">🔄</button>
-    <button id="newBtn" class="primary">New game</button>
+    <div class="seg" aria-label="Game mode">
+      <button id="modeAI" class="on">🤖 Vs AI</button>
+      <button id="mode2P">👥 2 Players</button>
+    </div>
   </header>
+  <div id="optRow">
+    <span id="aiControls" class="row" style="gap:10px;">
+      <label class="row" style="gap:6px;"><span style="font-size:12px;color:var(--muted)">AI level</span>
+        <select id="diffSel" aria-label="AI difficulty">
+          <option value="0">🌱 Learning</option>
+          <option value="1" selected>🙂 Friendly</option>
+          <option value="2">🧠 Sharp</option>
+          <option value="3">♞ Grandmaster</option>
+        </select>
+      </label>
+      <label class="row" style="gap:6px;"><span style="font-size:12px;color:var(--muted)">You play</span>
+        <select id="sideSel" aria-label="Your color">
+          <option value="1" selected>White</option>
+          <option value="-1">Black</option>
+          <option value="0">Random</option>
+        </select>
+      </label>
+    </span>
+    <label class="switch" id="flipSwitch" style="display:none;"><input type="checkbox" id="autoFlip"> Auto-rotate board</label>
+    <div class="spacer"></div>
+    <button id="soundBtn" aria-label="Toggle sound">🔊 Sound</button>
+    <button id="flipBtn" aria-label="Flip board">🔄 Flip</button>
+    <button id="newBtn" class="primary">＋ New game</button>
+  </div>
 
   <main>
     <div class="board-col">
+      <div class="playerbar">
+        <div class="player" id="pTop"><span class="tdot"></span><span class="pname"></span><span class="tag"></span></div>
+        <div class="player" id="pBottom"><span class="tdot"></span><span class="pname"></span><span class="tag"></span></div>
+      </div>
       <div class="board-frame">
         <div id="evalbar" title="Who's ahead"><div id="evalfill"></div><div id="evalnum"></div></div>
         <div id="boardWrap">
@@ -180,15 +226,18 @@
       <div id="coach" aria-live="polite"></div>
     </div>
     <aside class="panel">
-      <div class="row">
+      <div class="sec-title">Actions</div>
+      <div class="btn-grid">
         <button id="hintBtn">💡 Hint</button>
         <button id="undoBtn">↩ Undo</button>
-        <button id="resignBtn" class="ghost">🏳 Resign</button>
+        <button id="resignBtn">🏳 Resign</button>
+        <button id="flipBtn2">🔄 Flip</button>
       </div>
+      <div class="sec-title">Captured</div>
       <div>
-        <div class="row" style="margin-bottom:4px;"><label>Captured by you</label></div>
+        <div class="row" style="margin-bottom:4px;"><label id="capLabelA">Captured</label></div>
         <div class="tray" id="capByYou"></div>
-        <div class="row" style="margin:6px 0 4px;"><label>Captured by AI</label></div>
+        <div class="row" style="margin:6px 0 4px;"><label id="capLabelB">Captured</label></div>
         <div class="tray" id="capByAI"></div>
       </div>
       <div>
@@ -201,6 +250,12 @@
       </div>
     </aside>
   </main>
+
+  <div id="mobilebar">
+    <button id="mHint">💡 Hint</button>
+    <button id="mUndo">↩ Undo</button>
+    <button id="mNew">＋ New</button>
+  </div>
 
   <footer><a href="../../">← Toddler Games</a> · progress saves on this device</footer>
 </div>
@@ -970,10 +1025,21 @@ globalThis.Chess = {
   const game = {
     st: C.newPosition(), uci: [], sans: [], keys: [],
     human: C.WHITE, diff: 1, flip: false,
+    mode: 'ai', autoflip: false,
     selected: -1, legalFor: [], over: null, thinking: false,
     pendingPromo: null, hintMove: 0,
   };
   game.keys.push(game.st.key);
+  const is2P = () => game.mode === '2p';
+  // whose turn may a person move right now?
+  function isHumanTurn() {
+    if (game.over || game.thinking) return false;
+    return is2P() || game.st.turn === game.human;
+  }
+  function moverName(color) {
+    if (!is2P()) return color === game.human ? 'You' : 'AI';
+    return color === C.WHITE ? 'White' : 'Black';
+  }
 
   /* ---------- sound (WebAudio, synthesized) ---------- */
   let AC = null;
@@ -1063,11 +1129,30 @@ globalThis.Chess = {
       mark.className = game.st.b[to] || (C.mvFlags(m) & 2) ? 'ring' : 'dot';
       d.appendChild(mark);
     }
+    updateBadges();
     renderPanel();
   }
   function sqToRF(sq) {
     for (let r = 0; r < 8; r++) for (let f = 0; f < 8; f++) if (dispSq(r, f) === sq) return [r, f];
     return null;
+  }
+
+  function updateBadges() {
+    const topColor = game.flip ? C.WHITE : C.BLACK;
+    const botColor = -topColor;
+    const info = color => {
+      let name, tag;
+      if (is2P()) { name = color === C.WHITE ? '⬜ White' : '⬛ Black'; tag = ''; }
+      else if (color === game.human) { name = color === C.WHITE ? '⬜ You' : '⬛ You'; tag = ''; }
+      else { name = color === C.WHITE ? '⬜ AI' : '⬛ AI'; tag = DIFFS[game.diff].name; }
+      return { name, tag, turn: !game.over && game.st.turn === color };
+    };
+    for (const [id, color] of [['pTop', topColor], ['pBottom', botColor]]) {
+      const el = $(id), i = info(color);
+      el.querySelector('.pname').textContent = i.name;
+      el.querySelector('.tag').textContent = i.tag;
+      el.classList.toggle('turn', i.turn);
+    }
   }
 
   /* ---------- side panel ---------- */
@@ -1092,10 +1177,25 @@ globalThis.Chess = {
       .map(p => '<span class="' + cls + '">' + C.GLYPH[Math.abs(p)] + '</span>').join('');
     const mat = arr => arr.reduce((s, p) => s + C.VAL[Math.abs(p)], 0);
     const diff = (mat(byYou) - mat(byAI)) / 100;
-    $('capByYou').innerHTML = tray(byYou, game.human === C.WHITE ? 'pb' : 'pw') +
-      (diff > 0 ? '<span class="mdiff">+' + diff + '</span>' : '');
-    $('capByAI').innerHTML = tray(byAI, game.human === C.WHITE ? 'pw' : 'pb') +
-      (diff < 0 ? '<span class="mdiff">+' + (-diff) + '</span>' : '');
+    if (is2P()) {
+      $('capLabelA').textContent = 'Captured by White';
+      $('capLabelB').textContent = 'Captured by Black';
+      const wcap = [], bcap = [];
+      for (const u of game.uci) {
+        const m = u.move;
+        if (C.isCap(m)) (C.mvPiece(m) > 0 ? wcap : bcap).push(C.mvCap(m));
+      }
+      const wdiff = (mat(wcap) - mat(bcap)) / 100;
+      $('capByYou').innerHTML = tray(wcap, 'pb') + (wdiff > 0 ? '<span class="mdiff">+' + wdiff + '</span>' : '');
+      $('capByAI').innerHTML = tray(bcap, 'pw') + (wdiff < 0 ? '<span class="mdiff">+' + (-wdiff) + '</span>' : '');
+    } else {
+      $('capLabelA').textContent = 'Captured by you';
+      $('capLabelB').textContent = 'Captured by AI';
+      $('capByYou').innerHTML = tray(byYou, game.human === C.WHITE ? 'pb' : 'pw') +
+        (diff > 0 ? '<span class="mdiff">+' + diff + '</span>' : '');
+      $('capByAI').innerHTML = tray(byAI, game.human === C.WHITE ? 'pw' : 'pb') +
+        (diff < 0 ? '<span class="mdiff">+' + (-diff) + '</span>' : '');
+    }
     // moves
     let html = '';
     for (let i = 0; i < game.sans.length; i += 2) {
@@ -1115,10 +1215,15 @@ globalThis.Chess = {
   function updateStatus() {
     if (game.over) return;
     const t = game.st.turn;
-    const who = t === game.human ? 'Your' : 'AI';
-    let s = (t === game.human ? 'Your move' : 'AI is thinking…') ;
-    if (t !== game.human) s = '<span class="think"></span>' + 'AI (' + DIFFS[game.diff].name + ') is thinking…';
-    if (C.inCheck(game.st, t)) s += ' — <b style="color:var(--bad)">check!</b>';
+    let s;
+    if (is2P()) {
+      s = (t === C.WHITE ? '⬜ <b>White</b>' : '⬛ <b>Black</b>') + ' to move — tap a piece, then tap where it goes.';
+    } else if (t === game.human) {
+      s = 'Your move — tap a piece, then tap a highlighted square.';
+    } else {
+      s = '<span class="think"></span>AI (' + DIFFS[game.diff].name + ') is thinking…';
+    }
+    if (C.inCheck(game.st, t)) s += ' <b style="color:var(--bad)">Check!</b>';
     setStatus(s);
   }
 
@@ -1206,6 +1311,7 @@ globalThis.Chess = {
       localStorage.setItem(LS_SAVE, JSON.stringify({
         uci: game.uci.map(u => u.uci), diff: game.diff,
         human: game.human, flip: game.flip, side: $('sideSel').value,
+        mode: game.mode, autoflip: game.autoflip,
       }));
     } catch (e) { /* ignore */ }
   }
@@ -1218,10 +1324,16 @@ globalThis.Chess = {
   function checkEnd() {
     const t = game.st.turn;
     const moves = C.legalMoves(game.st, false);
+    const sideName = t === C.WHITE ? 'White' : 'Black';
     if (moves.length === 0) {
-      if (C.inCheck(game.st, t)) return endGame(t === game.human ? 'l' : 'w',
-        t === game.human ? 'Checkmate — the AI wins this one.' : 'Checkmate — you win! 🎉');
-      return endGame('d', 'Stalemate — nobody can move. It\'s a draw.');
+      if (C.inCheck(game.st, t)) {
+        const winner = -t;
+        const wName = winner === C.WHITE ? 'White' : 'Black';
+        if (is2P()) return endGame(winner === C.WHITE ? 'w' : 'l', 'Checkmate — ' + wName + ' wins! 🎉');
+        const youWon = winner === game.human;
+        return endGame(youWon ? 'w' : 'l', youWon ? 'Checkmate — you win! 🎉' : 'Checkmate — the AI wins this one.');
+      }
+      return endGame('d', 'Stalemate — ' + sideName + ' has no legal move. It\'s a draw.');
     }
     if (C.insufficientMaterial(game.st)) return endGame('d', 'Draw — neither side has enough material to checkmate.');
     if (game.st.half >= 100) return endGame('d', 'Draw — 50 moves without a capture or pawn move.');
@@ -1232,11 +1344,12 @@ globalThis.Chess = {
   }
   function endGame(result, text) {
     game.over = result;
-    record(result);
+    if (!is2P()) record(result);
     clearArrow();
     save();
     if (result === 'w') sfx.win(); else if (result === 'l') sfx.lose(); else sfx.draw();
-    $('overTitle').textContent = result === 'w' ? '🏆 You win!' : result === 'l' ? 'AI wins' : 'Draw';
+    $('overTitle').textContent = result === 'w' ? (is2P() ? '🏆 White wins!' : '🏆 You win!')
+      : result === 'l' ? (is2P() ? '🏆 Black wins!' : 'AI wins') : 'Draw';
     $('overText').textContent = text;
     $('overModal').classList.add('open');
     setStatus(text);
@@ -1259,7 +1372,9 @@ globalThis.Chess = {
     else sfx.move();
     if (C.inCheck(st, st.turn) && C.legalMoves(st, false).length) sfx.check();
     save();
-    render({ last: [C.mvFrom(m), C.mvTo(m)], check: C.inCheck(st, st.turn) ? C.kingSq(st.b, st.turn) : -1 });
+    const hl = { last: [C.mvFrom(m), C.mvTo(m)], check: C.inCheck(st, st.turn) ? C.kingSq(st.b, st.turn) : -1 };
+    if (is2P() && game.autoflip) { game.flip = (st.turn === C.BLACK); buildBoard(); }
+    render(hl);
     if (checkEnd()) return;
     updateStatus();
     return mover;
@@ -1279,17 +1394,20 @@ globalThis.Chess = {
     } else m = cands[0];
     const mover = doMove(m);
     if (mover === undefined) return true; // game ended
-    // coach: warn about hanging pieces
-    const hang = hangingPieces(st, game.human);
+    // coach: warn about hanging pieces for the side that just moved
+    const hang = hangingPieces(st, mover);
     if (hang.length) {
       const h = hang[0];
-      coachSay('Heads up — your <b>' + C.PIECE_NAME[h.p] + '</b> on <b>' + C.sqName(h.sq) +
-        '</b> is hanging (attacked and undefended). Can you save it or trade up?');
+      const who = is2P() ? (mover === C.WHITE ? 'White' : 'Black') + ' — your' : 'your';
+      coachSay('<span class="coach-warn">Heads up</span> — ' + who + ' <b>' + C.PIECE_NAME[h.p] + '</b> on <b>' +
+        C.sqName(h.sq) + '</b> is hanging (attacked and undefended). Can it be saved?');
     }
-    // AI replies
-    game.thinking = true;
-    updateStatus();
-    setTimeout(aiMove, 60);
+    if (!is2P()) {
+      // AI replies
+      game.thinking = true;
+      updateStatus();
+      setTimeout(aiMove, 60);
+    }
     return true;
   }
 
@@ -1317,17 +1435,19 @@ globalThis.Chess = {
     const mover = doMove(m);
     game.thinking = false;
     if (mover === undefined) return;
-    coachSay('AI played ' + expl + ' <span style="color:var(--muted)">[' + info + ']</span>');
+    const who = is2P() ? (mover === C.WHITE ? '⚪ White' : '⚫ Black') : 'AI';
+    coachSay(who + ' played ' + expl + ' <span style="color:var(--muted)">[' + info + ']</span>');
     render({ last: [C.mvFrom(m), C.mvTo(m)], check: C.inCheck(st, st.turn) ? C.kingSq(st.b, st.turn) : -1 });
     updateStatus();
   }
 
   /* ---------- hint ---------- */
   function hint() {
-    if (game.over || game.thinking || game.st.turn !== game.human) return;
+    if (game.over || game.thinking || !isHumanTurn()) return;
+    const side = game.st.turn;
     setStatus('<span class="think"></span>Coach is thinking…');
     setTimeout(() => {
-      if (game.over || game.st.turn !== game.human) { updateStatus(); return; }
+      if (game.over || game.st.turn !== side) { updateStatus(); return; }
       const st = game.st;
       const r = C.searchBest(st, 8, 700, game.keys);
       if (!r.move) { updateStatus(); return; }
@@ -1337,8 +1457,9 @@ globalThis.Chess = {
       const sc = r.score / 100;
       let extra = '';
       if (r.score > C.MATE - 1000) extra = ' This looks <b>forcing</b> — possibly mate soon!';
-      else if (sc > 1.5) extra = ' The coach rates this about <b>+' + sc.toFixed(1) + '</b> for you.';
-      coachSay('Try ' + explainMove(st, r.move, game.human) + extra);
+      else if (sc > 1.5) extra = ' The coach rates this about <b>+' + sc.toFixed(1) + '</b>.';
+      const who = is2P() ? (side === C.WHITE ? 'White' : 'Black') + ', try' : 'Try';
+      coachSay(who + ' ' + explainMove(st, r.move, side) + extra);
       updateStatus();
     }, 40);
   }
@@ -1350,7 +1471,8 @@ globalThis.Chess = {
     pk.innerHTML = '';
     for (const p of [C.QUEEN, C.ROOK, C.BISHOP, C.KNIGHT]) {
       const b = document.createElement('button');
-      b.innerHTML = '<span class="' + (game.human === C.WHITE ? 'piece w' : 'piece b') + '">' + C.GLYPH[p] + '</span>';
+      const col = is2P() ? game.st.turn : game.human;
+      b.innerHTML = '<span class="' + (col === C.WHITE ? 'piece w' : 'piece b') + '">' + C.GLYPH[p] + '</span>';
       b.setAttribute('aria-label', C.PIECE_NAME[p]);
       b.onclick = () => {
         $('promoModal').classList.remove('open');
@@ -1370,24 +1492,34 @@ globalThis.Chess = {
     if (x < 0 || x >= 8 || y < 0 || y >= 8) return -1;
     return dispSq(Math.floor(y), Math.floor(x));
   }
-  function canHumanMove() { return !game.over && !game.thinking && game.st.turn === game.human; }
   function select(sq) {
     game.selected = sq;
     game.legalFor = C.legalMoves(game.st, false).filter(m => C.mvFrom(m) === sq);
     sfx.select();
     render();
+    const p = game.st.b[sq];
+    const n = game.legalFor.length;
+    setStatus('Selected <b>' + C.GLYPH[Math.abs(p)] + ' ' + C.sqName(sq) + '</b> — tap a highlighted square to place it' +
+      (n ? ' (' + n + ' move' + (n === 1 ? '' : 's') + ')' : '') + '.');
   }
   const wrap = $('boardWrap');
   wrap.addEventListener('pointerdown', e => {
-    if (!canHumanMove()) return;
+    if (!isHumanTurn()) return;
     const sq = sqFromEvent(e);
     if (sq < 0) return;
     const p = game.st.b[sq];
     downPos = { x: e.clientX, y: e.clientY };
-    if (p && Math.sign(p) === game.human) {
+    if (p && Math.sign(p) === game.st.turn) {
+      // tap (or press) own piece: select it, ready for click-to-place or drag
       select(sq);
       dragSq = sq; dragging = false;
       e.preventDefault();
+    } else if (game.selected >= 0) {
+      // click-to-place: a piece is selected, this tap is the destination
+      const from = game.selected;
+      if (!humanMove(from, sq)) {
+        game.selected = -1; game.legalFor = []; render(); updateStatus();
+      }
     }
   });
   window.addEventListener('pointermove', e => {
@@ -1406,22 +1538,37 @@ globalThis.Chess = {
     ghostEl.style.display = 'none';
     dragging = false; downPos = null;
     const from = dragSq; dragSq = -1;
-    if (!canHumanMove()) { game.selected = -1; game.legalFor = []; render(); return; }
+    if (!isHumanTurn()) { game.selected = -1; game.legalFor = []; render(); return; }
     const to = sqFromEvent(e);
     if (wasDrag && to >= 0 && to !== from) {
-      if (!humanMove(from, to)) { game.selected = -1; game.legalFor = []; render(); }
-    } else if (!wasDrag && to === from) {
-      // plain click on own piece: keep selection (already selected)
+      // drag-and-drop: place the piece where it lands
+      if (!humanMove(from, to)) { game.selected = -1; game.legalFor = []; render(); updateStatus(); }
     } else if (!wasDrag && to >= 0 && game.selected >= 0 && to !== game.selected) {
+      // click-to-place: piece already selected, tap the destination
       if (!humanMove(game.selected, to)) {
         const p = game.st.b[to];
-        if (p && Math.sign(p) === game.human) select(to);
-        else { game.selected = -1; game.legalFor = []; render(); }
+        if (p && Math.sign(p) === game.st.turn) select(to);
+        else { game.selected = -1; game.legalFor = []; render(); updateStatus(); }
       }
+    } else if (!wasDrag && (to < 0 || to === from)) {
+      updateStatus();
     }
   });
 
   /* ---------- controls ---------- */
+  function setMode(mode, startFresh) {
+    game.mode = mode;
+    $('modeAI').classList.toggle('on', mode === 'ai');
+    $('mode2P').classList.toggle('on', mode === '2p');
+    $('aiControls').style.display = mode === 'ai' ? '' : 'none';
+    $('flipSwitch').style.display = mode === '2p' ? '' : 'none';
+    if (startFresh) newGame();
+    else { save(); render(); updateStatus(); }
+  }
+  $('modeAI').onclick = () => setMode('ai', true);
+  $('mode2P').onclick = () => setMode('2p', true);
+  $('autoFlip').onchange = e => { game.autoflip = e.target.checked; save(); };
+
   function newGame() {
     const side = $('sideSel').value;
     game.human = side === '0' ? (Math.random() < 0.5 ? C.WHITE : C.BLACK) : +side;
@@ -1435,43 +1582,70 @@ globalThis.Chess = {
     game.selected = -1; game.legalFor = []; game.over = null; game.thinking = false;
     clearArrow();
     $('overModal').classList.remove('open');
-    coachSay('Welcome! <b>💡 Hint</b> explains the best move — a great way to learn. ' +
-      (game.human === C.WHITE ? 'You are <b>White</b>; you move first.' : 'You are <b>Black</b>; the AI opens.'));
+    if (is2P()) {
+      coachSay('Two-player mode — White moves first. ' +
+        (game.autoflip ? 'The board auto-rotates each turn.' : 'Tip: turn on <b>Auto-rotate board</b> if you share one screen.') +
+        ' <b>💡 Hint</b> still explains the best move for whoever is playing.');
+    } else {
+      coachSay('Welcome! <b>💡 Hint</b> explains the best move — a great way to learn. ' +
+        (game.human === C.WHITE ? 'You are <b>White</b>; you move first.' : 'You are <b>Black</b>; the AI opens.'));
+    }
     save();
     render();
     updateStatus();
-    if (game.st.turn !== game.human) { game.thinking = true; updateStatus(); setTimeout(aiMove, 400); }
+    if (!is2P() && game.st.turn !== game.human) { game.thinking = true; updateStatus(); setTimeout(aiMove, 400); }
   }
   $('newBtn').onclick = newGame;
   $('againBtn').onclick = () => { $('overModal').classList.remove('open'); newGame(); };
   $('hintBtn').onclick = hint;
-  $('undoBtn').onclick = () => {
+  $('mHint').onclick = hint;
+  const doUndo = () => {
     if (game.thinking || game.over) return;
-    let n = game.uci.length && game.st.turn !== game.human ? 1 : 2;
-    // pop until it's the human's turn again (or start)
-    while (n-- > 0 && game.uci.length) {
+    if (is2P()) {
+      // take back one move (one player's turn)
+      if (!game.uci.length) return;
       const u = game.uci.pop();
       C.unmake(game.st, u.move);
       game.sans.pop(); game.keys.pop();
-    }
-    // if AI already replied, take back its reply too so human moves again
-    while (game.uci.length && game.st.turn !== game.human) {
-      const u = game.uci.pop();
-      C.unmake(game.st, u.move);
-      game.sans.pop(); game.keys.pop();
+    } else {
+      // take back the AI's reply too, so it's your move again
+      let n = game.uci.length && game.st.turn !== game.human ? 1 : 2;
+      while (n-- > 0 && game.uci.length) {
+        const u = game.uci.pop();
+        C.unmake(game.st, u.move);
+        game.sans.pop(); game.keys.pop();
+      }
+      while (game.uci.length && game.st.turn !== game.human) {
+        const u = game.uci.pop();
+        C.unmake(game.st, u.move);
+        game.sans.pop(); game.keys.pop();
+      }
     }
     clearArrow();
     $('overModal').classList.remove('open');
     game.over = null;
     save(); render(); updateStatus();
     coachSay('Move taken back. Try a different idea!');
-    if (game.st.turn !== game.human) { game.thinking = true; updateStatus(); setTimeout(aiMove, 400); }
+    if (!is2P() && game.st.turn !== game.human) { game.thinking = true; updateStatus(); setTimeout(aiMove, 400); }
   };
-  $('resignBtn').onclick = () => {
+  $('undoBtn').onclick = doUndo;
+  $('mUndo').onclick = doUndo;
+  $('mNew').onclick = newGame;
+  const doResign = () => {
     if (game.over || game.thinking) return;
-    endGame('l', 'You resigned. The AI takes this one — rematch?');
+    if (is2P()) {
+      const loser = game.st.turn;
+      endGame(loser === C.WHITE ? 'l' : 'w',
+        (loser === C.WHITE ? 'White' : 'Black') + ' resigned. ' +
+        (loser === C.WHITE ? 'Black' : 'White') + ' takes the game!');
+    } else {
+      endGame('l', 'You resigned. The AI takes this one — rematch?');
+    }
   };
-  $('flipBtn').onclick = () => { game.flip = !game.flip; buildBoard(); render(); save(); };
+  $('resignBtn').onclick = doResign;
+  const doFlip = () => { game.flip = !game.flip; buildBoard(); render(); save(); };
+  $('flipBtn').onclick = doFlip;
+  $('flipBtn2').onclick = doFlip;
   $('soundBtn').onclick = () => {
     try { localStorage.setItem(LS_SOUND, soundOn() ? '0' : '1'); } catch (e) { /* ignore */ }
     refreshSoundBtn(); sfx.select();
@@ -1488,6 +1662,9 @@ globalThis.Chess = {
         game.diff = +$('diffSel').value;
         game.human = s.human || C.WHITE;
         game.flip = !!s.flip;
+        game.autoflip = !!s.autoflip;
+        $('autoFlip').checked = game.autoflip;
+        setMode(s.mode === '2p' ? '2p' : 'ai', false);
         game.st = C.newPosition();
         game.uci = []; game.sans = []; game.keys = [game.st.key];
         let ok = true;
@@ -1502,7 +1679,7 @@ globalThis.Chess = {
         if (ok && !checkEndSilent()) {
           render(); updateStatus();
           coachSay('Welcome back — your saved game is restored. <b>💡 Hint</b> is there whenever you want a lesson.');
-          if (game.st.turn !== game.human) { game.thinking = true; updateStatus(); setTimeout(aiMove, 500); }
+          if (!is2P() && game.st.turn !== game.human) { game.thinking = true; updateStatus(); setTimeout(aiMove, 500); }
           refreshSoundBtn();
           return;
         }
